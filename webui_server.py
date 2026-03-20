@@ -118,6 +118,7 @@ def build_payload_config(payload: dict[str, Any]) -> dict[str, Any]:
     prompt = raw.get("prompt", {})
     scan = raw.get("scan", {})
     resource_pack = raw.get("resource_pack", {})
+    runtime = raw.get("runtime", {})
 
     config["world_dir"] = ensure_str(raw.get("world_dir"))
     config["report_path"] = ensure_str(raw.get("report_path"))
@@ -171,6 +172,15 @@ def build_payload_config(payload: dict[str, Any]) -> dict[str, Any]:
         resource_pack.get("skip_if_target_exists"), False
     )
 
+    config["runtime"]["checkpoint_enabled"] = ensure_bool(runtime.get("checkpoint_enabled"), True)
+    config["runtime"]["checkpoint_path"] = ensure_str(runtime.get("checkpoint_path"))
+    config["runtime"]["resume_from_checkpoint"] = ensure_bool(runtime.get("resume_from_checkpoint"), False)
+    config["runtime"]["continue_on_file_error"] = ensure_bool(runtime.get("continue_on_file_error"), True)
+    config["runtime"]["max_batch_retries"] = max(1, ensure_int(runtime.get("max_batch_retries"), 3))
+    config["runtime"]["max_file_write_retries"] = max(1, ensure_int(runtime.get("max_file_write_retries"), 2))
+    if config["runtime"]["resume_from_checkpoint"]:
+        config["runtime"]["checkpoint_enabled"] = True
+
     return normalize_config(merge_nested(DEFAULT_CONFIG, config), CONFIG_BASE_PATH)
 
 
@@ -191,6 +201,8 @@ def summarize_config(config: dict[str, Any]) -> dict[str, Any]:
         "style_preset": config["prompt"]["style_preset"],
         "resource_pack_enabled": config["resource_pack"]["enabled"],
         "resource_pack_zip_paths": config["resource_pack"]["zip_paths"],
+        "resume_from_checkpoint": config["runtime"]["resume_from_checkpoint"],
+        "checkpoint_path": config["runtime"]["checkpoint_path"],
     }
 
 
@@ -222,6 +234,16 @@ class JobManager:
 
     def create_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         config = build_payload_config(payload)
+        if not config["world_dir"]:
+            raise ValueError("`world_dir` is required.")
+        if not Path(config["world_dir"]).is_dir():
+            raise ValueError(f"World directory does not exist or is not a directory: {config['world_dir']}")
+        if not config["dry_run"]:
+            if not config["api"]["api_key"]:
+                raise ValueError("API key is missing. Set it in the UI, .env, environment, or translate.py defaults.")
+            if not config["api"]["model"]:
+                raise ValueError("Model is missing. Set it in the UI or your defaults.")
+
         job_id = uuid.uuid4().hex[:10]
         job = {
             "id": job_id,
@@ -247,7 +269,9 @@ class JobManager:
             "summary": summarize_config(config),
             "events": [],
             "result": None,
+            "can_resume": False,
             "_config": config,
+            "_cancel_event": threading.Event(),
         }
 
         with self.lock:
@@ -262,6 +286,18 @@ class JobManager:
             if job_id not in self.jobs:
                 raise KeyError(job_id)
             return self._public_view(self.jobs[job_id])
+
+    def cancel_job(self, job_id: str) -> dict[str, Any]:
+        with self.lock:
+            if job_id not in self.jobs:
+                raise KeyError(job_id)
+            job = self.jobs[job_id]
+            if job["status"] in {"completed", "failed", "cancelled"}:
+                return self._public_view(job)
+            job["_cancel_event"].set()
+            self._append_event(job, {"event": "job_cancel_requested"})
+            job["progress"]["current_activity"] = "cancel_requested"
+            return self._public_view(job)
 
     def list_jobs(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -330,6 +366,22 @@ class JobManager:
         elif name == "translation_batch_error":
             progress["phase"] = "translate"
             progress["current_activity"] = "translation_batch_error"
+        elif name == "resource_pack_skipped":
+            progress["current_activity"] = "resource_pack_skipped"
+        elif name == "checkpoint_loaded":
+            progress["current_activity"] = "checkpoint_loaded"
+        elif name == "file_error":
+            progress["current_activity"] = "file_error"
+        elif name == "file_write_retry":
+            progress["current_activity"] = "file_write_retry"
+        elif name == "job_cancel_requested":
+            progress["current_activity"] = "cancel_requested"
+        elif name == "cancelled":
+            progress["phase"] = "cancelled"
+            progress["current_activity"] = "cancelled"
+        elif name == "fatal_error":
+            progress["phase"] = "failed"
+            progress["current_activity"] = "failed"
         elif name == "done":
             progress["phase"] = "done"
             progress["current_activity"] = "done"
@@ -346,28 +398,36 @@ class JobManager:
             job["progress"]["current_activity"] = "preparing"
             self._append_event(job, {"event": "job_started"})
             config = job["_config"]
+            cancel_event = job["_cancel_event"]
 
         try:
-            translator = WorldTranslator(config, progress_callback=lambda event: self._handle_progress(job_id, event))
+            translator = WorldTranslator(
+                config,
+                progress_callback=lambda event: self._handle_progress(job_id, event),
+                cancel_check=cancel_event.is_set,
+            )
             report = translator.run()
             with self.lock:
                 job = self.jobs[job_id]
-                job["status"] = "completed"
+                final_status = report.get("status", "completed")
+                job["status"] = final_status
                 job["finished_at"] = now_iso()
                 job["result"] = report
-                job["progress"]["phase"] = "done"
-                job["progress"]["current_activity"] = "done"
-                job["progress"]["percent"] = 100
+                job["can_resume"] = final_status == "cancelled"
+                if final_status == "cancelled":
+                    job["progress"]["phase"] = "cancelled"
+                    job["progress"]["current_activity"] = "cancelled"
+                else:
+                    job["progress"]["phase"] = "done"
+                    job["progress"]["current_activity"] = "done"
+                    job["progress"]["percent"] = 100
                 job["progress"]["changed_file_count"] = int(report.get("changed_file_count", 0))
                 job["progress"]["candidate_file_count"] = int(report.get("candidate_file_count", 0))
-                self._append_event(
-                    job,
-                    {
-                        "event": "job_completed",
-                        "changed_file_count": report.get("changed_file_count", 0),
-                        "candidate_file_count": report.get("candidate_file_count", 0),
-                    },
-                )
+                self._append_event(job, {
+                    "event": "job_cancelled" if final_status == "cancelled" else "job_completed",
+                    "changed_file_count": report.get("changed_file_count", 0),
+                    "candidate_file_count": report.get("candidate_file_count", 0),
+                })
         except SystemExit as exc:
             self._fail_job(job_id, str(exc) or "Translator exited early.")
         except Exception as exc:
@@ -381,6 +441,7 @@ class JobManager:
             job["error"] = message
             job["progress"]["phase"] = "failed"
             job["progress"]["current_activity"] = "failed"
+            job["can_resume"] = True
             self._append_event(job, {"event": "job_failed", "message": message})
 
     def _handle_progress(self, job_id: str, event: dict[str, Any]) -> None:
@@ -418,6 +479,10 @@ class AppHandler(BaseHTTPRequestHandler):
                         "backup_suffix": DEFAULT_CONFIG["backup_suffix"],
                         "provider": DEFAULT_CONFIG["api"]["provider"],
                         "request_timeout": DEFAULT_CONFIG["api"]["request_timeout"],
+                        "checkpoint_enabled": DEFAULT_CONFIG["runtime"]["checkpoint_enabled"],
+                        "continue_on_file_error": DEFAULT_CONFIG["runtime"]["continue_on_file_error"],
+                        "max_batch_retries": DEFAULT_CONFIG["runtime"]["max_batch_retries"],
+                        "max_file_write_retries": DEFAULT_CONFIG["runtime"]["max_file_write_retries"],
                         "region_dirs": DEFAULT_CONFIG["scan"]["region_dirs"],
                         "skip_patterns": DEFAULT_CONFIG["scan"]["skip_patterns"],
                         "resource_pack_source_lang_files": DEFAULT_CONFIG["resource_pack"]["source_lang_files"],
@@ -462,6 +527,16 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
                 return
             self.send_json(job, status=HTTPStatus.CREATED)
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/cancel"):
+            job_id = parsed.path.split("/")[-2]
+            try:
+                job = JOB_MANAGER.cancel_job(job_id)
+            except KeyError:
+                self.send_error_json(HTTPStatus.NOT_FOUND, "Job not found.")
+                return
+            self.send_json(job)
             return
 
         if parsed.path == "/api/models":

@@ -143,6 +143,16 @@ const I18N = {
     helpBackup: "실번역 전에 원본 파일을 따로 복사합니다.",
     fieldDryRun: "기본값을 스캔 모드로",
     helpDryRun: "버튼으로 언제든 스캔/실번역을 바꿀 수 있지만, 폼 기본값은 이 체크를 따릅니다.",
+    fieldCheckpointEnabled: "체크포인트 저장",
+    helpCheckpointEnabled: "중간 취소나 오류 뒤에 이어서 하려면 켜두는 편이 좋습니다.",
+    fieldContinueOnError: "파일 오류 시 계속 진행",
+    helpContinueOnError: "문제가 있는 파일만 건너뛰고 나머지 작업을 계속합니다.",
+    fieldCheckpointPath: "체크포인트 경로",
+    helpCheckpointPath: "비워두면 월드 폴더 안 `.translation_checkpoint.json`을 사용합니다.",
+    fieldBatchRetries: "배치 재시도 횟수",
+    helpBatchRetries: "API 오류가 나면 이 횟수만큼 먼저 재시도합니다.",
+    fieldWriteRetries: "파일 쓰기 재시도 횟수",
+    helpWriteRetries: "쓰기 실패 시 원자적 저장으로 다시 시도합니다.",
     fieldRegionDirs: "스캔할 region 디렉터리",
     helpRegionDirs: "기본값이면 일반 월드, 엔티티, 네더 영역까지 봅니다.",
     fieldSkipPatterns: "건너뛸 파일 패턴",
@@ -156,6 +166,8 @@ const I18N = {
     runCopy: "처음에는 스캔으로 후보만 보고, 문제 없으면 실번역으로 넘어가는 흐름을 권장합니다.",
     actionScan: "스캔만 실행",
     actionTranslate: "실제 번역 실행",
+    actionResume: "이전 진행 재개",
+    actionCancel: "현재 작업 중지",
     actionExport: "설정 JSON 내보내기",
     actionReset: "폼 기본값 복원",
     liveKicker: "Live Monitor",
@@ -164,6 +176,7 @@ const I18N = {
     statusQueued: "대기열",
     statusRunning: "실행 중",
     statusCompleted: "완료",
+    statusCancelled: "중지됨",
     statusFailed: "실패",
     phaseIdle: "준비 안 됨",
     phaseQueued: "대기",
@@ -172,6 +185,7 @@ const I18N = {
     phaseScanPending: "월드 스캔 준비",
     phaseScan: "월드 파일 처리",
     phaseTranslate: "문장 번역 중",
+    phaseCancelled: "중지됨",
     phaseDone: "완료",
     phaseFailed: "실패",
     activityPreparing: "설정과 입력값을 검증하는 중",
@@ -182,13 +196,26 @@ const I18N = {
     activityBatchStart: "배치 번역 요청을 보내는 중",
     activityBatchDone: "배치 번역 응답을 반영하는 중",
     activityBatchError: "배치 실패 후 더 작은 단위로 재시도 중",
+    activityResourcePackSkipped: "이미 처리된 리소스팩을 건너뛰는 중",
+    activityCheckpointLoaded: "저장된 진행 상황을 불러오는 중",
+    activityFileError: "일부 파일 오류를 기록하고 계속 진행 중",
+    activityFileWriteRetry: "파일 저장 재시도 중",
+    activityCancelRequested: "중지 요청을 반영하는 중",
+    activityCancelled: "작업을 중지했고 체크포인트를 저장함",
     activityDone: "전체 작업을 마침",
     activityFailed: "작업이 중단됨",
     summaryIdle: "아직 실행되지 않았습니다. 스캔 또는 실번역을 시작하면 여기에 현재 상태가 계속 갱신됩니다.",
     summaryQueued: "작업이 큐에 들어갔습니다. 준비가 끝나면 바로 실행합니다.",
     summaryRunning: "현재 파일과 번역 배치를 기준으로 상태를 갱신 중입니다. 마지막 업데이트 시각도 같이 확인하세요.",
+    summaryCancelled: "작업이 중지됐습니다. 체크포인트가 남아 있으니 `이전 진행 재개`로 이어갈 수 있습니다.",
     summaryCompleted: "{changed}개 파일이 수정됐고, 후보 파일은 {candidates}개였습니다.",
     summaryFailed: "작업이 중단됐습니다. 경로, 공급자, 모델, API 키를 확인하세요.",
+    runHintIdle: "월드 폴더를 먼저 지정한 뒤 `스캔만 실행`으로 안전하게 시작하는 편이 좋습니다.",
+    runHintReady: "지금 바로 새 작업을 시작할 수 있습니다. 체크포인트 저장이 켜져 있으면 나중에 이어서 할 수 있습니다.",
+    runHintRunning: "현재 작업이 실행 중입니다. 중지가 필요하면 `현재 작업 중지`를 누르면 체크포인트를 저장한 뒤 멈춥니다.",
+    runHintResume: "이전 중단 작업을 이어갈 수 있습니다. `이전 진행 재개`를 누르면 저장된 체크포인트부터 다시 시작합니다.",
+    runHintCancelled: "작업이 중지된 상태입니다. 설정을 유지한 채 `이전 진행 재개`를 누르면 이어서 진행합니다.",
+    runHintFailed: "오류로 멈췄지만 체크포인트가 있으면 이어서 진행할 수 있습니다. 설정을 확인한 뒤 재개를 시도하세요.",
     statPhase: "단계",
     statFiles: "파일 진행",
     statTexts: "번역 배치 텍스트",
@@ -215,6 +242,9 @@ const I18N = {
     localLoadError: "메타데이터를 못 불러와서 내장 기본값으로 시작했습니다.",
     localScanStarted: "스캔 작업을 서버에 요청했습니다.",
     localTranslateStarted: "실번역 작업을 서버에 요청했습니다.",
+    localResumeStarted: "체크포인트 재개 작업을 서버에 요청했습니다.",
+    localCancelRequested: "현재 작업에 중지 요청을 보냈습니다.",
+    localCancelError: "중지 요청 실패: {message}",
     localExported: "현재 폼 설정을 JSON으로 내보냈습니다.",
     localReset: "폼을 기본값으로 되돌렸습니다.",
     localSubmitError: "작업 생성 실패: {message}",
@@ -227,6 +257,13 @@ const I18N = {
     eventBatchStart: "번역 배치 요청 시작 · 묶음 크기 {count}",
     eventBatchDone: "번역 배치 완료 · 묶음 크기 {count}",
     eventBatchError: "배치 번역 오류 · {message}",
+    eventResourcePackSkipped: "이미 처리된 리소스팩 건너뜀 · {file}",
+    eventCheckpointLoaded: "체크포인트를 불러왔습니다 · 완료 파일 {files} · 리소스팩 {packs}",
+    eventFileError: "파일 오류 기록 · {message}",
+    eventWriteRetry: "파일 저장 재시도 · {message}",
+    eventCancelRequested: "중지 요청을 보냈습니다.",
+    eventCancelled: "작업이 중지됐고 체크포인트가 저장됐습니다.",
+    eventFatalError: "치명적 오류 발생 · {message}",
     eventDone: "전체 작업 완료 · 수정 파일 {changed} · 후보 파일 {candidates}",
     eventCompleted: "리포트를 저장했습니다.",
     eventFailed: "작업 실패: {message}",
@@ -349,6 +386,16 @@ const I18N = {
     helpBackup: "Copy original files before a real translation run writes anything.",
     fieldDryRun: "Keep default in scan mode",
     helpDryRun: "The buttons below still let you switch instantly, but this controls the form default.",
+    fieldCheckpointEnabled: "Save checkpoints",
+    helpCheckpointEnabled: "Leave this on if you want to stop and resume later.",
+    fieldContinueOnError: "Continue after file errors",
+    helpContinueOnError: "Skip broken files and keep the rest of the job moving.",
+    fieldCheckpointPath: "Checkpoint path",
+    helpCheckpointPath: "Leave blank to use `.translation_checkpoint.json` inside the world folder.",
+    fieldBatchRetries: "Batch retry count",
+    helpBatchRetries: "Retry API failures this many times before splitting batches smaller.",
+    fieldWriteRetries: "File write retry count",
+    helpWriteRetries: "Retry atomic file writes if the first write fails.",
     fieldRegionDirs: "Region directories to scan",
     helpRegionDirs: "The default set covers common world, entity, and Nether region folders.",
     fieldSkipPatterns: "Skip patterns",
@@ -362,6 +409,8 @@ const I18N = {
     runCopy: "A scan-first flow is still recommended. Once the candidate coverage looks right, move to a full translation run.",
     actionScan: "Run Scan Only",
     actionTranslate: "Run Translation",
+    actionResume: "Resume Previous Progress",
+    actionCancel: "Stop Current Job",
     actionExport: "Export JSON Settings",
     actionReset: "Reset Form",
     liveKicker: "Live Monitor",
@@ -370,6 +419,7 @@ const I18N = {
     statusQueued: "Queued",
     statusRunning: "Running",
     statusCompleted: "Completed",
+    statusCancelled: "Cancelled",
     statusFailed: "Failed",
     phaseIdle: "Not started",
     phaseQueued: "Queued",
@@ -378,6 +428,7 @@ const I18N = {
     phaseScanPending: "Ready to scan",
     phaseScan: "Scanning world files",
     phaseTranslate: "Translating batches",
+    phaseCancelled: "Cancelled",
     phaseDone: "Done",
     phaseFailed: "Failed",
     activityPreparing: "Validating settings and inputs",
@@ -388,13 +439,26 @@ const I18N = {
     activityBatchStart: "Sending a translation batch request",
     activityBatchDone: "Applying a finished translation batch",
     activityBatchError: "Retrying with a smaller batch after an error",
+    activityResourcePackSkipped: "Skipping a resource pack that was already processed",
+    activityCheckpointLoaded: "Loading saved progress from a checkpoint",
+    activityFileError: "Recording a file error and continuing",
+    activityFileWriteRetry: "Retrying a file write",
+    activityCancelRequested: "Applying a stop request",
+    activityCancelled: "Stopped the job and saved a checkpoint",
     activityDone: "Finished the full job",
     activityFailed: "The job stopped early",
     summaryIdle: "No job has started yet. Once you run a scan or translation, this panel will keep updating live.",
     summaryQueued: "The job is queued and will start as soon as setup finishes.",
     summaryRunning: "The status is being refreshed from current-file and translation-batch activity. Keep an eye on the last update time as well.",
+    summaryCancelled: "The job was stopped. A checkpoint should be available, so you can continue with `Resume Previous Progress`.",
     summaryCompleted: "{changed} files were modified, and {candidates} files contained translation candidates.",
     summaryFailed: "The job stopped early. Check paths, provider settings, model name, and API credentials.",
+    runHintIdle: "Pick the world directory first, then start with `Run Scan Only` for the safest first pass.",
+    runHintReady: "You can start a new job now. If checkpoint saving is enabled, you can stop and continue later.",
+    runHintRunning: "A job is running right now. Use `Stop Current Job` if you need to stop safely and keep a checkpoint.",
+    runHintResume: "Previous progress can be resumed. Use `Resume Previous Progress` to continue from the saved checkpoint.",
+    runHintCancelled: "The job is stopped. Keep your settings and use `Resume Previous Progress` to continue.",
+    runHintFailed: "The job stopped on an error, but you may still be able to continue from a saved checkpoint after fixing the settings.",
     statPhase: "Phase",
     statFiles: "Files",
     statTexts: "Batch text count",
@@ -421,6 +485,9 @@ const I18N = {
     localLoadError: "Metadata could not be loaded, so the UI started with built-in defaults.",
     localScanStarted: "Submitted a scan job to the server.",
     localTranslateStarted: "Submitted a full translation job to the server.",
+    localResumeStarted: "Submitted a resume-from-checkpoint job to the server.",
+    localCancelRequested: "Sent a stop request for the current job.",
+    localCancelError: "Stop request failed: {message}",
     localExported: "Exported the current form settings as JSON.",
     localReset: "Restored the form to its default values.",
     localSubmitError: "Job creation failed: {message}",
@@ -433,6 +500,13 @@ const I18N = {
     eventBatchStart: "Started a translation batch · batch size {count}",
     eventBatchDone: "Finished a translation batch · batch size {count}",
     eventBatchError: "Batch translation error · {message}",
+    eventResourcePackSkipped: "Skipped an already-processed resource pack · {file}",
+    eventCheckpointLoaded: "Loaded checkpoint data · completed files {files} · resource packs {packs}",
+    eventFileError: "Recorded a file error · {message}",
+    eventWriteRetry: "Retrying a file write · {message}",
+    eventCancelRequested: "Sent a cancellation request.",
+    eventCancelled: "The job was cancelled and a checkpoint was saved.",
+    eventFatalError: "Fatal error encountered · {message}",
     eventDone: "Job finished · changed files {changed} · candidate files {candidates}",
     eventCompleted: "Saved the report.",
     eventFailed: "Job failed: {message}",
@@ -555,6 +629,16 @@ const I18N = {
     helpBackup: "本翻訳の前に元ファイルを別名でコピーします。",
     fieldDryRun: "既定値をスキャンモードにする",
     helpDryRun: "下のボタンで即座に切り替えられますが、フォーム既定値はこの設定に従います。",
+    fieldCheckpointEnabled: "チェックポイント保存",
+    helpCheckpointEnabled: "途中停止して後で再開したいなら有効のままが安全です。",
+    fieldContinueOnError: "ファイルエラー後も継続",
+    helpContinueOnError: "壊れたファイルだけ飛ばして残りを続行します。",
+    fieldCheckpointPath: "チェックポイント保存先",
+    helpCheckpointPath: "空欄ならワールド内の `.translation_checkpoint.json` を使います。",
+    fieldBatchRetries: "バッチ再試行回数",
+    helpBatchRetries: "API エラー時に小分け前にこの回数だけ再試行します。",
+    fieldWriteRetries: "書き込み再試行回数",
+    helpWriteRetries: "保存失敗時に原子的書き込みで再試行します。",
     fieldRegionDirs: "走査する region ディレクトリ",
     helpRegionDirs: "既定値で通常ワールド、entity、ネザー領域まで対象になります。",
     fieldSkipPatterns: "除外パターン",
@@ -568,6 +652,8 @@ const I18N = {
     runCopy: "まずはスキャン、問題なければ本翻訳という流れがやはり安全です。",
     actionScan: "スキャンのみ実行",
     actionTranslate: "本翻訳を実行",
+    actionResume: "前回の進行を再開",
+    actionCancel: "現在の作業を停止",
     actionExport: "設定JSONを書き出す",
     actionReset: "フォームを初期化",
     liveKicker: "Live Monitor",
@@ -576,6 +662,7 @@ const I18N = {
     statusQueued: "キュー待ち",
     statusRunning: "実行中",
     statusCompleted: "完了",
+    statusCancelled: "停止済み",
     statusFailed: "失敗",
     phaseIdle: "未開始",
     phaseQueued: "待機",
@@ -584,6 +671,7 @@ const I18N = {
     phaseScanPending: "スキャン準備",
     phaseScan: "ワールド処理中",
     phaseTranslate: "文の翻訳中",
+    phaseCancelled: "停止済み",
     phaseDone: "完了",
     phaseFailed: "失敗",
     activityPreparing: "設定と入力値を検証中",
@@ -594,13 +682,26 @@ const I18N = {
     activityBatchStart: "翻訳バッチ要求を送信中",
     activityBatchDone: "翻訳バッチ結果を反映中",
     activityBatchError: "エラー後に小さいバッチで再試行中",
+    activityResourcePackSkipped: "既に処理済みのリソースパックをスキップ中",
+    activityCheckpointLoaded: "保存済み進行を読み込み中",
+    activityFileError: "ファイルエラーを記録して継続中",
+    activityFileWriteRetry: "ファイル保存を再試行中",
+    activityCancelRequested: "停止要求を反映中",
+    activityCancelled: "作業を止めてチェックポイントを保存した",
     activityDone: "全体作業を完了",
     activityFailed: "ジョブが途中停止",
     summaryIdle: "まだ実行されていません。スキャンか本翻訳を開始すると、このパネルがリアルタイムで更新されます。",
     summaryQueued: "ジョブをキューに入れました。準備が終わり次第すぐに実行されます。",
     summaryRunning: "現在のファイルと翻訳バッチを基準に状態を更新中です。最終更新時刻も併せて確認してください。",
+    summaryCancelled: "ジョブは停止しました。チェックポイントが残るので `前回の進行を再開` で続きから実行できます。",
     summaryCompleted: "{changed}個のファイルが変更され、候補ファイルは {candidates} 個でした。",
     summaryFailed: "ジョブが途中で停止しました。パス、供給元、モデル、APIキーを確認してください。",
+    runHintIdle: "まずワールドフォルダを指定し、最初は `スキャンのみ実行` から始めるのが安全です。",
+    runHintReady: "新しいジョブを開始できます。チェックポイント保存が有効なら途中停止して後で再開できます。",
+    runHintRunning: "現在ジョブが動作中です。安全に止めたい場合は `現在の作業を停止` を使ってください。",
+    runHintResume: "前回の進行を再開できます。`前回の進行を再開` を押すと保存済みチェックポイントから続行します。",
+    runHintCancelled: "ジョブは停止中です。設定を保ったまま `前回の進行を再開` で続きから進められます。",
+    runHintFailed: "エラーで停止しましたが、チェックポイントが残っていれば設定修正後に再開できる場合があります。",
     statPhase: "段階",
     statFiles: "ファイル進行",
     statTexts: "バッチ文字列数",
@@ -627,6 +728,9 @@ const I18N = {
     localLoadError: "メタデータ取得に失敗したため、内蔵既定値で開始しました。",
     localScanStarted: "スキャンジョブをサーバーへ送信しました。",
     localTranslateStarted: "本翻訳ジョブをサーバーへ送信しました。",
+    localResumeStarted: "チェックポイント再開ジョブをサーバーへ送信しました。",
+    localCancelRequested: "現在のジョブへ停止要求を送りました。",
+    localCancelError: "停止要求失敗: {message}",
     localExported: "現在のフォーム設定を JSON として書き出しました。",
     localReset: "フォームを既定値に戻しました。",
     localSubmitError: "ジョブ作成失敗: {message}",
@@ -639,6 +743,13 @@ const I18N = {
     eventBatchStart: "翻訳バッチ開始 · バッチサイズ {count}",
     eventBatchDone: "翻訳バッチ完了 · バッチサイズ {count}",
     eventBatchError: "バッチ翻訳エラー · {message}",
+    eventResourcePackSkipped: "既に処理済みのリソースパックをスキップ · {file}",
+    eventCheckpointLoaded: "チェックポイント読込完了 · 完了ファイル {files} · リソースパック {packs}",
+    eventFileError: "ファイルエラー記録 · {message}",
+    eventWriteRetry: "ファイル保存再試行 · {message}",
+    eventCancelRequested: "停止要求を送りました。",
+    eventCancelled: "ジョブを停止し、チェックポイントを保存しました。",
+    eventFatalError: "致命的エラー発生 · {message}",
     eventDone: "全体完了 · 変更ファイル {changed} · 候補ファイル {candidates}",
     eventCompleted: "レポートを保存しました。",
     eventFailed: "ジョブ失敗: {message}",
@@ -737,14 +848,22 @@ function bindDom() {
     backupSuffix: document.getElementById("backupSuffix"),
     backup: document.getElementById("backup"),
     dryRun: document.getElementById("dryRun"),
+    checkpointEnabled: document.getElementById("checkpointEnabled"),
+    continueOnFileError: document.getElementById("continueOnFileError"),
+    checkpointPath: document.getElementById("checkpointPath"),
+    maxBatchRetries: document.getElementById("maxBatchRetries"),
+    maxFileWriteRetries: document.getElementById("maxFileWriteRetries"),
     regionDirs: document.getElementById("regionDirs"),
     skipPatterns: document.getElementById("skipPatterns"),
     componentPrefixes: document.getElementById("componentPrefixes"),
     overrides: document.getElementById("overrides"),
     scanButton: document.getElementById("scanButton"),
     translateButton: document.getElementById("translateButton"),
+    resumeButton: document.getElementById("resumeButton"),
+    cancelButton: document.getElementById("cancelButton"),
     exportButton: document.getElementById("exportButton"),
     resetButton: document.getElementById("resetButton"),
+    runHint: document.getElementById("runHint"),
     statusPill: document.getElementById("statusPill"),
     livePulse: document.getElementById("livePulse"),
     progressNumber: document.getElementById("progressNumber"),
@@ -837,6 +956,11 @@ function bindEvents() {
     dom.backupSuffix,
     dom.backup,
     dom.dryRun,
+    dom.checkpointEnabled,
+    dom.continueOnFileError,
+    dom.checkpointPath,
+    dom.maxBatchRetries,
+    dom.maxFileWriteRetries,
     dom.regionDirs,
     dom.skipPatterns,
     dom.componentPrefixes,
@@ -848,6 +972,8 @@ function bindEvents() {
 
   dom.scanButton.addEventListener("click", () => submitJob(true));
   dom.translateButton.addEventListener("click", () => submitJob(false));
+  dom.resumeButton.addEventListener("click", resumeJob);
+  dom.cancelButton.addEventListener("click", cancelJob);
   dom.exportButton.addEventListener("click", exportSettings);
   dom.resetButton.addEventListener("click", resetForm);
 }
@@ -917,6 +1043,11 @@ function buildDefaultDraft() {
     backupSuffix: meta.defaults.backup_suffix || ".bak_translate",
     backup: true,
     dryRun: false,
+    checkpointEnabled: meta.defaults.checkpoint_enabled ?? true,
+    continueOnFileError: meta.defaults.continue_on_file_error ?? true,
+    checkpointPath: "",
+    maxBatchRetries: meta.defaults.max_batch_retries ?? 3,
+    maxFileWriteRetries: meta.defaults.max_file_write_retries ?? 2,
     regionDirs: (meta.defaults.region_dirs || []).join("\n"),
     skipPatterns: (meta.defaults.skip_patterns || []).join("\n"),
     componentPrefixes: "",
@@ -978,6 +1109,11 @@ function collectDraft() {
     backupSuffix: dom.backupSuffix.value,
     backup: dom.backup.checked,
     dryRun: dom.dryRun.checked,
+    checkpointEnabled: dom.checkpointEnabled.checked,
+    continueOnFileError: dom.continueOnFileError.checked,
+    checkpointPath: dom.checkpointPath.value,
+    maxBatchRetries: dom.maxBatchRetries.value,
+    maxFileWriteRetries: dom.maxFileWriteRetries.value,
     regionDirs: dom.regionDirs.value,
     skipPatterns: dom.skipPatterns.value,
     componentPrefixes: dom.componentPrefixes.value,
@@ -1020,6 +1156,11 @@ function populateForm(draft) {
   dom.backupSuffix.value = state.draft.backupSuffix || ".bak_translate";
   dom.backup.checked = !!state.draft.backup;
   dom.dryRun.checked = !!state.draft.dryRun;
+  dom.checkpointEnabled.checked = !!state.draft.checkpointEnabled;
+  dom.continueOnFileError.checked = !!state.draft.continueOnFileError;
+  dom.checkpointPath.value = state.draft.checkpointPath || "";
+  dom.maxBatchRetries.value = state.draft.maxBatchRetries || 3;
+  dom.maxFileWriteRetries.value = state.draft.maxFileWriteRetries || 2;
   dom.regionDirs.value = state.draft.regionDirs || "";
   dom.skipPatterns.value = state.draft.skipPatterns || "";
   dom.componentPrefixes.value = state.draft.componentPrefixes || "";
@@ -1146,7 +1287,7 @@ function parseOverrides(text) {
   return result;
 }
 
-function buildPayload(forceDryRun) {
+function buildPayload(forceDryRun, resumeFromCheckpoint = false) {
   const draft = collectDraft();
   const targetLanguage =
     draft.targetLanguagePreset === "custom"
@@ -1197,6 +1338,14 @@ function buildPayload(forceDryRun) {
       source_lang_files: splitLines(draft.sourceLangFiles),
       target_lang_file: draft.targetLangFile.trim(),
       skip_if_target_exists: draft.skipIfTargetExists,
+    },
+    runtime: {
+      checkpoint_enabled: draft.checkpointEnabled,
+      checkpoint_path: draft.checkpointPath.trim(),
+      resume_from_checkpoint: resumeFromCheckpoint,
+      continue_on_file_error: draft.continueOnFileError,
+      max_batch_retries: Number(draft.maxBatchRetries) || 3,
+      max_file_write_retries: Number(draft.maxFileWriteRetries) || 2,
     },
   };
 }
@@ -1347,12 +1496,28 @@ function applyScopePreset(preset) {
 }
 
 async function submitJob(forceDryRun) {
+  return startJob({
+    forceDryRun,
+    resumeFromCheckpoint: false,
+    localEventKey: forceDryRun ? "localScanStarted" : "localTranslateStarted",
+  });
+}
+
+async function resumeJob() {
+  return startJob({
+    forceDryRun: false,
+    resumeFromCheckpoint: true,
+    localEventKey: "localResumeStarted",
+  });
+}
+
+async function startJob({ forceDryRun, resumeFromCheckpoint, localEventKey }) {
   setRunButtonsDisabled(true);
   try {
     const response = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ config: buildPayload(forceDryRun) }),
+      body: JSON.stringify({ config: buildPayload(forceDryRun, resumeFromCheckpoint) }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -1361,12 +1526,37 @@ async function submitJob(forceDryRun) {
     state.activeJobId = data.id;
     state.job = data;
     state.localEvents = [];
-    pushLocalEvent(forceDryRun ? "localScanStarted" : "localTranslateStarted");
+    pushLocalEvent(localEventKey);
     startPolling();
     renderMonitor();
   } catch (error) {
     pushLocalEvent("localSubmitError", { message: error.message }, true);
     setRunButtonsDisabled(false);
+    renderMonitor();
+  }
+}
+
+async function cancelJob() {
+  if (!state.activeJobId) {
+    return;
+  }
+
+  dom.cancelButton.disabled = true;
+  try {
+    const response = await fetch(`/api/jobs/${state.activeJobId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+    state.job = data;
+    pushLocalEvent("localCancelRequested");
+  } catch (error) {
+    pushLocalEvent("localCancelError", { message: error.message }, true);
+  } finally {
     renderMonitor();
   }
 }
@@ -1395,7 +1585,7 @@ async function pollJob() {
       throw new Error(data.error || "Polling failed");
     }
     state.job = data;
-    if (["completed", "failed"].includes(data.status)) {
+    if (["completed", "failed", "cancelled"].includes(data.status)) {
       setRunButtonsDisabled(false);
       stopPolling();
     }
@@ -1409,8 +1599,15 @@ async function pollJob() {
 }
 
 function setRunButtonsDisabled(disabled) {
-  dom.scanButton.disabled = disabled;
-  dom.translateButton.disabled = disabled;
+  const status = state.job?.status || "idle";
+  const running = disabled || status === "queued" || status === "running";
+  const hasWorldDir = Boolean(dom.worldDir.value.trim());
+  const canResume = !running && hasWorldDir && (state.job ? Boolean(state.job.can_resume) : dom.checkpointEnabled.checked);
+
+  dom.scanButton.disabled = running;
+  dom.translateButton.disabled = running;
+  dom.resumeButton.disabled = !canResume;
+  dom.cancelButton.disabled = !state.activeJobId || !running;
 }
 
 function exportSettings() {
@@ -1461,15 +1658,18 @@ function renderMonitor() {
   };
   const status = job?.status || "idle";
   const running = status === "running";
+  const resumable = canResumeFromState(job);
   const summary = job?.summary || buildPayload(dom.dryRun?.checked || false);
   const providerId = summary.provider || summary.api?.provider || providerFromPicker();
   const providerLabel = providerMetaById(providerId)?.label || providerId;
 
+  setRunButtonsDisabled(false);
   dom.statusPill.textContent = statusLabel(status);
   dom.livePulse.classList.toggle("active", running);
   dom.progressNumber.textContent = `${Math.round(progress.percent || 0)}%`;
   dom.progressBar.style.width = `${Math.max(0, Math.min(100, progress.percent || 0))}%`;
-  dom.monitorSummary.textContent = buildSummary(status, progress, job?.error || "");
+  dom.monitorSummary.textContent = buildSummary(status, progress, job?.error || "", resumable);
+  dom.runHint.textContent = runHintLabel(status, resumable);
   dom.statPhase.textContent = phaseLabel(progress.phase || "idle");
   dom.statFiles.textContent = `${progress.processed_files || 0} / ${progress.total_files || 0}`;
   dom.statTexts.textContent = String(progress.processed_texts || 0);
@@ -1543,11 +1743,30 @@ function formatServerEvent(event) {
       return formatTemplate(t("eventBatchDone"), { count: event.batch_size || 0 });
     case "translation_batch_error":
       return formatTemplate(t("eventBatchError"), { message: event.message || "" });
+    case "resource_pack_skipped":
+      return formatTemplate(t("eventResourcePackSkipped"), { file: baseName(event.zip_path || event.file || "") });
+    case "checkpoint_loaded":
+      return formatTemplate(t("eventCheckpointLoaded"), {
+        files: event.completed_region_files || 0,
+        packs: event.completed_resource_packs || 0,
+      });
+    case "file_error":
+      return formatTemplate(t("eventFileError"), { message: event.message || "" });
+    case "file_write_retry":
+      return formatTemplate(t("eventWriteRetry"), { message: event.message || "" });
+    case "job_cancel_requested":
+      return t("eventCancelRequested");
+    case "cancelled":
+      return t("eventCancelled");
+    case "fatal_error":
+      return formatTemplate(t("eventFatalError"), { message: event.message || "" });
     case "done":
       return formatTemplate(t("eventDone"), {
         changed: event.changed_file_count || 0,
         candidates: event.candidate_file_count || 0,
       });
+    case "job_cancelled":
+      return t("eventCancelled");
     case "job_completed":
       return t("eventCompleted");
     case "job_failed":
@@ -1557,19 +1776,21 @@ function formatServerEvent(event) {
   }
 }
 
-function buildSummary(status, progress, errorMessage) {
+function buildSummary(status, progress, errorMessage, resumable) {
   switch (status) {
     case "queued":
       return t("summaryQueued");
     case "running":
       return t("summaryRunning");
+    case "cancelled":
+      return t("summaryCancelled");
     case "completed":
       return formatTemplate(t("summaryCompleted"), {
         changed: progress.changed_file_count || 0,
         candidates: progress.candidate_file_count || 0,
       });
     case "failed":
-      return errorMessage ? `${t("summaryFailed")} ${errorMessage}` : t("summaryFailed");
+      return errorMessage ? `${t("summaryFailed")} ${errorMessage}`.trim() : t("summaryFailed");
     default:
       return t("summaryIdle");
   }
@@ -1583,6 +1804,8 @@ function statusLabel(status) {
       return t("statusRunning");
     case "completed":
       return t("statusCompleted");
+    case "cancelled":
+      return t("statusCancelled");
     case "failed":
       return t("statusFailed");
     default:
@@ -1604,6 +1827,8 @@ function phaseLabel(phase) {
       return t("phaseScan");
     case "translate":
       return t("phaseTranslate");
+    case "cancelled":
+      return t("phaseCancelled");
     case "done":
       return t("phaseDone");
     case "failed":
@@ -1632,12 +1857,50 @@ function activityLabel(activity) {
       return t("activityBatchDone");
     case "translation_batch_error":
       return t("activityBatchError");
+    case "resource_pack_skipped":
+      return t("activityResourcePackSkipped");
+    case "checkpoint_loaded":
+      return t("activityCheckpointLoaded");
+    case "file_error":
+      return t("activityFileError");
+    case "file_write_retry":
+      return t("activityFileWriteRetry");
+    case "cancel_requested":
+    case "job_cancel_requested":
+      return t("activityCancelRequested");
+    case "cancelled":
+      return t("activityCancelled");
     case "done":
       return t("activityDone");
     case "failed":
+    case "fatal_error":
       return t("activityFailed");
     default:
       return phaseLabel(activity);
+  }
+}
+
+function canResumeFromState(job) {
+  if (job) {
+    return Boolean(job.can_resume);
+  }
+  return Boolean(dom.worldDir.value.trim()) && dom.checkpointEnabled.checked;
+}
+
+function runHintLabel(status, resumable) {
+  switch (status) {
+    case "running":
+    case "queued":
+      return t("runHintRunning");
+    case "cancelled":
+      return t("runHintCancelled");
+    case "failed":
+      return resumable ? t("runHintFailed") : t("runHintReady");
+    case "completed":
+      return resumable ? t("runHintResume") : t("runHintReady");
+    case "idle":
+    default:
+      return resumable ? t("runHintResume") : dom.worldDir.value.trim() ? t("runHintReady") : t("runHintIdle");
   }
 }
 

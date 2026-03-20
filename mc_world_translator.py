@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import tomllib
 import zlib
 from copy import deepcopy
@@ -134,6 +135,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "target_lang_file": "ko_kr.json",
         "skip_if_target_exists": False,
     },
+    "runtime": {
+        "checkpoint_enabled": True,
+        "checkpoint_path": "",
+        "resume_from_checkpoint": False,
+        "continue_on_file_error": True,
+        "max_batch_retries": 3,
+        "max_file_write_retries": 2,
+    },
 }
 
 
@@ -154,6 +163,10 @@ class TextRef:
         self.path = path
 
 
+class TranslationCancelled(RuntimeError):
+    pass
+
+
 def merge_nested(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     result = deepcopy(base)
     for key, value in override.items():
@@ -169,6 +182,31 @@ def load_toml_config(path: Path | None) -> dict[str, Any]:
         return {}
     with path.open("rb") as f:
         return tomllib.load(f)
+
+
+def write_text_atomic(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=str(path.parent)) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
+
+
+def write_bytes_atomic(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(path.parent)) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
+
+
+def load_json_file(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 def load_legacy_translate_defaults(path: Path) -> dict[str, str]:
@@ -232,6 +270,8 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
         result["resource_pack"]["enabled"] = True
     if args.disable_resource_pack_translation:
         result["resource_pack"]["enabled"] = False
+    if getattr(args, "resume", False):
+        result["runtime"]["resume_from_checkpoint"] = True
 
     return result
 
@@ -287,9 +327,17 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
         if not report_path.is_absolute():
             report_path = (world_dir / report_path).resolve()
         result["report_path"] = str(report_path)
+        checkpoint_path = result["runtime"]["checkpoint_path"] or str(world_dir / ".translation_checkpoint.json")
+        checkpoint_path = Path(checkpoint_path).expanduser()
+        if not checkpoint_path.is_absolute():
+            checkpoint_path = (world_dir / checkpoint_path).resolve()
+        else:
+            checkpoint_path = checkpoint_path.resolve()
+        result["runtime"]["checkpoint_path"] = str(checkpoint_path)
     else:
         result["world_dir"] = ""
         result["report_path"] = result["report_path"] or ""
+        result["runtime"]["checkpoint_path"] = result["runtime"]["checkpoint_path"] or ""
 
     zip_paths: list[str] = []
     for zip_path in result["resource_pack"]["zip_paths"]:
@@ -303,16 +351,27 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
 
 
 class BatchTranslator:
-    def __init__(self, config: dict[str, Any], progress_callback: Any = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        progress_callback: Any = None,
+        cancel_check: Any = None,
+        initial_cache: dict[str, str] | None = None,
+    ) -> None:
         self.config = config
         self.progress_callback = progress_callback
-        self.cache: dict[str, str] = {}
+        self.cancel_check = cancel_check
+        self.cache: dict[str, str] = dict(initial_cache or {})
         self.overrides: dict[str, str] = dict(config["scan"]["overrides"])
         self.client = LLMProviderClient(config)
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
             self.progress_callback({"event": event, **payload})
+
+    def ensure_not_cancelled(self) -> None:
+        if self.cancel_check is not None and self.cancel_check():
+            raise TranslationCancelled("Translation was cancelled by the user.")
 
     def system_prompt(self) -> str:
         prompt_config = self.config["prompt"]
@@ -332,6 +391,7 @@ class BatchTranslator:
         )
 
     def translate_texts(self, texts: list[str]) -> dict[str, str]:
+        self.ensure_not_cancelled()
         missing: list[str] = []
         for text in texts:
             if text in self.cache:
@@ -346,6 +406,7 @@ class BatchTranslator:
 
         batch_size = max(1, int(self.config["batch_size"]))
         for start in range(0, len(missing), batch_size):
+            self.ensure_not_cancelled()
             batch = missing[start : start + batch_size]
             translated = self._translate_batch(batch, batch_size)
             for original, localized in translated.items():
@@ -355,84 +416,240 @@ class BatchTranslator:
 
     def _translate_batch(self, texts: list[str], batch_size: int) -> dict[str, str]:
         payload = {str(i): text for i, text in enumerate(texts)}
-        try:
-            self.emit("translation_batch_start", batch_size=len(texts))
-            parsed = self.client.translate_mapping(
-                payload,
-                system_prompt=self.system_prompt(),
-                temperature=float(self.config["temperature"]),
-            )
-            self.emit("translation_batch_done", batch_size=len(texts))
-            return {
-                text: parsed.get(str(i), text)
-                for i, text in enumerate(texts)
-            }
-        except Exception as exc:
-            self.emit("translation_batch_error", batch_size=len(texts), message=str(exc))
-            if batch_size > 1:
-                next_size = max(1, batch_size // 5)
-                merged: dict[str, str] = {}
-                for i in range(0, len(texts), next_size):
-                    merged.update(self._translate_batch(texts[i : i + next_size], next_size))
-                return merged
-            return {text: text for text in texts}
+        max_retries = max(1, int(self.config["runtime"]["max_batch_retries"]))
+        for attempt in range(1, max_retries + 1):
+            self.ensure_not_cancelled()
+            try:
+                self.emit("translation_batch_start", batch_size=len(texts), attempt=attempt, max_attempts=max_retries)
+                parsed = self.client.translate_mapping(
+                    payload,
+                    system_prompt=self.system_prompt(),
+                    temperature=float(self.config["temperature"]),
+                )
+                self.emit("translation_batch_done", batch_size=len(texts), attempt=attempt)
+                return {
+                    text: parsed.get(str(i), text)
+                    for i, text in enumerate(texts)
+                }
+            except TranslationCancelled:
+                raise
+            except Exception as exc:
+                self.emit(
+                    "translation_batch_error",
+                    batch_size=len(texts),
+                    attempt=attempt,
+                    max_attempts=max_retries,
+                    message=str(exc),
+                )
+                if attempt < max_retries:
+                    time.sleep(min(1.5 * attempt, 4.0))
+
+        if batch_size > 1:
+            next_size = max(1, batch_size // 5)
+            merged: dict[str, str] = {}
+            for i in range(0, len(texts), next_size):
+                self.ensure_not_cancelled()
+                merged.update(self._translate_batch(texts[i : i + next_size], next_size))
+            return merged
+        return {text: text for text in texts}
 
 
 class WorldTranslator:
-    def __init__(self, config: dict[str, Any], progress_callback: Any = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        progress_callback: Any = None,
+        cancel_check: Any = None,
+    ) -> None:
         self.config = config
         self.scan_config = config["scan"]
+        self.runtime_config = config["runtime"]
         self.component_prefixes = tuple(self.scan_config["component_translate_key_prefixes"])
         self.skip_patterns = tuple(self.scan_config["skip_patterns"])
         self.progress_callback = progress_callback
+        self.cancel_check = cancel_check
+        self.checkpoint_path = Path(self.runtime_config["checkpoint_path"]) if self.runtime_config["checkpoint_path"] else None
+        self.resume_from_checkpoint = bool(self.runtime_config["resume_from_checkpoint"])
+        self.completed_region_files: set[str] = set()
+        self.completed_resource_pack_paths: set[str] = set()
+        self.translation_cache: dict[str, str] = {}
+        self.file_errors: list[dict[str, Any]] = []
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
             "provider": config["api"]["provider"],
             "model": config["api"]["model"],
+            "status": "running",
             "changed_files": [],
             "resource_packs": [],
+            "errors": [],
         }
-        self.translator = None if config["dry_run"] else BatchTranslator(config, progress_callback=self.emit)
+        self.load_checkpoint()
+        self.translator = None if config["dry_run"] else BatchTranslator(
+            config,
+            progress_callback=self.emit,
+            cancel_check=self.is_cancelled,
+            initial_cache=self.translation_cache,
+        )
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
             self.progress_callback({"event": event, **payload})
 
-    def run(self) -> dict[str, Any]:
-        if self.config["resource_pack"]["enabled"]:
-            self.emit("resource_pack_start")
-            self.translate_resource_packs()
-            self.emit("resource_pack_done", count=len(self.report["resource_packs"]))
+    def is_cancelled(self) -> bool:
+        return bool(self.cancel_check is not None and self.cancel_check())
 
-        region_files = self.iter_region_files()
-        total_files = len(region_files)
-        self.emit("scan_start", total_files=total_files)
-        for index, file_path in enumerate(region_files, start=1):
-            self.emit("file_start", index=index, total=total_files, file=str(file_path))
-            result = self.process_region_file(file_path)
-            if result["changed_chunks"] > 0 or result.get("candidates", 0) > 0:
-                self.report["changed_files"].append(result)
-            self.emit(
-                "file_done",
-                index=index,
-                total=total_files,
-                file=str(file_path),
-                changed_chunks=result["changed_chunks"],
-                candidates=result.get("candidates", 0),
-            )
+    def ensure_not_cancelled(self) -> None:
+        if self.is_cancelled():
+            self.report["status"] = "cancelled"
+            self.save_checkpoint()
+            raise TranslationCancelled("Translation was cancelled by the user.")
 
-        self.report["changed_file_count"] = len(
-            [item for item in self.report["changed_files"] if item["changed_chunks"] > 0]
-        )
-        self.report["candidate_file_count"] = len(self.report["changed_files"])
-        self.write_report()
+    def checkpoint_payload(self) -> dict[str, Any]:
+        self.refresh_report_counts()
+        return {
+            "version": 1,
+            "world_dir": self.config["world_dir"],
+            "provider": self.config["api"]["provider"],
+            "model": self.config["api"]["model"],
+            "dry_run": self.config["dry_run"],
+            "completed_region_files": sorted(self.completed_region_files),
+            "completed_resource_pack_paths": sorted(self.completed_resource_pack_paths),
+            "translation_cache": self.translator.cache if self.translator is not None else self.translation_cache,
+            "report": self.report,
+            "saved_at": time.time(),
+        }
+
+    def load_checkpoint(self) -> None:
+        if not self.resume_from_checkpoint or self.checkpoint_path is None:
+            return
+        checkpoint = load_json_file(self.checkpoint_path)
+        if not checkpoint:
+            return
+        if checkpoint.get("world_dir") != self.config["world_dir"]:
+            return
+        self.completed_region_files = set(checkpoint.get("completed_region_files", []))
+        self.completed_resource_pack_paths = set(checkpoint.get("completed_resource_pack_paths", []))
+        self.translation_cache = dict(checkpoint.get("translation_cache", {}))
+        saved_report = checkpoint.get("report")
+        if isinstance(saved_report, dict):
+            self.report.update(saved_report)
+            self.report["status"] = "running"
         self.emit(
-            "done",
-            changed_file_count=self.report["changed_file_count"],
-            candidate_file_count=self.report["candidate_file_count"],
+            "checkpoint_loaded",
+            completed_region_files=len(self.completed_region_files),
+            completed_resource_packs=len(self.completed_resource_pack_paths),
         )
-        return self.report
+
+    def clear_checkpoint(self) -> None:
+        if self.checkpoint_path is not None and self.checkpoint_path.exists():
+            try:
+                self.checkpoint_path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def save_checkpoint(self) -> None:
+        if not self.runtime_config["checkpoint_enabled"] or self.checkpoint_path is None:
+            return
+        write_text_atomic(
+            self.checkpoint_path,
+            json.dumps(self.checkpoint_payload(), ensure_ascii=False, indent=2),
+        )
+
+    def refresh_report_counts(self) -> None:
+        self.report["changed_file_count"] = len(
+            [item for item in self.report["changed_files"] if item.get("changed_chunks", 0) > 0]
+        )
+        self.report["candidate_file_count"] = len(
+            [item for item in self.report["changed_files"] if item.get("candidates", 0) > 0]
+        )
+
+    def run(self) -> dict[str, Any]:
+        try:
+            if self.config["resource_pack"]["enabled"]:
+                self.ensure_not_cancelled()
+                self.emit("resource_pack_start")
+                self.translate_resource_packs()
+                self.emit("resource_pack_done", count=len(self.report["resource_packs"]))
+
+            region_files = self.iter_region_files()
+            pending_files = [path for path in region_files if str(path) not in self.completed_region_files]
+            total_files = len(pending_files)
+            self.emit(
+                "scan_start",
+                total_files=total_files,
+                skipped_completed=len(region_files) - total_files,
+            )
+            for index, file_path in enumerate(pending_files, start=1):
+                self.ensure_not_cancelled()
+                self.emit("file_start", index=index, total=total_files, file=str(file_path))
+                try:
+                    result = self.process_region_file(file_path)
+                except TranslationCancelled:
+                    raise
+                except Exception as exc:
+                    result = {
+                        "file": str(file_path),
+                        "changed_chunks": 0,
+                        "unique_texts": 0,
+                        "candidates": 0,
+                        "skipped": "file_error",
+                        "error": str(exc),
+                    }
+                    self.file_errors.append(result)
+                    self.report["errors"].append(result)
+                    self.emit("file_error", file=str(file_path), message=str(exc))
+                    if not self.runtime_config["continue_on_file_error"]:
+                        raise
+
+                self.completed_region_files.add(str(file_path))
+                if result["changed_chunks"] > 0 or result.get("candidates", 0) > 0 or result.get("skipped"):
+                    self.report["changed_files"].append(result)
+                self.save_checkpoint()
+                self.emit(
+                    "file_done",
+                    index=index,
+                    total=total_files,
+                    file=str(file_path),
+                    changed_chunks=result["changed_chunks"],
+                    candidates=result.get("candidates", 0),
+                    skipped=result.get("skipped", ""),
+                )
+
+            self.refresh_report_counts()
+            self.report["status"] = "completed"
+            self.write_report()
+            self.clear_checkpoint()
+            self.emit(
+                "done",
+                changed_file_count=self.report["changed_file_count"],
+                candidate_file_count=self.report["candidate_file_count"],
+                error_count=len(self.report["errors"]),
+            )
+            return self.report
+        except TranslationCancelled:
+            self.report["status"] = "cancelled"
+            self.refresh_report_counts()
+            self.write_report()
+            self.save_checkpoint()
+            self.emit(
+                "cancelled",
+                changed_file_count=self.report.get("changed_file_count", 0),
+                candidate_file_count=self.report.get("candidate_file_count", 0),
+            )
+            return self.report
+        except Exception as exc:
+            error_entry = {
+                "scope": "run",
+                "message": str(exc) or exc.__class__.__name__,
+            }
+            self.report["status"] = "failed"
+            self.report["errors"].append(error_entry)
+            self.refresh_report_counts()
+            self.write_report()
+            self.save_checkpoint()
+            self.emit("fatal_error", message=error_entry["message"])
+            raise
 
     def iter_region_files(self) -> list[Path]:
         world_dir = Path(self.config["world_dir"])
@@ -759,6 +976,7 @@ class WorldTranslator:
         return changed
 
     def process_region_file(self, path: Path) -> dict[str, Any]:
+        self.ensure_not_cancelled()
         if path.stat().st_size < 8192:
             return {"file": str(path), "changed_chunks": 0, "unique_texts": 0, "candidates": 0, "skipped": "small"}
 
@@ -773,6 +991,7 @@ class WorldTranslator:
         entries: list[tuple[int, bytes, int]] = []
 
         for idx in range(1024):
+            self.ensure_not_cancelled()
             loc = locations[idx * 4 : idx * 4 + 4]
             sector_offset = int.from_bytes(loc[:3], "big")
             sector_count = loc[3]
@@ -839,10 +1058,19 @@ class WorldTranslator:
                     body.extend(b"\x00" * padding)
                 sector_cursor += needed_sectors
 
-            with path.open("wb") as f:
-                f.write(header_locations)
-                f.write(header_timestamps)
-                f.write(body)
+            final_bytes = bytes(header_locations) + bytes(header_timestamps) + bytes(body)
+            last_error: Exception | None = None
+            for attempt in range(1, max(1, int(self.runtime_config["max_file_write_retries"])) + 1):
+                try:
+                    write_bytes_atomic(path, final_bytes)
+                    last_error = None
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    self.emit("file_write_retry", file=str(path), attempt=attempt, message=str(exc))
+                    time.sleep(min(0.5 * attempt, 2.0))
+            if last_error is not None:
+                raise last_error
 
         return {
             "file": str(path),
@@ -860,13 +1088,35 @@ class WorldTranslator:
             return
 
         for zip_path_str in self.config["resource_pack"]["zip_paths"]:
+            self.ensure_not_cancelled()
+            if zip_path_str in self.completed_resource_pack_paths:
+                self.emit("resource_pack_skipped", zip_path=zip_path_str, reason="checkpoint")
+                continue
             zip_path = Path(zip_path_str)
-            result = self.translate_resource_pack_zip(zip_path)
+            try:
+                result = self.translate_resource_pack_zip(zip_path)
+            except TranslationCancelled:
+                raise
+            except Exception as exc:
+                result = {
+                    "zip_path": str(zip_path),
+                    "translated_files": 0,
+                    "candidates": 0,
+                    "skipped": "resource_pack_error",
+                    "error": str(exc),
+                }
+                self.report["errors"].append(result)
+                self.emit("file_error", file=str(zip_path), message=str(exc))
+                if not self.runtime_config["continue_on_file_error"]:
+                    raise
             self.report["resource_packs"].append(result)
+            self.completed_resource_pack_paths.add(zip_path_str)
+            self.save_checkpoint()
 
     def translate_resource_pack_zip(self, zip_path: Path) -> dict[str, Any]:
         import zipfile
 
+        self.ensure_not_cancelled()
         if not zip_path.exists():
             return {"zip_path": str(zip_path), "translated_files": 0, "candidates": 0, "skipped": "missing"}
 
@@ -879,8 +1129,10 @@ class WorldTranslator:
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
             for source_name in source_names:
+                self.ensure_not_cancelled()
                 targets = [name for name in names if name.endswith(source_name) and "/lang/" in name]
                 for source_path in targets:
+                    self.ensure_not_cancelled()
                     target_path = source_path[: -len(source_name)] + target_name
                     if self.config["resource_pack"]["skip_if_target_exists"] and target_path in names:
                         continue
@@ -916,12 +1168,14 @@ class WorldTranslator:
             with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as dst:
                 written_targets = set()
                 for info in src.infolist():
+                    self.ensure_not_cancelled()
                     if info.filename in replacements:
                         dst.writestr(info.filename, replacements[info.filename])
                         written_targets.add(info.filename)
                     else:
                         dst.writestr(info, src.read(info.filename))
                 for target_path, payload in replacements.items():
+                    self.ensure_not_cancelled()
                     if target_path not in written_targets:
                         dst.writestr(target_path, payload)
             shutil.move(str(tmp_path), str(zip_path))
@@ -934,10 +1188,9 @@ class WorldTranslator:
 
     def write_report(self) -> None:
         report_path = Path(self.config["report_path"])
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(
+        write_text_atomic(
+            report_path,
             json.dumps(self.report, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
 
 
@@ -978,6 +1231,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, help="Translation batch size")
     parser.add_argument("--temperature", type=float, help="Sampling temperature")
     parser.add_argument("--dry-run", action="store_true", help="Scan only, do not call API or write files")
+    parser.add_argument("--resume", action="store_true", help="Resume from the last saved checkpoint if it exists")
     parser.add_argument("--no-backup", action="store_true", help="Do not create backup files")
     parser.add_argument(
         "--resource-pack-zip",

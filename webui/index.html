@@ -309,6 +309,41 @@
               </label>
             </div>
 
+            <div class="field-grid three">
+              <label class="field checkbox-field">
+                <span class="field-label" data-i18n="fieldCheckpointEnabled"></span>
+                <span class="toggle-line">
+                  <input id="checkpointEnabled" type="checkbox" checked />
+                  <span data-i18n="helpCheckpointEnabled"></span>
+                </span>
+              </label>
+              <label class="field checkbox-field">
+                <span class="field-label" data-i18n="fieldContinueOnError"></span>
+                <span class="toggle-line">
+                  <input id="continueOnFileError" type="checkbox" checked />
+                  <span data-i18n="helpContinueOnError"></span>
+                </span>
+              </label>
+              <label class="field">
+                <span class="field-label" data-i18n="fieldCheckpointPath"></span>
+                <input id="checkpointPath" type="text" />
+                <span class="field-help" data-i18n="helpCheckpointPath"></span>
+              </label>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span class="field-label" data-i18n="fieldBatchRetries"></span>
+                <input id="maxBatchRetries" type="number" min="1" />
+                <span class="field-help" data-i18n="helpBatchRetries"></span>
+              </label>
+              <label class="field">
+                <span class="field-label" data-i18n="fieldWriteRetries"></span>
+                <input id="maxFileWriteRetries" type="number" min="1" />
+                <span class="field-help" data-i18n="helpWriteRetries"></span>
+              </label>
+            </div>
+
             <div class="field-grid two">
               <label class="field">
                 <span class="field-label" data-i18n="fieldRegionDirs"></span>
@@ -341,10 +376,13 @@
               <p class="kicker" data-i18n="runKicker"></p>
               <h2 data-i18n="runTitle"></h2>
               <p class="section-copy" data-i18n="runCopy"></p>
+              <p class="run-hint" id="runHint"></p>
             </div>
             <div class="run-actions">
               <button type="button" class="primary-btn" id="scanButton" data-i18n="actionScan"></button>
               <button type="button" class="primary-btn accent-btn" id="translateButton" data-i18n="actionTranslate"></button>
+              <button type="button" class="secondary-btn" id="resumeButton" data-i18n="actionResume"></button>
+              <button type="button" class="secondary-btn danger-btn" id="cancelButton" data-i18n="actionCancel"></button>
               <button type="button" class="secondary-btn" id="exportButton" data-i18n="actionExport"></button>
               <button type="button" class="secondary-btn" id="resetButton" data-i18n="actionReset"></button>
             </div>
