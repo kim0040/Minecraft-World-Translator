@@ -34,6 +34,7 @@ minecraft-world-translator/
 ├── README.md
 ├── config.example.toml
 ├── mc_world_translator.py
+├── run_web_ui.command
 ├── webui_server.py
 └── requirements.txt
 └── webui/
@@ -70,6 +71,19 @@ python3 mc_world_translator.py --config config.example.toml
 
 브라우저에서 설정하고 실행하고 싶다면 웹 UI를 쓸 수 있다.
 
+### 원터치 실행
+
+macOS에서는 [run_web_ui.command](./run_web_ui.command) 파일을 더블클릭하면 된다.
+
+이 런처가 자동으로 처리하는 것:
+
+- `.venv` 가상환경 생성
+- `requirements.txt` 의존성 설치
+- 웹 UI 서버 실행
+- 기본 브라우저 열기
+
+처음 실행할 때는 의존성 설치 때문에 조금 걸릴 수 있다.
+
 ```bash
 python3 webui_server.py
 ```
@@ -105,6 +119,7 @@ python3 webui_server.py --host 0.0.0.0 --port 9000
 - 웹 UI는 `로컬 서버`다. 외부에 배포하는 용도가 아니라, 현재 PC에서 번역기를 편하게 조작하기 위한 화면이다.
 - API 키는 브라우저 저장소에 남기지 않는다. 새로고침 후 필요하면 다시 입력하면 된다.
 - 실제 번역 전에는 웹 UI에서도 `스캔만 실행`을 먼저 돌리는 걸 권장한다.
+- 더블클릭 런처를 실행했는데 macOS가 막으면, 파일 우클릭 후 `열기`로 한 번 허용하면 된다.
 
 ## 설정 파일 설명
 
