@@ -93,6 +93,8 @@ That launcher will:
 
 - create `.venv` if missing
 - install dependencies if needed
+- reuse an already-running local UI if one is found
+- choose the next open port automatically if `8765` is busy
 - start the local web server
 - open your browser automatically
 
@@ -141,6 +143,7 @@ Or use:
 - [run_web_ui.command](./run_web_ui.command)
 
 If macOS blocks the launcher, right-click it and choose `Open` once.
+If port `8765` is already being used, the launcher will try the next available port automatically.
 
 ### Linux
 
@@ -183,6 +186,8 @@ Change host and port:
 ```bash
 python3 webui_server.py --host 0.0.0.0 --port 9000
 ```
+
+If the default port is busy when using the one-click launcher, it will either reconnect to the existing UI or move to the next available port.
 
 ### What the Web UI Shows
 

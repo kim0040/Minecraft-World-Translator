@@ -623,7 +623,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     server = ThreadingHTTPServer((args.host, args.port), AppHandler)
-    url = f"http://{args.host}:{args.port}"
+    bound_host, bound_port = server.server_address[:2]
+    display_host = args.host
+    if bound_host in {"0.0.0.0", "::"}:
+        display_host = "127.0.0.1"
+    url = f"http://{display_host}:{bound_port}"
     print(f"Minecraft World Translator UI running at {url}")
     print("Press Ctrl+C to stop.")
 
