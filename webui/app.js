@@ -1,12 +1,21 @@
-const STORAGE_KEY = "mc-world-translator-ui-v1";
+const STORAGE_KEY = "mc-world-translator-ui-v2";
 
 const FALLBACK_META = {
+  providers: [
+    { id: "comet", label: "Comet API", default_base_url: "https://api.cometapi.com/v1", env_var: "COMET_API_KEY" },
+    { id: "openai", label: "OpenAI", default_base_url: "https://api.openai.com/v1", env_var: "OPENAI_API_KEY" },
+    { id: "gemini", label: "Gemini", default_base_url: "https://generativelanguage.googleapis.com/v1beta", env_var: "GEMINI_API_KEY" },
+    { id: "anthropic", label: "Anthropic", default_base_url: "https://api.anthropic.com/v1", env_var: "ANTHROPIC_API_KEY" },
+    { id: "openrouter", label: "OpenRouter", default_base_url: "https://openrouter.ai/api/v1", env_var: "OPENROUTER_API_KEY" },
+  ],
   style_presets: ["neutral", "casual", "formal", "dcinside"],
   example_paths: { world_dir: "", translate_py_path: "" },
   defaults: {
+    provider: "comet",
     batch_size: 40,
     temperature: 0.3,
     backup_suffix: ".bak_translate",
+    request_timeout: 120,
     region_dirs: ["region", "entities", "DIM-1/region", "DIM-1/entities"],
     skip_patterns: ["*.bak_translate"],
     resource_pack_source_lang_files: ["en_us.json", "zh_cn.json"],
@@ -22,117 +31,65 @@ const TARGET_LANGUAGE_VALUES = {
 const I18N = {
   ko: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "월드 번역 컨트롤 데스크",
+    brandTitle: "월드 번역 운영 패널",
     brandCopy:
-      "월드 경로, API 정보, 번역 범위, 리소스팩 옵션을 한 화면에서 정리하고 바로 실행할 수 있습니다. 초보자는 스캔부터, 숙련자는 커스텀 프롬프트까지 한 번에 제어하면 됩니다.",
-    heroEyebrow: "Browser Workflow",
-    heroTitle: "맵 번역 작업을\n브라우저에서 정돈해서 처리합니다",
+      "공급자, 모델, 프롬프트, 범위, 리소스팩, 진행 상태를 한 화면에서 정리합니다. 초반에는 안전하게 스캔하고, 확인이 끝나면 그대로 실번역으로 넘기면 됩니다.",
+    heroKicker: "Refined Workflow",
+    heroTitle: "보기 쉬운 구조로\n번역 작업을 끝까지 밀어붙입니다",
     heroText:
-      "이 UI는 기존 Python 번역기를 감싸는 로컬 컨트롤 패널입니다. 영어, 한국어, 일본어 인터페이스를 지원하고, 라이트/다크 테마 전환, 진행률 모니터링, 설정 재사용까지 포함합니다.",
-    stepOneTitle: "연결",
-    stepOneBody: "월드 폴더, translate.py, API 모델을 넣고 안전한 기본값부터 확인합니다.",
-    stepTwoTitle: "조정",
-    stepTwoBody: "대상 언어, 말투, 번역 범위, 리소스팩 옵션을 목적에 맞게 바꿉니다.",
-    stepThreeTitle: "실행",
-    stepThreeBody: "스캔 또는 실제 번역을 돌리고, 진행 로그와 결과 리포트를 같은 화면에서 확인합니다.",
-    sectionQuickEyebrow: "Quick Guide",
-    sectionQuickTitle: "바로 시작하기 전에",
-    recommendedBadge: "추천 흐름",
-    tipSafeTitle: "먼저 스캔",
-    tipSafeBody: "처음 다루는 월드면 `스캔만 실행`으로 후보 텍스트부터 확인하는 편이 안전합니다.",
-    tipPromptTitle: "기본은 neutral",
-    tipPromptBody: "책, 퍼즐 힌트, 안내문이 중요한 맵은 `neutral` 또는 `formal`이 가장 안정적입니다.",
-    tipSecretTitle: "API 키는 세션용",
-    tipSecretBody: "API 키는 브라우저 저장소에 남기지 않습니다. 새로고침 후 필요하면 다시 넣으면 됩니다.",
-    sectionBasicEyebrow: "Core Setup",
-    sectionBasicTitle: "기본 연결 정보",
+      "공급자별 API 형식을 맞춰두고, 모델 카탈로그 조회와 스타일 프롬프트 보정까지 붙였습니다. 지금 보이는 화면은 실제 번역기 코어를 제어하는 로컬 컨트롤 룸입니다.",
+    heroPanelOneTitle: "공급자 선택",
+    heroPanelOneBody: "Comet, OpenAI, Gemini, Anthropic, OpenRouter 중 하나를 고르고 기본 URL과 모델을 바로 다룹니다.",
+    heroPanelTwoTitle: "빠른 조정",
+    heroPanelTwoBody: "짧은 스타일 메모만 적어도 API를 통해 더 실전적인 번역 지시로 확장할 수 있습니다.",
+    heroPanelThreeTitle: "실시간 확인",
+    heroPanelThreeBody: "파일 수, 텍스트 배치 수, 현재 파일, 마지막 업데이트 시각이 계속 보여서 실제로 돌아가는지 바로 알 수 있습니다.",
+    connectionKicker: "Step 1",
+    connectionTitle: "연결과 모델",
+    connectionCopy: "먼저 공급자와 모델, 경로를 잡습니다. 모델 목록 불러오기를 누르면 현재 공급자 기준으로 사용 가능한 모델을 조회합니다.",
+    connectionTag: "필수 구간",
     fieldWorldDir: "월드 폴더 경로",
-    helpWorldDir: "번역할 마인크래프트 월드 폴더를 지정합니다. region/entities/resources.zip이 있는 폴더 기준입니다.",
+    helpWorldDir: "region, entities, resources.zip이 들어 있는 월드 폴더를 지정합니다.",
     fieldReportPath: "리포트 저장 경로",
-    helpReportPath: "비워두면 월드 폴더 안 `translation_report.json`을 기본값으로 사용합니다.",
+    helpReportPath: "비워두면 월드 내부 `translation_report.json`을 사용합니다.",
     fieldTranslatePy: "translate.py 경로",
-    helpTranslatePy: "기존 API 키, base_url, 모델, 시스템 프롬프트를 상속할 원본 스크립트 경로입니다.",
+    helpTranslatePy: "기존 API 키, base_url, 모델, 시스템 프롬프트를 상속할 원본 파일입니다.",
     fieldInheritTranslatePy: "translate.py 상속",
-    helpInheritTranslatePy: "켜면 비어 있는 API 관련 값들을 translate.py에서 자동으로 채웁니다.",
+    helpInheritTranslatePy: "빈 API 설정이 있으면 translate.py 값으로 채웁니다.",
     fieldApiKey: "API 키",
-    helpApiKey: "현재 세션에서만 사용합니다. 브라우저 저장소에는 보관하지 않습니다.",
+    helpApiKey: "현재 세션에서만 사용하며 브라우저 저장소에는 남기지 않습니다.",
     fieldBaseUrl: "Base URL",
-    helpBaseUrl: "프록시 또는 호환 API 엔드포인트가 있으면 입력합니다. 없으면 비워둡니다.",
     fieldModel: "모델 이름",
-    helpModel: "예: GPT 계열, 호환 LLM 모델명. translate.py 상속을 쓰면 비워둘 수 있습니다.",
-    sectionPromptEyebrow: "Prompt Design",
-    sectionPromptTitle: "대상 언어와 스타일",
+    helpModel: "직접 입력도 가능하고, 아래에서 모델 목록을 불러와 클릭해 넣을 수도 있습니다.",
+    fieldTimeout: "요청 제한 시간(초)",
+    helpTimeout: "모델 응답이 느린 공급자를 쓸 때 여유 있게 늘릴 수 있습니다.",
+    baseUrlHelp: "기본 URL: {url} · 환경변수: {env}",
+    actionLoadModels: "모델 목록 불러오기",
+    modelCatalogIdle: "아직 모델 목록을 불러오지 않았습니다.",
+    modelCatalogLoading: "모델 목록을 불러오는 중입니다...",
+    modelCatalogLoaded: "{count}개 모델을 불러왔습니다. 클릭하면 모델 입력칸에 채워집니다.",
+    modelCatalogError: "모델 목록 조회 실패: {message}",
+    promptKicker: "Step 2",
+    promptTitle: "대상 언어와 스타일",
+    promptCopy: "짧은 메모에서 시작해도 됩니다. 스타일 보정 버튼이 현재 공급자와 모델을 이용해 더 디테일한 지시문으로 다듬어줍니다.",
     fieldTargetLanguage: "대상 언어",
-    helpTargetLanguage: "빠른 선택 후 필요하면 커스텀 언어명을 직접 입력할 수 있습니다.",
-    fieldCustomLanguage: "커스텀 언어명",
+    helpTargetLanguage: "한국어, 영어, 일본어는 빠르게 선택하고, 필요하면 직접 입력으로 바꿉니다.",
+    fieldCustomLanguage: "직접 입력 언어명",
     helpCustomLanguage: "예: 繁體中文, Deutsch, Brazilian Portuguese",
     fieldStylePreset: "스타일 프리셋",
+    fieldStyleBrief: "짧은 스타일 메모",
+    helpStyleBrief: "예: 중세 공포맵 느낌, 고유명사는 음역, 힌트는 명확하게",
+    assistTitle: "스타일 보정",
+    assistBody: "짧게 적은 메모를 실제 게임 번역용 추가 지시문으로 확장합니다.",
+    actionImproveStyle: "AI로 디테일 보강",
+    assistLoading: "스타일 지시를 보정하는 중입니다...",
+    assistDone: "스타일 지시를 추가했습니다.",
+    assistError: "스타일 보정 실패: {message}",
     fieldStylePrompt: "추가 스타일 지시",
-    helpStylePrompt: "프리셋 뒤에 덧붙일 세부 톤 조정입니다. 말투, 고유명사 처리, 분위기 등을 적습니다.",
+    helpStylePrompt: "프리셋 뒤에 붙는 세부 지시문입니다. 분위기, 고유명사 처리, 말투 강도 등을 여기에 넣습니다.",
+    customPromptToggle: "전체 시스템 프롬프트를 직접 넣고 싶다면 열기",
     fieldCustomPrompt: "전체 시스템 프롬프트",
-    helpCustomPrompt: "이 값을 입력하면 프리셋 대신 완전한 시스템 프롬프트로 사용합니다.",
-    sectionScopeEyebrow: "Scan Scope",
-    sectionScopeTitle: "무엇을 번역할지",
-    scopeSigns: "표지판",
-    scopeBooks: "책 페이지",
-    scopeCustomNames: "커스텀 이름",
-    scopeItemNames: "아이템 이름",
-    scopeLore: "Lore",
-    scopeTitles: "title",
-    scopeFilteredTitles: "filtered_title",
-    scopeCommandOutput: "tellraw/title 출력",
-    scopeSkipCommands: "실제 명령어 건너뛰기",
-    fieldPrefixes: "번역 키 접두사",
-    helpPrefixes: "한 줄에 하나씩 넣습니다. `brennenburg.`처럼 translate 키를 텍스트화할 때 씁니다.",
-    fieldOverrides: "강제 치환 규칙",
-    helpOverrides: "한 줄에 `원문=번역문` 형식으로 넣습니다. 프로젝트 고유 용어 고정용입니다.",
-    sectionResourceEyebrow: "Resource Pack",
-    sectionResourceTitle: "리소스팩 언어 파일 옵션",
-    fieldResourceEnabled: "리소스팩 번역 사용",
-    helpResourceEnabled: "resources.zip 같은 lang 파일도 같이 번역합니다.",
-    fieldSkipExistingLang: "이미 대상 언어가 있으면 건너뛰기",
-    helpSkipExistingLang: "기존 `ko_kr.json` 등을 보존하고 싶을 때 유용합니다.",
-    fieldZipPaths: "zip 경로",
-    helpZipPaths: "한 줄에 하나씩 입력합니다. 상대 경로는 월드 폴더 기준으로 처리됩니다.",
-    fieldSourceLangFiles: "원본 lang 파일명",
-    helpSourceLangFiles: "예: en_us.json, zh_cn.json",
-    fieldTargetLangFile: "대상 lang 파일명",
-    helpTargetLangFile: "예: ko_kr.json, en_us.json, ja_jp.json",
-    sectionAdvancedEyebrow: "Advanced",
-    sectionAdvancedTitle: "세부 제어",
-    fieldBatchSize: "배치 크기",
-    helpBatchSize: "한 번에 API로 보내는 문장 수입니다. 응답이 불안하면 낮추는 편이 좋습니다.",
-    fieldTemperature: "Temperature",
-    helpTemperature: "낮을수록 보수적이고 일관적입니다. 보통 0.1~0.4가 무난합니다.",
-    fieldBackupSuffix: "백업 suffix",
-    helpBackupSuffix: "원본 백업 파일명 뒤에 붙는 문자열입니다.",
-    fieldBackup: "원본 백업",
-    helpBackup: "실제 번역 전에 원본 파일을 별도 백업합니다.",
-    fieldDryRun: "기본값을 스캔 모드로",
-    helpDryRun: "이 체크는 현재 폼 기본값입니다. 아래 버튼으로도 실행 방식을 바로 바꿀 수 있습니다.",
-    fieldRegionDirs: "스캔할 region 디렉터리",
-    helpRegionDirs: "기본값을 유지하면 일반 월드와 네더/엔티티 영역까지 함께 봅니다.",
-    fieldSkipPatterns: "건너뛸 파일 패턴",
-    helpSkipPatterns: "예: *.bak_translate",
-    actionsTitle: "실행 버튼",
-    actionsBody: "스캔은 API 호출 없이 후보만 확인합니다. 실제 번역은 변경 사항을 적용하고 리포트를 남깁니다.",
-    actionScan: "스캔만 실행",
-    actionTranslate: "실제 번역 실행",
-    actionExport: "설정 내보내기",
-    actionReset: "기본값 복원",
-    monitorEyebrow: "Live Monitor",
-    monitorTitle: "실시간 진행 상황",
-    timelineEyebrow: "Activity",
-    timelineTitle: "작업 로그",
-    resultEyebrow: "Report",
-    resultTitle: "결과 JSON",
-    statPhase: "단계",
-    statFiles: "파일 진행",
-    statChanged: "수정 파일",
-    statCandidates: "후보 파일",
-    currentFile: "현재 파일",
-    themeLight: "다크 테마로 전환",
-    themeDark: "라이트 테마로 전환",
+    helpCustomPrompt: "여기에 값을 넣으면 프리셋과 추가 스타일 지시 대신 이 문장을 그대로 사용합니다.",
     targetPreset_ko: "한국어",
     targetPreset_en: "영어",
     targetPreset_ja: "일본어",
@@ -141,10 +98,68 @@ const I18N = {
     stylePreset_casual: "casual",
     stylePreset_formal: "formal",
     stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "가장 안전한 기본값입니다. 설명문, 퍼즐 힌트, 시스템 문구에 적합합니다.",
-    stylePresetDesc_casual: "조금 더 친근하고 부드럽게 번역합니다. 대사 중심 맵에 어울립니다.",
-    stylePresetDesc_formal: "정돈된 문장으로 번역합니다. 안내문, 책, 기록물에 안정적입니다.",
-    stylePresetDesc_dcinside: "인터넷 커뮤니티 말투를 섞습니다. 진지한 맵에는 과할 수 있습니다.",
+    stylePresetDesc_neutral: "책, 퍼즐, 시스템 안내에 가장 안전합니다.",
+    stylePresetDesc_casual: "조금 더 부드럽고 친근한 번역에 적합합니다.",
+    stylePresetDesc_formal: "기록물, 메모, 고풍스러운 안내문에 안정적입니다.",
+    stylePresetDesc_dcinside: "거친 커뮤니티 말투가 섞입니다. 분위기 맵에서는 과할 수 있습니다.",
+    scopeKicker: "Step 3",
+    scopeTitle: "무엇을 번역할지",
+    scopeCopy: "복잡한 체크박스를 줄이고 의미별 그룹으로 묶었습니다. 프리셋 버튼으로 빠르게 시작한 뒤 세부 조정만 하면 됩니다.",
+    scopePresetRecommended: "추천 구성",
+    scopePresetStory: "스토리 우선",
+    scopePresetAll: "전부 켜기",
+    scopeGroupCore: "핵심 진행 텍스트",
+    scopeGroupItems: "아이템과 이름",
+    scopeGroupScripted: "커맨드/연출",
+    scopeBooks: "책 페이지",
+    scopeSigns: "표지판",
+    scopeTitles: "title",
+    scopeFilteredTitles: "filtered_title",
+    scopeCustomNames: "커스텀 이름",
+    scopeItemNames: "아이템 이름",
+    scopeLore: "Lore",
+    scopeCommandOutput: "tellraw/title 출력",
+    scopeSkipCommands: "실제 명령어는 건너뛰기",
+    resourceKicker: "Step 4",
+    resourceTitle: "리소스팩 언어 파일",
+    resourceCopy: "리소스팩 번역이 필요한 경우에만 켭니다. 꺼져 있으면 관련 입력칸은 의미만 보여주고 실제 작업에는 포함되지 않습니다.",
+    fieldResourceEnabled: "리소스팩 번역 사용",
+    fieldZipPaths: "zip 경로",
+    helpZipPaths: "한 줄에 하나씩. 상대 경로는 월드 폴더 기준으로 계산됩니다.",
+    fieldSourceLangFiles: "원본 lang 파일명",
+    helpSourceLangFiles: "예: en_us.json, zh_cn.json",
+    fieldTargetLangFile: "대상 lang 파일명",
+    helpTargetLangFile: "예: ko_kr.json, en_us.json, ja_jp.json",
+    fieldSkipExistingLang: "이미 대상 언어 파일이 있으면 건너뛰기",
+    advancedKicker: "Optional",
+    advancedTitle: "세부 제어",
+    fieldBatchSize: "배치 크기",
+    helpBatchSize: "한 번에 API로 보내는 문자열 수입니다. 실패가 잦으면 줄이세요.",
+    fieldTemperature: "Temperature",
+    helpTemperature: "낮을수록 보수적이고 일관적입니다. 보통 0.1~0.4가 안전합니다.",
+    fieldBackupSuffix: "백업 suffix",
+    helpBackupSuffix: "원본 파일 백업명 뒤에 붙는 문자열입니다.",
+    fieldBackup: "원본 백업",
+    helpBackup: "실번역 전에 원본 파일을 따로 복사합니다.",
+    fieldDryRun: "기본값을 스캔 모드로",
+    helpDryRun: "버튼으로 언제든 스캔/실번역을 바꿀 수 있지만, 폼 기본값은 이 체크를 따릅니다.",
+    fieldRegionDirs: "스캔할 region 디렉터리",
+    helpRegionDirs: "기본값이면 일반 월드, 엔티티, 네더 영역까지 봅니다.",
+    fieldSkipPatterns: "건너뛸 파일 패턴",
+    helpSkipPatterns: "예: *.bak_translate",
+    fieldPrefixes: "번역 키 접두사",
+    helpPrefixes: "한 줄에 하나씩. translate 키를 텍스트화해서 번역할 때 씁니다.",
+    fieldOverrides: "강제 치환 규칙",
+    helpOverrides: "한 줄에 `원문=번역문` 형식으로 넣습니다.",
+    runKicker: "Step 5",
+    runTitle: "실행",
+    runCopy: "처음에는 스캔으로 후보만 보고, 문제 없으면 실번역으로 넘어가는 흐름을 권장합니다.",
+    actionScan: "스캔만 실행",
+    actionTranslate: "실제 번역 실행",
+    actionExport: "설정 JSON 내보내기",
+    actionReset: "폼 기본값 복원",
+    liveKicker: "Live Monitor",
+    liveTitle: "실행 상태",
     statusIdle: "대기 중",
     statusQueued: "대기열",
     statusRunning: "실행 중",
@@ -152,150 +167,131 @@ const I18N = {
     statusFailed: "실패",
     phaseIdle: "준비 안 됨",
     phaseQueued: "대기",
-    phasePreparing: "설정 정리",
-    phaseResourcePack: "리소스팩 번역",
+    phasePreparing: "초기 준비",
+    phaseResourcePack: "리소스팩 처리",
     phaseScanPending: "월드 스캔 준비",
     phaseScan: "월드 파일 처리",
+    phaseTranslate: "문장 번역 중",
     phaseDone: "완료",
     phaseFailed: "실패",
-    summaryIdle: "폼을 채운 뒤 스캔 또는 실제 번역을 실행하면 여기서 진행률을 실시간으로 볼 수 있습니다.",
-    summaryQueued: "작업을 큐에 올렸습니다. 설정 검증과 초기 준비가 끝나면 바로 실행됩니다.",
-    summaryRunning: "월드 파일을 순회하면서 번역 가능한 텍스트를 수집하고 적용하는 중입니다.",
+    activityPreparing: "설정과 입력값을 검증하는 중",
+    activityResourcePack: "리소스팩 zip 안 언어 파일을 처리하는 중",
+    activityScanStart: "월드 파일 스캔을 시작함",
+    activityFileStart: "현재 파일의 텍스트 후보를 모으는 중",
+    activityFileDone: "현재 파일 처리를 마침",
+    activityBatchStart: "배치 번역 요청을 보내는 중",
+    activityBatchDone: "배치 번역 응답을 반영하는 중",
+    activityBatchError: "배치 실패 후 더 작은 단위로 재시도 중",
+    activityDone: "전체 작업을 마침",
+    activityFailed: "작업이 중단됨",
+    summaryIdle: "아직 실행되지 않았습니다. 스캔 또는 실번역을 시작하면 여기에 현재 상태가 계속 갱신됩니다.",
+    summaryQueued: "작업이 큐에 들어갔습니다. 준비가 끝나면 바로 실행합니다.",
+    summaryRunning: "현재 파일과 번역 배치를 기준으로 상태를 갱신 중입니다. 마지막 업데이트 시각도 같이 확인하세요.",
     summaryCompleted: "{changed}개 파일이 수정됐고, 후보 파일은 {candidates}개였습니다.",
-    summaryFailed: "작업이 중단됐습니다. 입력 경로나 모델 설정, API 키를 다시 확인하세요.",
-    emptyResult: "아직 실행 결과가 없습니다.",
+    summaryFailed: "작업이 중단됐습니다. 경로, 공급자, 모델, API 키를 확인하세요.",
+    statPhase: "단계",
+    statFiles: "파일 진행",
+    statTexts: "번역 배치 텍스트",
+    statChanged: "수정 파일",
+    statCandidates: "후보 파일",
+    statLastUpdate: "마지막 갱신",
+    currentProvider: "현재 공급자",
+    currentModel: "현재 모델",
+    currentActivity: "현재 동작",
+    currentFile: "현재 파일",
+    logKicker: "Activity",
+    logTitle: "작업 로그",
+    resultKicker: "Report",
+    resultTitle: "결과 JSON",
+    emptyResult: "아직 결과가 없습니다.",
     emptyTimeline: "아직 로그가 없습니다.",
+    themeLight: "다크 테마로 전환",
+    themeDark: "라이트 테마로 전환",
     exportFilename: "translator-config.json",
+    localLoadError: "메타데이터를 못 불러와서 내장 기본값으로 시작했습니다.",
+    localScanStarted: "스캔 작업을 서버에 요청했습니다.",
+    localTranslateStarted: "실번역 작업을 서버에 요청했습니다.",
+    localExported: "현재 폼 설정을 JSON으로 내보냈습니다.",
+    localReset: "폼을 기본값으로 되돌렸습니다.",
+    localSubmitError: "작업 생성 실패: {message}",
     eventJobStarted: "작업을 시작했습니다.",
-    eventResourcePackStart: "리소스팩 언어 파일 번역을 시작했습니다.",
-    eventResourcePackDone: "리소스팩 단계가 끝났습니다. 처리된 zip 결과: {count}",
-    eventScanStart: "월드 파일 스캔을 시작했습니다. 대상 파일 수: {total}",
+    eventResourcePackStart: "리소스팩 번역을 시작했습니다.",
+    eventResourcePackDone: "리소스팩 단계가 끝났습니다. 처리 결과 수: {count}",
+    eventScanStart: "월드 파일 스캔 시작. 대상 파일 수: {total}",
     eventFileStart: "[{index}/{total}] {file} 처리 시작",
     eventFileDone: "[{index}/{total}] {file} 완료 · 수정 청크 {changed} · 후보 텍스트 {candidates}",
-    eventDone: "전체 작업 완료. 수정 파일 {changed}, 후보 파일 {candidates}",
-    eventCompleted: "번역 리포트를 저장했습니다.",
+    eventBatchStart: "번역 배치 요청 시작 · 묶음 크기 {count}",
+    eventBatchDone: "번역 배치 완료 · 묶음 크기 {count}",
+    eventBatchError: "배치 번역 오류 · {message}",
+    eventDone: "전체 작업 완료 · 수정 파일 {changed} · 후보 파일 {candidates}",
+    eventCompleted: "리포트를 저장했습니다.",
     eventFailed: "작업 실패: {message}",
     eventUnknown: "이벤트: {event}",
-    localScanStarted: "스캔 작업 요청을 서버에 보냈습니다.",
-    localTranslateStarted: "실제 번역 작업 요청을 서버에 보냈습니다.",
-    localExported: "현재 설정을 JSON 파일로 내보냈습니다.",
-    localReset: "폼을 기본값으로 되돌렸습니다.",
-    localLoadError: "메타데이터를 불러오지 못해 기본값으로 시작했습니다.",
-    localSubmitError: "작업 생성 요청에 실패했습니다: {message}",
+    relativeNow: "방금 전",
+    relativeSeconds: "{count}초 전",
+    relativeMinutes: "{count}분 전",
   },
   en: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "World Translation Control Desk",
+    brandTitle: "World Translation Operations Panel",
     brandCopy:
-      "Configure the world path, API settings, scan scope, and resource-pack options in one place, then run the job directly. Beginners can start with a scan, while advanced users can drive everything with custom prompts.",
-    heroEyebrow: "Browser Workflow",
-    heroTitle: "Run map translation\nthrough a clean browser dashboard",
+      "Manage provider, model, prompt, scan scope, resource-pack options, and live execution state in one place. Start with a scan, review it, then move straight into a full translation run.",
+    heroKicker: "Refined Workflow",
+    heroTitle: "Push translation work\nthrough a cleaner control surface",
     heroText:
-      "This UI is a local control panel built around the existing Python translator. It supports English, Korean, and Japanese UI copy, light and dark themes, live progress tracking, and reusable settings.",
-    stepOneTitle: "Connect",
-    stepOneBody: "Point to the world folder, translate.py, and your model so the tool can inherit safe defaults.",
-    stepTwoTitle: "Tune",
-    stepTwoBody: "Adjust target language, tone, scan scope, and resource-pack behavior for the map you are working on.",
-    stepThreeTitle: "Run",
-    stepThreeBody: "Launch a scan or a full translation and review progress logs plus the JSON report in the same screen.",
-    sectionQuickEyebrow: "Quick Guide",
-    sectionQuickTitle: "Before you start",
-    recommendedBadge: "Recommended flow",
-    tipSafeTitle: "Scan first",
-    tipSafeBody: "If this is a new world, start with scan-only mode so you can review candidates before any write happens.",
-    tipPromptTitle: "Use neutral by default",
-    tipPromptBody: "For books, puzzle hints, and system text, `neutral` or `formal` is usually the safest choice.",
-    tipSecretTitle: "API key stays session-only",
-    tipSecretBody: "The API key is not saved in browser storage. If you refresh, enter it again if needed.",
-    sectionBasicEyebrow: "Core Setup",
-    sectionBasicTitle: "Basic connection settings",
+      "Provider-specific API formats are wired in, model catalog loading is built in, and short style notes can be expanded into usable prompt instructions. This page is a local control room for the actual translator core.",
+    heroPanelOneTitle: "Pick a provider",
+    heroPanelOneBody: "Switch between Comet, OpenAI, Gemini, Anthropic, and OpenRouter without manually rewriting the transport layer.",
+    heroPanelTwoTitle: "Tune faster",
+    heroPanelTwoBody: "Even a short note can be expanded into a more practical translation instruction block through the connected API.",
+    heroPanelThreeTitle: "See progress clearly",
+    heroPanelThreeBody: "Files, translated batch text counts, current file, and last update time stay visible so you can tell the job is still moving.",
+    connectionKicker: "Step 1",
+    connectionTitle: "Connection and model",
+    connectionCopy: "Set the provider, model, and paths first. The model loader will query the selected provider for available models.",
+    connectionTag: "Required",
     fieldWorldDir: "World directory",
-    helpWorldDir: "Point to the Minecraft world folder that contains region/entities/resources.zip.",
+    helpWorldDir: "Point to the world folder that contains region, entities, and optionally resources.zip.",
     fieldReportPath: "Report output path",
-    helpReportPath: "Leave empty to use `translation_report.json` inside the world folder.",
+    helpReportPath: "Leave blank to use `translation_report.json` inside the world folder.",
     fieldTranslatePy: "translate.py path",
-    helpTranslatePy: "Path to the legacy script used to inherit API key, base_url, model, and system prompt defaults.",
+    helpTranslatePy: "Legacy file used to inherit API key, base_url, model, and prompt defaults.",
     fieldInheritTranslatePy: "Inherit from translate.py",
-    helpInheritTranslatePy: "When enabled, missing API fields will be filled from translate.py automatically.",
+    helpInheritTranslatePy: "Missing API settings will be filled from translate.py when available.",
     fieldApiKey: "API key",
-    helpApiKey: "Used only for the current session. It is not stored in browser storage.",
+    helpApiKey: "Used only for this browser session. It is not written to local storage.",
     fieldBaseUrl: "Base URL",
-    helpBaseUrl: "Set this only if you use a proxy or compatible API endpoint.",
     fieldModel: "Model name",
-    helpModel: "Example: a GPT-family or compatible LLM model name. Can stay empty if translate.py provides it.",
-    sectionPromptEyebrow: "Prompt Design",
-    sectionPromptTitle: "Target language and tone",
+    helpModel: "You can type it manually or click a loaded model below to fill this field.",
+    fieldTimeout: "Request timeout (sec)",
+    helpTimeout: "Increase this if the selected provider or model tends to answer slowly.",
+    baseUrlHelp: "Default URL: {url} · env var: {env}",
+    actionLoadModels: "Load Available Models",
+    modelCatalogIdle: "Model catalog has not been loaded yet.",
+    modelCatalogLoading: "Loading model catalog...",
+    modelCatalogLoaded: "{count} models loaded. Click one to fill the model field.",
+    modelCatalogError: "Model catalog request failed: {message}",
+    promptKicker: "Step 2",
+    promptTitle: "Target language and tone",
+    promptCopy: "A short note is enough to start. The style improver can turn it into a more detailed instruction block using the selected provider and model.",
     fieldTargetLanguage: "Target language",
-    helpTargetLanguage: "Choose a common target first, then switch to a custom label if needed.",
+    helpTargetLanguage: "Pick Korean, English, or Japanese quickly, then switch to custom if needed.",
     fieldCustomLanguage: "Custom language label",
     helpCustomLanguage: "Examples: 繁體中文, Deutsch, Brazilian Portuguese",
     fieldStylePreset: "Style preset",
+    fieldStyleBrief: "Short style note",
+    helpStyleBrief: "Example: medieval horror tone, transliterate names, keep hints explicit",
+    assistTitle: "Style booster",
+    assistBody: "Expand a short note into more actionable prompt instructions.",
+    actionImproveStyle: "Expand with AI",
+    assistLoading: "Improving the style instructions...",
+    assistDone: "Added the expanded style instructions.",
+    assistError: "Style improvement failed: {message}",
     fieldStylePrompt: "Extra style instructions",
-    helpStylePrompt: "Use this for finer tone control, name handling, or atmosphere hints.",
+    helpStylePrompt: "Appended after the preset. Use this for tone, name handling, puzzle clarity, and pacing.",
+    customPromptToggle: "Open this if you want to provide the full system prompt yourself",
     fieldCustomPrompt: "Full system prompt",
-    helpCustomPrompt: "If set, this replaces the preset and becomes the full system prompt.",
-    sectionScopeEyebrow: "Scan Scope",
-    sectionScopeTitle: "What should be translated",
-    scopeSigns: "Signs",
-    scopeBooks: "Book pages",
-    scopeCustomNames: "Custom names",
-    scopeItemNames: "Item names",
-    scopeLore: "Lore",
-    scopeTitles: "title",
-    scopeFilteredTitles: "filtered_title",
-    scopeCommandOutput: "tellraw/title output",
-    scopeSkipCommands: "Skip real commands",
-    fieldPrefixes: "Translate key prefixes",
-    helpPrefixes: "One per line. Use prefixes like `brennenburg.` when translate keys should become readable text.",
-    fieldOverrides: "Forced replacements",
-    helpOverrides: "One `source=translation` rule per line for project-specific vocabulary.",
-    sectionResourceEyebrow: "Resource Pack",
-    sectionResourceTitle: "Language file options",
-    fieldResourceEnabled: "Enable resource-pack translation",
-    helpResourceEnabled: "Translate `lang/*.json` inside archives such as resources.zip.",
-    fieldSkipExistingLang: "Skip if target language already exists",
-    helpSkipExistingLang: "Useful when you want to preserve an existing `ko_kr.json` or similar file.",
-    fieldZipPaths: "Zip paths",
-    helpZipPaths: "One per line. Relative paths are resolved from the world directory.",
-    fieldSourceLangFiles: "Source lang filenames",
-    helpSourceLangFiles: "Examples: en_us.json, zh_cn.json",
-    fieldTargetLangFile: "Target lang filename",
-    helpTargetLangFile: "Examples: ko_kr.json, en_us.json, ja_jp.json",
-    sectionAdvancedEyebrow: "Advanced",
-    sectionAdvancedTitle: "Fine control",
-    fieldBatchSize: "Batch size",
-    helpBatchSize: "How many strings are sent per API call. Lower it if responses get unstable.",
-    fieldTemperature: "Temperature",
-    helpTemperature: "Lower values are more conservative and consistent. 0.1 to 0.4 is usually safe.",
-    fieldBackupSuffix: "Backup suffix",
-    helpBackupSuffix: "Suffix appended to the backup copy before writes happen.",
-    fieldBackup: "Create backups",
-    helpBackup: "Store original files before any real translation write.",
-    fieldDryRun: "Keep form default in scan mode",
-    helpDryRun: "This only affects the form default. The action buttons below can still override it instantly.",
-    fieldRegionDirs: "Region directories to scan",
-    helpRegionDirs: "The default set covers common world, Nether, and entity region folders.",
-    fieldSkipPatterns: "Skip patterns",
-    helpSkipPatterns: "Example: *.bak_translate",
-    actionsTitle: "Run actions",
-    actionsBody: "Scan checks candidates without API writes. Full translation applies changes and writes the report.",
-    actionScan: "Run Scan Only",
-    actionTranslate: "Run Translation",
-    actionExport: "Export Settings",
-    actionReset: "Reset Defaults",
-    monitorEyebrow: "Live Monitor",
-    monitorTitle: "Real-time progress",
-    timelineEyebrow: "Activity",
-    timelineTitle: "Job log",
-    resultEyebrow: "Report",
-    resultTitle: "Result JSON",
-    statPhase: "Phase",
-    statFiles: "Files",
-    statChanged: "Changed",
-    statCandidates: "Candidate files",
-    currentFile: "Current file",
-    themeLight: "Switch to dark theme",
-    themeDark: "Switch to light theme",
+    helpCustomPrompt: "If this is filled, it replaces the preset and the extra style prompt.",
     targetPreset_ko: "Korean",
     targetPreset_en: "English",
     targetPreset_ja: "Japanese",
@@ -304,10 +300,68 @@ const I18N = {
     stylePreset_casual: "casual",
     stylePreset_formal: "formal",
     stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "Safest default for system text, books, hints, and puzzle instructions.",
-    stylePresetDesc_casual: "Warmer and more conversational. Good for dialogue-heavy maps.",
-    stylePresetDesc_formal: "More structured and restrained. Reliable for notes, books, and records.",
-    stylePresetDesc_dcinside: "Uses internet-community tone. It can be too aggressive for serious maps.",
+    stylePresetDesc_neutral: "Safest for books, puzzles, and system guidance.",
+    stylePresetDesc_casual: "Better for softer, more conversational output.",
+    stylePresetDesc_formal: "Stable for records, notes, and old-fashioned exposition.",
+    stylePresetDesc_dcinside: "Uses rough community slang. It can overpower atmospheric maps.",
+    scopeKicker: "Step 3",
+    scopeTitle: "What should be translated",
+    scopeCopy: "The scope controls are grouped by meaning instead of being thrown into one flat block. Start from a preset and adjust only what you need.",
+    scopePresetRecommended: "Recommended",
+    scopePresetStory: "Story-first",
+    scopePresetAll: "Enable everything",
+    scopeGroupCore: "Core progression text",
+    scopeGroupItems: "Items and names",
+    scopeGroupScripted: "Commands and effects",
+    scopeBooks: "Book pages",
+    scopeSigns: "Signs",
+    scopeTitles: "title",
+    scopeFilteredTitles: "filtered_title",
+    scopeCustomNames: "Custom names",
+    scopeItemNames: "Item names",
+    scopeLore: "Lore",
+    scopeCommandOutput: "tellraw/title output",
+    scopeSkipCommands: "Skip raw commands",
+    resourceKicker: "Step 4",
+    resourceTitle: "Resource-pack language files",
+    resourceCopy: "Enable this only when you actually need resource-pack translation. When it is off, the section stays readable but does not affect the job.",
+    fieldResourceEnabled: "Enable resource-pack translation",
+    fieldZipPaths: "Zip paths",
+    helpZipPaths: "One path per line. Relative paths resolve from the world directory.",
+    fieldSourceLangFiles: "Source lang filenames",
+    helpSourceLangFiles: "Examples: en_us.json, zh_cn.json",
+    fieldTargetLangFile: "Target lang filename",
+    helpTargetLangFile: "Examples: ko_kr.json, en_us.json, ja_jp.json",
+    fieldSkipExistingLang: "Skip if target language file already exists",
+    advancedKicker: "Optional",
+    advancedTitle: "Advanced controls",
+    fieldBatchSize: "Batch size",
+    helpBatchSize: "How many strings are sent in one API request. Lower it if retries happen often.",
+    fieldTemperature: "Temperature",
+    helpTemperature: "Lower values are more conservative and consistent. 0.1 to 0.4 is usually safe.",
+    fieldBackupSuffix: "Backup suffix",
+    helpBackupSuffix: "Text appended to backup filenames before writes happen.",
+    fieldBackup: "Create backups",
+    helpBackup: "Copy original files before a real translation run writes anything.",
+    fieldDryRun: "Keep default in scan mode",
+    helpDryRun: "The buttons below still let you switch instantly, but this controls the form default.",
+    fieldRegionDirs: "Region directories to scan",
+    helpRegionDirs: "The default set covers common world, entity, and Nether region folders.",
+    fieldSkipPatterns: "Skip patterns",
+    helpSkipPatterns: "Example: *.bak_translate",
+    fieldPrefixes: "Translate key prefixes",
+    helpPrefixes: "One per line. Use this when translate keys should become readable text before translation.",
+    fieldOverrides: "Forced replacements",
+    helpOverrides: "Use one `source=translation` rule per line.",
+    runKicker: "Step 5",
+    runTitle: "Run",
+    runCopy: "A scan-first flow is still recommended. Once the candidate coverage looks right, move to a full translation run.",
+    actionScan: "Run Scan Only",
+    actionTranslate: "Run Translation",
+    actionExport: "Export JSON Settings",
+    actionReset: "Reset Form",
+    liveKicker: "Live Monitor",
+    liveTitle: "Execution status",
     statusIdle: "Idle",
     statusQueued: "Queued",
     statusRunning: "Running",
@@ -319,146 +373,127 @@ const I18N = {
     phaseResourcePack: "Resource pack",
     phaseScanPending: "Ready to scan",
     phaseScan: "Scanning world files",
+    phaseTranslate: "Translating batches",
     phaseDone: "Done",
     phaseFailed: "Failed",
-    summaryIdle: "Fill the form and start either a scan or a translation job. Progress will appear here live.",
-    summaryQueued: "The job is queued. It will start as soon as validation and setup finish.",
-    summaryRunning: "The translator is walking through world files, collecting candidate text, and applying changes.",
+    activityPreparing: "Validating settings and inputs",
+    activityResourcePack: "Translating resource-pack language files",
+    activityScanStart: "Starting the world-file scan",
+    activityFileStart: "Collecting text candidates from the current file",
+    activityFileDone: "Finished the current file",
+    activityBatchStart: "Sending a translation batch request",
+    activityBatchDone: "Applying a finished translation batch",
+    activityBatchError: "Retrying with a smaller batch after an error",
+    activityDone: "Finished the full job",
+    activityFailed: "The job stopped early",
+    summaryIdle: "No job has started yet. Once you run a scan or translation, this panel will keep updating live.",
+    summaryQueued: "The job is queued and will start as soon as setup finishes.",
+    summaryRunning: "The status is being refreshed from current-file and translation-batch activity. Keep an eye on the last update time as well.",
     summaryCompleted: "{changed} files were modified, and {candidates} files contained translation candidates.",
-    summaryFailed: "The job stopped early. Check paths, model settings, and API credentials.",
+    summaryFailed: "The job stopped early. Check paths, provider settings, model name, and API credentials.",
+    statPhase: "Phase",
+    statFiles: "Files",
+    statTexts: "Batch text count",
+    statChanged: "Changed files",
+    statCandidates: "Candidate files",
+    statLastUpdate: "Last update",
+    currentProvider: "Current provider",
+    currentModel: "Current model",
+    currentActivity: "Current activity",
+    currentFile: "Current file",
+    logKicker: "Activity",
+    logTitle: "Job log",
+    resultKicker: "Report",
+    resultTitle: "Result JSON",
     emptyResult: "No result yet.",
-    emptyTimeline: "No activity yet.",
+    emptyTimeline: "No log entries yet.",
+    themeLight: "Switch to dark theme",
+    themeDark: "Switch to light theme",
     exportFilename: "translator-config.json",
-    eventJobStarted: "Job started.",
-    eventResourcePackStart: "Started translating resource-pack language files.",
-    eventResourcePackDone: "Finished the resource-pack step. Zip results processed: {count}",
-    eventScanStart: "Started scanning world files. Target file count: {total}",
-    eventFileStart: "[{index}/{total}] Starting {file}",
-    eventFileDone: "[{index}/{total}] Finished {file} · changed chunks {changed} · candidate texts {candidates}",
-    eventDone: "All work finished. Changed files {changed}, candidate files {candidates}",
-    eventCompleted: "Translation report saved.",
-    eventFailed: "Job failed: {message}",
-    eventUnknown: "Event: {event}",
-    localScanStarted: "Submitted a scan-only job to the server.",
+    localLoadError: "Metadata could not be loaded, so the UI started with built-in defaults.",
+    localScanStarted: "Submitted a scan job to the server.",
     localTranslateStarted: "Submitted a full translation job to the server.",
     localExported: "Exported the current form settings as JSON.",
     localReset: "Restored the form to its default values.",
-    localLoadError: "Failed to load metadata. Starting with built-in defaults.",
-    localSubmitError: "Failed to create a job: {message}",
+    localSubmitError: "Job creation failed: {message}",
+    eventJobStarted: "Job started.",
+    eventResourcePackStart: "Started resource-pack translation.",
+    eventResourcePackDone: "Finished the resource-pack phase. Result count: {count}",
+    eventScanStart: "Started scanning world files. Target files: {total}",
+    eventFileStart: "[{index}/{total}] Starting {file}",
+    eventFileDone: "[{index}/{total}] Finished {file} · changed chunks {changed} · candidate texts {candidates}",
+    eventBatchStart: "Started a translation batch · batch size {count}",
+    eventBatchDone: "Finished a translation batch · batch size {count}",
+    eventBatchError: "Batch translation error · {message}",
+    eventDone: "Job finished · changed files {changed} · candidate files {candidates}",
+    eventCompleted: "Saved the report.",
+    eventFailed: "Job failed: {message}",
+    eventUnknown: "Event: {event}",
+    relativeNow: "just now",
+    relativeSeconds: "{count}s ago",
+    relativeMinutes: "{count}m ago",
   },
   ja: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "ワールド翻訳コントロールデスク",
+    brandTitle: "ワールド翻訳オペレーションパネル",
     brandCopy:
-      "ワールドパス、API設定、翻訳範囲、リソースパック設定をひとつの画面で整理して、そのまま実行できます。初回はスキャンから、慣れているならカスタムプロンプトまでまとめて操作できます。",
-    heroEyebrow: "Browser Workflow",
-    heroTitle: "マップ翻訳を\nブラウザから整理して操作します",
+      "供給元、モデル、プロンプト、翻訳範囲、リソースパック設定、進行状況を一画面で管理します。まずはスキャンで確認し、そのまま本翻訳へ進めます。",
+    heroKicker: "Refined Workflow",
+    heroTitle: "見やすい構造で\n翻訳作業を最後まで回します",
     heroText:
-      "このUIは既存のPython翻訳器を包むローカル操作パネルです。英語・韓国語・日本語UI、ライト/ダークテーマ切替、進行状況の監視、設定の再利用に対応しています。",
-    stepOneTitle: "接続",
-    stepOneBody: "ワールドフォルダ、translate.py、モデル設定を指定して、安全な既定値を読み込みます。",
-    stepTwoTitle: "調整",
-    stepTwoBody: "対象言語、文体、翻訳範囲、リソースパック設定をマップに合わせて整えます。",
-    stepThreeTitle: "実行",
-    stepThreeBody: "スキャンまたは本翻訳を開始し、進行ログとJSONレポートを同じ画面で確認します。",
-    sectionQuickEyebrow: "Quick Guide",
-    sectionQuickTitle: "開始前のポイント",
-    recommendedBadge: "推奨フロー",
-    tipSafeTitle: "まずはスキャン",
-    tipSafeBody: "初めて触るワールドなら、書き込み前に候補だけを確認できるスキャン専用モードが安全です。",
-    tipPromptTitle: "最初は neutral",
-    tipPromptBody: "本、パズルのヒント、案内文が重要なマップでは `neutral` または `formal` が安定します。",
-    tipSecretTitle: "APIキーはセッションのみ",
-    tipSecretBody: "APIキーはブラウザ保存領域に残しません。必要なら再読み込み後に入れ直してください。",
-    sectionBasicEyebrow: "Core Setup",
-    sectionBasicTitle: "基本接続設定",
+      "供給元ごとのAPI形式を合わせ、モデル一覧取得とスタイル指示の補強まで入れました。今の画面は実際の翻訳コアを動かすローカル操作室です。",
+    heroPanelOneTitle: "供給元を選ぶ",
+    heroPanelOneBody: "Comet、OpenAI、Gemini、Anthropic、OpenRouterを切り替えても通信形式を手で直す必要がありません。",
+    heroPanelTwoTitle: "素早く調整",
+    heroPanelTwoBody: "短いメモだけでも、接続中のAPIを使って実運用向けの指示文へ広げられます。",
+    heroPanelThreeTitle: "進行が見える",
+    heroPanelThreeBody: "ファイル数、翻訳バッチ文字列数、現在のファイル、最終更新時刻が見えるので、本当に動いているかすぐ分かります。",
+    connectionKicker: "Step 1",
+    connectionTitle: "接続とモデル",
+    connectionCopy: "まず供給元、モデル、パスを決めます。モデル一覧読み込みは選択中の供給元へ問い合わせます。",
+    connectionTag: "必須",
     fieldWorldDir: "ワールドフォルダ",
-    helpWorldDir: "region/entities/resources.zip を含むマインクラフトのワールドフォルダを指定します。",
+    helpWorldDir: "region、entities、resources.zip を含むワールドフォルダを指定します。",
     fieldReportPath: "レポート保存先",
-    helpReportPath: "空欄ならワールドフォルダ内の `translation_report.json` を使います。",
+    helpReportPath: "空欄ならワールド内の `translation_report.json` を使います。",
     fieldTranslatePy: "translate.py のパス",
-    helpTranslatePy: "APIキー、base_url、モデル、システムプロンプト既定値を継承する元スクリプトです。",
+    helpTranslatePy: "APIキー、base_url、モデル、プロンプト既定値を継承する元ファイルです。",
     fieldInheritTranslatePy: "translate.py を継承",
-    helpInheritTranslatePy: "有効にすると、空いているAPI関連の値を translate.py から自動補完します。",
+    helpInheritTranslatePy: "空いているAPI設定を translate.py から補完します。",
     fieldApiKey: "APIキー",
-    helpApiKey: "現在のセッションでのみ使用します。ブラウザ保存領域には保存しません。",
+    helpApiKey: "現在のセッションでのみ使用し、ブラウザ保存領域には残しません。",
     fieldBaseUrl: "Base URL",
-    helpBaseUrl: "プロキシや互換APIエンドポイントを使う場合だけ入力します。",
     fieldModel: "モデル名",
-    helpModel: "例: GPT系または互換LLMのモデル名。translate.py から継承するなら空欄でも構いません。",
-    sectionPromptEyebrow: "Prompt Design",
-    sectionPromptTitle: "対象言語とスタイル",
+    helpModel: "手入力も可能で、下のモデル一覧をクリックして入力欄へ入れることもできます。",
+    fieldTimeout: "リクエスト制限時間(秒)",
+    helpTimeout: "応答が遅い供給元やモデルを使うときに長めにできます。",
+    baseUrlHelp: "既定URL: {url} · 環境変数: {env}",
+    actionLoadModels: "利用可能モデルを取得",
+    modelCatalogIdle: "まだモデル一覧を読み込んでいません。",
+    modelCatalogLoading: "モデル一覧を読み込み中です...",
+    modelCatalogLoaded: "{count}件のモデルを読み込みました。クリックするとモデル欄に入ります。",
+    modelCatalogError: "モデル一覧取得に失敗しました: {message}",
+    promptKicker: "Step 2",
+    promptTitle: "対象言語とスタイル",
+    promptCopy: "短いメモから始めて構いません。スタイル補強ボタンが選択中の供給元とモデルを使って、より実践的な指示文へ広げます。",
     fieldTargetLanguage: "対象言語",
-    helpTargetLanguage: "よく使う候補を選んだあと、必要なら独自の言語名を直接入力できます。",
-    fieldCustomLanguage: "カスタム言語名",
+    helpTargetLanguage: "韓国語、英語、日本語はすぐ選べて、必要なら直接入力へ切り替えられます。",
+    fieldCustomLanguage: "直接入力の言語名",
     helpCustomLanguage: "例: 繁體中文, Deutsch, Brazilian Portuguese",
     fieldStylePreset: "スタイルプリセット",
+    fieldStyleBrief: "短いスタイルメモ",
+    helpStyleBrief: "例: 中世ホラーマップ風、固有名詞は音訳、ヒントは明確に",
+    assistTitle: "スタイル補強",
+    assistBody: "短いメモを実戦向けの翻訳指示へ拡張します。",
+    actionImproveStyle: "AIで詳細化",
+    assistLoading: "スタイル指示を補強中です...",
+    assistDone: "補強したスタイル指示を追加しました。",
+    assistError: "スタイル補強に失敗しました: {message}",
     fieldStylePrompt: "追加スタイル指示",
-    helpStylePrompt: "口調、固有名詞処理、雰囲気などを細かく調整したいときに使います。",
+    helpStylePrompt: "プリセットの後ろに付く詳細指示です。雰囲気、固有名詞処理、ヒントの明瞭さなどをここで指定します。",
+    customPromptToggle: "完全なシステムプロンプトを自分で入れたい場合は開く",
     fieldCustomPrompt: "完全なシステムプロンプト",
-    helpCustomPrompt: "入力するとプリセットを無視して、その内容を完全なシステムプロンプトとして使います。",
-    sectionScopeEyebrow: "Scan Scope",
-    sectionScopeTitle: "何を翻訳するか",
-    scopeSigns: "看板",
-    scopeBooks: "本のページ",
-    scopeCustomNames: "カスタム名",
-    scopeItemNames: "アイテム名",
-    scopeLore: "Lore",
-    scopeTitles: "title",
-    scopeFilteredTitles: "filtered_title",
-    scopeCommandOutput: "tellraw/title 出力",
-    scopeSkipCommands: "実コマンドは除外",
-    fieldPrefixes: "翻訳キー接頭辞",
-    helpPrefixes: "1行に1つ。`brennenburg.` のような translate キーを可読テキスト化したいときに使います。",
-    fieldOverrides: "強制置換ルール",
-    helpOverrides: "1行に `原文=翻訳文` 形式で入力します。固有用語の固定に便利です。",
-    sectionResourceEyebrow: "Resource Pack",
-    sectionResourceTitle: "言語ファイル設定",
-    fieldResourceEnabled: "リソースパック翻訳を有効化",
-    helpResourceEnabled: "resources.zip などの `lang/*.json` も一緒に翻訳します。",
-    fieldSkipExistingLang: "対象言語が既にあればスキップ",
-    helpSkipExistingLang: "既存の `ko_kr.json` などを残したい場合に便利です。",
-    fieldZipPaths: "zip パス",
-    helpZipPaths: "1行に1つ。相対パスはワールドフォルダ基準で解決します。",
-    fieldSourceLangFiles: "元の lang ファイル名",
-    helpSourceLangFiles: "例: en_us.json, zh_cn.json",
-    fieldTargetLangFile: "出力 lang ファイル名",
-    helpTargetLangFile: "例: ko_kr.json, en_us.json, ja_jp.json",
-    sectionAdvancedEyebrow: "Advanced",
-    sectionAdvancedTitle: "詳細制御",
-    fieldBatchSize: "バッチサイズ",
-    helpBatchSize: "1回のAPI呼び出しで送る文字列数です。不安定なら小さくします。",
-    fieldTemperature: "Temperature",
-    helpTemperature: "低いほど保守的で一貫します。通常は 0.1 から 0.4 が無難です。",
-    fieldBackupSuffix: "バックアップ suffix",
-    helpBackupSuffix: "書き込み前のバックアップファイル名の末尾に付く文字列です。",
-    fieldBackup: "元ファイルをバックアップ",
-    helpBackup: "実翻訳前に元ファイルを別名で保存します。",
-    fieldDryRun: "フォーム既定値をスキャンにする",
-    helpDryRun: "これはフォームの既定値です。下の実行ボタンでその場で上書きできます。",
-    fieldRegionDirs: "走査する region ディレクトリ",
-    helpRegionDirs: "既定値のままで通常ワールド、ネザー、entity 領域まで確認できます。",
-    fieldSkipPatterns: "除外パターン",
-    helpSkipPatterns: "例: *.bak_translate",
-    actionsTitle: "実行ボタン",
-    actionsBody: "スキャンは候補確認のみ、本翻訳は変更を適用してレポートを書き出します。",
-    actionScan: "スキャンのみ実行",
-    actionTranslate: "本翻訳を実行",
-    actionExport: "設定を書き出す",
-    actionReset: "既定値に戻す",
-    monitorEyebrow: "Live Monitor",
-    monitorTitle: "進行状況",
-    timelineEyebrow: "Activity",
-    timelineTitle: "ジョブログ",
-    resultEyebrow: "Report",
-    resultTitle: "結果 JSON",
-    statPhase: "段階",
-    statFiles: "ファイル進行",
-    statChanged: "変更ファイル",
-    statCandidates: "候補ファイル",
-    currentFile: "現在のファイル",
-    themeLight: "ダークテーマへ切替",
-    themeDark: "ライトテーマへ切替",
+    helpCustomPrompt: "ここに値を入れると、プリセットや追加スタイル指示よりこちらが優先されます。",
     targetPreset_ko: "韓国語",
     targetPreset_en: "英語",
     targetPreset_ja: "日本語",
@@ -467,10 +502,68 @@ const I18N = {
     stylePreset_casual: "casual",
     stylePreset_formal: "formal",
     stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "システム文、本、ヒント、パズル案内に最も安全な既定値です。",
-    stylePresetDesc_casual: "やや親しみやすく柔らかい訳になります。会話中心のマップ向けです。",
-    stylePresetDesc_formal: "整った文体になります。記録、案内文、本に安定しています。",
-    stylePresetDesc_dcinside: "ネットコミュニティ調を混ぜます。真面目なマップには強すぎる場合があります。",
+    stylePresetDesc_neutral: "本、パズル、システム案内に最も安全です。",
+    stylePresetDesc_casual: "やや柔らかく親しみやすい訳に向きます。",
+    stylePresetDesc_formal: "記録、メモ、古風な説明文に安定しています。",
+    stylePresetDesc_dcinside: "荒いコミュニティ口調が混ざります。雰囲気重視のマップでは強すぎる場合があります。",
+    scopeKicker: "Step 3",
+    scopeTitle: "何を翻訳するか",
+    scopeCopy: "単なるチェックボックスの塊ではなく、意味ごとに整理しました。まずプリセットを選び、必要な部分だけ微調整すれば済みます。",
+    scopePresetRecommended: "推奨構成",
+    scopePresetStory: "ストーリー優先",
+    scopePresetAll: "全部オン",
+    scopeGroupCore: "進行に直結する文",
+    scopeGroupItems: "アイテムと名称",
+    scopeGroupScripted: "コマンドと演出",
+    scopeBooks: "本のページ",
+    scopeSigns: "看板",
+    scopeTitles: "title",
+    scopeFilteredTitles: "filtered_title",
+    scopeCustomNames: "カスタム名",
+    scopeItemNames: "アイテム名",
+    scopeLore: "Lore",
+    scopeCommandOutput: "tellraw/title 出力",
+    scopeSkipCommands: "生コマンドは除外",
+    resourceKicker: "Step 4",
+    resourceTitle: "リソースパック言語ファイル",
+    resourceCopy: "必要な場合だけ有効にします。無効時も意味は見えますが、実際のジョブには含まれません。",
+    fieldResourceEnabled: "リソースパック翻訳を使う",
+    fieldZipPaths: "zip パス",
+    helpZipPaths: "1行に1つ。相対パスはワールドフォルダ基準です。",
+    fieldSourceLangFiles: "元の lang ファイル名",
+    helpSourceLangFiles: "例: en_us.json, zh_cn.json",
+    fieldTargetLangFile: "出力 lang ファイル名",
+    helpTargetLangFile: "例: ko_kr.json, en_us.json, ja_jp.json",
+    fieldSkipExistingLang: "対象言語ファイルが既にあればスキップ",
+    advancedKicker: "Optional",
+    advancedTitle: "詳細制御",
+    fieldBatchSize: "バッチサイズ",
+    helpBatchSize: "1回のAPIリクエストに入れる文字列数です。失敗が多いなら下げます。",
+    fieldTemperature: "Temperature",
+    helpTemperature: "低いほど保守的で一貫します。通常は 0.1 から 0.4 が安全です。",
+    fieldBackupSuffix: "バックアップ suffix",
+    helpBackupSuffix: "書き込み前のバックアップ名に付く文字列です。",
+    fieldBackup: "元ファイルをバックアップ",
+    helpBackup: "本翻訳の前に元ファイルを別名でコピーします。",
+    fieldDryRun: "既定値をスキャンモードにする",
+    helpDryRun: "下のボタンで即座に切り替えられますが、フォーム既定値はこの設定に従います。",
+    fieldRegionDirs: "走査する region ディレクトリ",
+    helpRegionDirs: "既定値で通常ワールド、entity、ネザー領域まで対象になります。",
+    fieldSkipPatterns: "除外パターン",
+    helpSkipPatterns: "例: *.bak_translate",
+    fieldPrefixes: "翻訳キー接頭辞",
+    helpPrefixes: "1行に1つ。translate キーを読みやすい文に変換して翻訳したいときに使います。",
+    fieldOverrides: "強制置換ルール",
+    helpOverrides: "1行に `原文=翻訳文` 形式で入力します。",
+    runKicker: "Step 5",
+    runTitle: "実行",
+    runCopy: "まずはスキャン、問題なければ本翻訳という流れがやはり安全です。",
+    actionScan: "スキャンのみ実行",
+    actionTranslate: "本翻訳を実行",
+    actionExport: "設定JSONを書き出す",
+    actionReset: "フォームを初期化",
+    liveKicker: "Live Monitor",
+    liveTitle: "実行状態",
     statusIdle: "待機中",
     statusQueued: "キュー待ち",
     statusRunning: "実行中",
@@ -481,33 +574,66 @@ const I18N = {
     phasePreparing: "準備中",
     phaseResourcePack: "リソースパック",
     phaseScanPending: "スキャン準備",
-    phaseScan: "ワールド走査",
+    phaseScan: "ワールド処理中",
+    phaseTranslate: "文の翻訳中",
     phaseDone: "完了",
     phaseFailed: "失敗",
-    summaryIdle: "フォームを入力してスキャンまたは翻訳を開始すると、ここに進行状況がリアルタイムで表示されます。",
-    summaryQueued: "ジョブをキューに入れました。検証と初期化が終わり次第すぐに実行されます。",
-    summaryRunning: "ワールドファイルを巡回しながら、翻訳候補を集めて変更を適用しています。",
-    summaryCompleted: "{changed} 個のファイルが変更され、候補ファイルは {candidates} 個でした。",
-    summaryFailed: "ジョブが途中で停止しました。パス、モデル設定、APIキーを再確認してください。",
+    activityPreparing: "設定と入力値を検証中",
+    activityResourcePack: "リソースパック内の言語ファイルを処理中",
+    activityScanStart: "ワールドファイル走査を開始",
+    activityFileStart: "現在のファイルから候補文を集めている",
+    activityFileDone: "現在のファイルを処理し終えた",
+    activityBatchStart: "翻訳バッチ要求を送信中",
+    activityBatchDone: "翻訳バッチ結果を反映中",
+    activityBatchError: "エラー後に小さいバッチで再試行中",
+    activityDone: "全体作業を完了",
+    activityFailed: "ジョブが途中停止",
+    summaryIdle: "まだ実行されていません。スキャンか本翻訳を開始すると、このパネルがリアルタイムで更新されます。",
+    summaryQueued: "ジョブをキューに入れました。準備が終わり次第すぐに実行されます。",
+    summaryRunning: "現在のファイルと翻訳バッチを基準に状態を更新中です。最終更新時刻も併せて確認してください。",
+    summaryCompleted: "{changed}個のファイルが変更され、候補ファイルは {candidates} 個でした。",
+    summaryFailed: "ジョブが途中で停止しました。パス、供給元、モデル、APIキーを確認してください。",
+    statPhase: "段階",
+    statFiles: "ファイル進行",
+    statTexts: "バッチ文字列数",
+    statChanged: "変更ファイル",
+    statCandidates: "候補ファイル",
+    statLastUpdate: "最終更新",
+    currentProvider: "現在の供給元",
+    currentModel: "現在のモデル",
+    currentActivity: "現在の動作",
+    currentFile: "現在のファイル",
+    logKicker: "Activity",
+    logTitle: "ジョブログ",
+    resultKicker: "Report",
+    resultTitle: "結果 JSON",
     emptyResult: "まだ結果がありません。",
     emptyTimeline: "まだログがありません。",
+    themeLight: "ダークテーマへ切替",
+    themeDark: "ライトテーマへ切替",
     exportFilename: "translator-config.json",
+    localLoadError: "メタデータ取得に失敗したため、内蔵既定値で開始しました。",
+    localScanStarted: "スキャンジョブをサーバーへ送信しました。",
+    localTranslateStarted: "本翻訳ジョブをサーバーへ送信しました。",
+    localExported: "現在のフォーム設定を JSON として書き出しました。",
+    localReset: "フォームを既定値に戻しました。",
+    localSubmitError: "ジョブ作成失敗: {message}",
     eventJobStarted: "ジョブを開始しました。",
-    eventResourcePackStart: "リソースパック言語ファイルの翻訳を開始しました。",
-    eventResourcePackDone: "リソースパック段階が完了しました。処理した zip 件数: {count}",
-    eventScanStart: "ワールドファイルの走査を開始しました。対象ファイル数: {total}",
+    eventResourcePackStart: "リソースパック翻訳を開始しました。",
+    eventResourcePackDone: "リソースパック段階が終了しました。結果数: {count}",
+    eventScanStart: "ワールドファイル走査開始。対象ファイル数: {total}",
     eventFileStart: "[{index}/{total}] {file} を開始",
     eventFileDone: "[{index}/{total}] {file} 完了 · 変更チャンク {changed} · 候補テキスト {candidates}",
-    eventDone: "全作業が完了しました。変更ファイル {changed}、候補ファイル {candidates}",
-    eventCompleted: "翻訳レポートを保存しました。",
+    eventBatchStart: "翻訳バッチ開始 · バッチサイズ {count}",
+    eventBatchDone: "翻訳バッチ完了 · バッチサイズ {count}",
+    eventBatchError: "バッチ翻訳エラー · {message}",
+    eventDone: "全体完了 · 変更ファイル {changed} · 候補ファイル {candidates}",
+    eventCompleted: "レポートを保存しました。",
     eventFailed: "ジョブ失敗: {message}",
     eventUnknown: "イベント: {event}",
-    localScanStarted: "スキャン専用ジョブをサーバーへ送信しました。",
-    localTranslateStarted: "本翻訳ジョブをサーバーへ送信しました。",
-    localExported: "現在の設定を JSON として書き出しました。",
-    localReset: "フォームを既定値に戻しました。",
-    localLoadError: "メタデータの取得に失敗したため、内蔵既定値で開始しました。",
-    localSubmitError: "ジョブ作成に失敗しました: {message}",
+    relativeNow: "たった今",
+    relativeSeconds: "{count}秒前",
+    relativeMinutes: "{count}分前",
   },
 };
 
@@ -515,10 +641,13 @@ const state = {
   lang: localStorage.getItem("mc-world-ui-lang") || "ko",
   theme: localStorage.getItem("mc-world-ui-theme") || "light",
   meta: FALLBACK_META,
+  draft: null,
+  modelCatalog: [],
   activeJobId: null,
   job: null,
   localEvents: [],
   pollTimer: null,
+  renderTimer: null,
 };
 
 const dom = {};
@@ -528,54 +657,65 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   bindDom();
   bindEvents();
-  applyTheme();
   applyLanguage();
+  applyTheme();
 
   try {
-    const res = await fetch("/api/meta");
-    if (!res.ok) {
-      throw new Error(await res.text());
+    const response = await fetch("/api/meta");
+    if (!response.ok) {
+      throw new Error(await response.text());
     }
-    state.meta = await res.json();
-  } catch (error) {
-    pushLocalEvent("localLoadError", {}, true);
+    state.meta = await response.json();
+  } catch {
     state.meta = FALLBACK_META;
+    pushLocalEvent("localLoadError", {}, true);
   }
 
-  renderStaticOptions();
-  populateForm(loadDraft() || buildDefaultDraft());
+  const draft = loadDraft() || buildDefaultDraft();
+  state.draft = draft;
+  renderStaticUi();
+  populateForm(draft);
   renderMonitor();
+  state.renderTimer = window.setInterval(() => renderMonitor(), 1000);
 }
 
 function bindDom() {
   Object.assign(dom, {
     themeToggle: document.getElementById("themeToggle"),
-    targetLanguagePreset: document.getElementById("targetLanguagePreset"),
-    customLanguageField: document.getElementById("customLanguageField"),
-    customLanguage: document.getElementById("customLanguage"),
-    stylePreset: document.getElementById("stylePreset"),
-    stylePresetHelp: document.getElementById("stylePresetHelp"),
+    providerPicker: document.getElementById("providerPicker"),
     worldDir: document.getElementById("worldDir"),
     reportPath: document.getElementById("reportPath"),
     translatePyPath: document.getElementById("translatePyPath"),
     inheritTranslatePy: document.getElementById("inheritTranslatePy"),
     apiKey: document.getElementById("apiKey"),
     baseUrl: document.getElementById("baseUrl"),
+    baseUrlHelp: document.getElementById("baseUrlHelp"),
     model: document.getElementById("model"),
+    requestTimeout: document.getElementById("requestTimeout"),
+    loadModelsButton: document.getElementById("loadModelsButton"),
+    modelCatalogStatus: document.getElementById("modelCatalogStatus"),
+    modelCatalog: document.getElementById("modelCatalog"),
+    targetLanguagePreset: document.getElementById("targetLanguagePreset"),
+    customLanguageField: document.getElementById("customLanguageField"),
+    customLanguage: document.getElementById("customLanguage"),
+    stylePreset: document.getElementById("stylePreset"),
+    stylePresetHelp: document.getElementById("stylePresetHelp"),
+    styleBrief: document.getElementById("styleBrief"),
+    improveStyleButton: document.getElementById("improveStyleButton"),
+    styleAssistStatus: document.getElementById("styleAssistStatus"),
     stylePrompt: document.getElementById("stylePrompt"),
     customSystemPrompt: document.getElementById("customSystemPrompt"),
-    translateSigns: document.getElementById("translateSigns"),
     translateBooks: document.getElementById("translateBooks"),
+    translateSigns: document.getElementById("translateSigns"),
+    translateTitles: document.getElementById("translateTitles"),
+    translateFilteredTitles: document.getElementById("translateFilteredTitles"),
     translateCustomNames: document.getElementById("translateCustomNames"),
     translateItemNames: document.getElementById("translateItemNames"),
     translateLore: document.getElementById("translateLore"),
-    translateTitles: document.getElementById("translateTitles"),
-    translateFilteredTitles: document.getElementById("translateFilteredTitles"),
     translateCommandOutput: document.getElementById("translateCommandOutput"),
     skipCommandLikeText: document.getElementById("skipCommandLikeText"),
-    componentPrefixes: document.getElementById("componentPrefixes"),
-    overrides: document.getElementById("overrides"),
     resourceEnabled: document.getElementById("resourceEnabled"),
+    resourcePanel: document.getElementById("resourcePanel"),
     zipPaths: document.getElementById("zipPaths"),
     sourceLangFiles: document.getElementById("sourceLangFiles"),
     targetLangFile: document.getElementById("targetLangFile"),
@@ -587,17 +727,26 @@ function bindDom() {
     dryRun: document.getElementById("dryRun"),
     regionDirs: document.getElementById("regionDirs"),
     skipPatterns: document.getElementById("skipPatterns"),
+    componentPrefixes: document.getElementById("componentPrefixes"),
+    overrides: document.getElementById("overrides"),
     scanButton: document.getElementById("scanButton"),
     translateButton: document.getElementById("translateButton"),
     exportButton: document.getElementById("exportButton"),
     resetButton: document.getElementById("resetButton"),
     statusPill: document.getElementById("statusPill"),
-    monitorSummary: document.getElementById("monitorSummary"),
+    livePulse: document.getElementById("livePulse"),
+    progressNumber: document.getElementById("progressNumber"),
     progressBar: document.getElementById("progressBar"),
+    monitorSummary: document.getElementById("monitorSummary"),
     statPhase: document.getElementById("statPhase"),
     statFiles: document.getElementById("statFiles"),
+    statTexts: document.getElementById("statTexts"),
     statChanged: document.getElementById("statChanged"),
     statCandidates: document.getElementById("statCandidates"),
+    statLastUpdate: document.getElementById("statLastUpdate"),
+    currentProvider: document.getElementById("currentProvider"),
+    currentModel: document.getElementById("currentModel"),
+    currentActivity: document.getElementById("currentActivity"),
     currentFile: document.getElementById("currentFile"),
     timeline: document.getElementById("timeline"),
     resultPanel: document.getElementById("resultPanel"),
@@ -609,8 +758,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.lang = button.dataset.langSwitch;
       localStorage.setItem("mc-world-ui-lang", state.lang);
-      applyLanguage();
-      renderStaticOptions();
+      renderStaticUi();
       renderMonitor();
     });
   });
@@ -627,12 +775,64 @@ function bindEvents() {
   });
 
   dom.stylePreset.addEventListener("change", () => {
-    updateStyleHelp();
+    updateStylePresetHelp();
     persistDraft();
   });
 
-  document.getElementById("translatorForm").addEventListener("input", persistDraft);
-  document.getElementById("translatorForm").addEventListener("change", persistDraft);
+  dom.resourceEnabled.addEventListener("change", () => {
+    toggleResourcePanel();
+    persistDraft();
+  });
+
+  dom.loadModelsButton.addEventListener("click", loadModels);
+  dom.improveStyleButton.addEventListener("click", improveStylePrompt);
+
+  document.querySelectorAll("[data-scope-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyScopePreset(button.dataset.scopePreset);
+      persistDraft();
+    });
+  });
+
+  [
+    dom.worldDir,
+    dom.reportPath,
+    dom.translatePyPath,
+    dom.inheritTranslatePy,
+    dom.apiKey,
+    dom.baseUrl,
+    dom.model,
+    dom.requestTimeout,
+    dom.customLanguage,
+    dom.styleBrief,
+    dom.stylePrompt,
+    dom.customSystemPrompt,
+    dom.translateBooks,
+    dom.translateSigns,
+    dom.translateTitles,
+    dom.translateFilteredTitles,
+    dom.translateCustomNames,
+    dom.translateItemNames,
+    dom.translateLore,
+    dom.translateCommandOutput,
+    dom.skipCommandLikeText,
+    dom.zipPaths,
+    dom.sourceLangFiles,
+    dom.targetLangFile,
+    dom.skipIfTargetExists,
+    dom.batchSize,
+    dom.temperature,
+    dom.backupSuffix,
+    dom.backup,
+    dom.dryRun,
+    dom.regionDirs,
+    dom.skipPatterns,
+    dom.componentPrefixes,
+    dom.overrides,
+  ].forEach((element) => {
+    element.addEventListener("input", persistDraft);
+    element.addEventListener("change", persistDraft);
+  });
 
   dom.scanButton.addEventListener("click", () => submitJob(true));
   dom.translateButton.addEventListener("click", () => submitJob(false));
@@ -642,8 +842,7 @@ function bindEvents() {
 
 function applyTheme() {
   document.documentElement.dataset.theme = state.theme;
-  dom.themeToggle.querySelector(".theme-toggle__label").textContent =
-    state.theme === "light" ? t("themeLight") : t("themeDark");
+  dom.themeToggle.textContent = state.theme === "light" ? t("themeLight") : t("themeDark");
 }
 
 function applyLanguage() {
@@ -651,50 +850,65 @@ function applyLanguage() {
   document.querySelectorAll("[data-lang-switch]").forEach((button) => {
     button.classList.toggle("active", button.dataset.langSwitch === state.lang);
   });
+}
+
+function renderStaticUi() {
+  applyLanguage();
+  applyTheme();
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
-  applyTheme();
+  renderProviderPicker();
+  renderTargetLanguageOptions();
+  renderStylePresetOptions();
+  updateStylePresetHelp();
+  updateBaseUrlHelp();
+  toggleCustomLanguageField();
+  toggleResourcePanel();
+  renderModelCatalog();
 }
 
 function buildDefaultDraft() {
   const meta = state.meta || FALLBACK_META;
   return {
+    provider: meta.defaults.provider || "comet",
     worldDir: meta.example_paths.world_dir || "",
     reportPath: "",
     translatePyPath: meta.example_paths.translate_py_path || "",
     inheritTranslatePy: true,
     apiKey: "",
-    baseUrl: "",
+    baseUrl: providerDefaultUrl(meta.defaults.provider || "comet"),
     model: "",
+    requestTimeout: meta.defaults.request_timeout || 120,
     targetLanguagePreset: "ko",
     customLanguage: "",
     stylePreset: "neutral",
+    styleBrief: "",
     stylePrompt: "",
     customSystemPrompt: "",
-    translateSigns: true,
     translateBooks: true,
+    translateSigns: true,
+    translateTitles: true,
+    translateFilteredTitles: true,
     translateCustomNames: true,
     translateItemNames: true,
     translateLore: true,
-    translateTitles: true,
-    translateFilteredTitles: true,
     translateCommandOutput: true,
     skipCommandLikeText: true,
-    componentPrefixes: "",
-    overrides: "",
     resourceEnabled: false,
     zipPaths: "",
     sourceLangFiles: (meta.defaults.resource_pack_source_lang_files || ["en_us.json", "zh_cn.json"]).join("\n"),
     targetLangFile: "ko_kr.json",
     skipIfTargetExists: false,
-    batchSize: meta.defaults.batch_size ?? 40,
-    temperature: meta.defaults.temperature ?? 0.3,
+    batchSize: meta.defaults.batch_size || 40,
+    temperature: meta.defaults.temperature || 0.3,
     backupSuffix: meta.defaults.backup_suffix || ".bak_translate",
     backup: true,
     dryRun: false,
     regionDirs: (meta.defaults.region_dirs || []).join("\n"),
     skipPatterns: (meta.defaults.skip_patterns || []).join("\n"),
+    componentPrefixes: "",
+    overrides: "",
   };
 }
 
@@ -711,53 +925,14 @@ function loadDraft() {
 }
 
 function persistDraft() {
-  const draft = collectDraft();
-  draft.apiKey = "";
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-}
-
-function populateForm(draft) {
-  dom.worldDir.value = draft.worldDir || "";
-  dom.reportPath.value = draft.reportPath || "";
-  dom.translatePyPath.value = draft.translatePyPath || "";
-  dom.inheritTranslatePy.checked = !!draft.inheritTranslatePy;
-  dom.apiKey.value = "";
-  dom.baseUrl.value = draft.baseUrl || "";
-  dom.model.value = draft.model || "";
-  dom.targetLanguagePreset.value = draft.targetLanguagePreset || "ko";
-  dom.customLanguage.value = draft.customLanguage || "";
-  dom.stylePreset.value = draft.stylePreset || "neutral";
-  dom.stylePrompt.value = draft.stylePrompt || "";
-  dom.customSystemPrompt.value = draft.customSystemPrompt || "";
-  dom.translateSigns.checked = !!draft.translateSigns;
-  dom.translateBooks.checked = !!draft.translateBooks;
-  dom.translateCustomNames.checked = !!draft.translateCustomNames;
-  dom.translateItemNames.checked = !!draft.translateItemNames;
-  dom.translateLore.checked = !!draft.translateLore;
-  dom.translateTitles.checked = !!draft.translateTitles;
-  dom.translateFilteredTitles.checked = !!draft.translateFilteredTitles;
-  dom.translateCommandOutput.checked = !!draft.translateCommandOutput;
-  dom.skipCommandLikeText.checked = !!draft.skipCommandLikeText;
-  dom.componentPrefixes.value = draft.componentPrefixes || "";
-  dom.overrides.value = draft.overrides || "";
-  dom.resourceEnabled.checked = !!draft.resourceEnabled;
-  dom.zipPaths.value = draft.zipPaths || "";
-  dom.sourceLangFiles.value = draft.sourceLangFiles || "";
-  dom.targetLangFile.value = draft.targetLangFile || "ko_kr.json";
-  dom.skipIfTargetExists.checked = !!draft.skipIfTargetExists;
-  dom.batchSize.value = draft.batchSize ?? 40;
-  dom.temperature.value = draft.temperature ?? 0.3;
-  dom.backupSuffix.value = draft.backupSuffix || ".bak_translate";
-  dom.backup.checked = !!draft.backup;
-  dom.dryRun.checked = !!draft.dryRun;
-  dom.regionDirs.value = draft.regionDirs || "";
-  dom.skipPatterns.value = draft.skipPatterns || "";
-  toggleCustomLanguageField();
-  updateStyleHelp();
+  state.draft = collectDraft();
+  const stored = { ...state.draft, apiKey: "" };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
 function collectDraft() {
   return {
+    provider: state.draft?.provider || providerFromPicker(),
     worldDir: dom.worldDir.value,
     reportPath: dom.reportPath.value,
     translatePyPath: dom.translatePyPath.value,
@@ -765,22 +940,22 @@ function collectDraft() {
     apiKey: dom.apiKey.value,
     baseUrl: dom.baseUrl.value,
     model: dom.model.value,
+    requestTimeout: dom.requestTimeout.value,
     targetLanguagePreset: dom.targetLanguagePreset.value,
     customLanguage: dom.customLanguage.value,
     stylePreset: dom.stylePreset.value,
+    styleBrief: dom.styleBrief.value,
     stylePrompt: dom.stylePrompt.value,
     customSystemPrompt: dom.customSystemPrompt.value,
-    translateSigns: dom.translateSigns.checked,
     translateBooks: dom.translateBooks.checked,
+    translateSigns: dom.translateSigns.checked,
+    translateTitles: dom.translateTitles.checked,
+    translateFilteredTitles: dom.translateFilteredTitles.checked,
     translateCustomNames: dom.translateCustomNames.checked,
     translateItemNames: dom.translateItemNames.checked,
     translateLore: dom.translateLore.checked,
-    translateTitles: dom.translateTitles.checked,
-    translateFilteredTitles: dom.translateFilteredTitles.checked,
     translateCommandOutput: dom.translateCommandOutput.checked,
     skipCommandLikeText: dom.skipCommandLikeText.checked,
-    componentPrefixes: dom.componentPrefixes.value,
-    overrides: dom.overrides.value,
     resourceEnabled: dom.resourceEnabled.checked,
     zipPaths: dom.zipPaths.value,
     sourceLangFiles: dom.sourceLangFiles.value,
@@ -793,18 +968,88 @@ function collectDraft() {
     dryRun: dom.dryRun.checked,
     regionDirs: dom.regionDirs.value,
     skipPatterns: dom.skipPatterns.value,
+    componentPrefixes: dom.componentPrefixes.value,
+    overrides: dom.overrides.value,
   };
 }
 
-function renderStaticOptions() {
-  renderTargetLanguageOptions();
-  renderStylePresetOptions();
-  updateStyleHelp();
-  toggleCustomLanguageField();
+function populateForm(draft) {
+  state.draft = { ...buildDefaultDraft(), ...draft };
+  dom.worldDir.value = state.draft.worldDir || "";
+  dom.reportPath.value = state.draft.reportPath || "";
+  dom.translatePyPath.value = state.draft.translatePyPath || "";
+  dom.inheritTranslatePy.checked = !!state.draft.inheritTranslatePy;
+  dom.apiKey.value = "";
+  dom.baseUrl.value = state.draft.baseUrl || providerDefaultUrl(state.draft.provider);
+  dom.model.value = state.draft.model || "";
+  dom.requestTimeout.value = state.draft.requestTimeout || 120;
+  dom.targetLanguagePreset.value = state.draft.targetLanguagePreset || "ko";
+  dom.customLanguage.value = state.draft.customLanguage || "";
+  dom.stylePreset.value = state.draft.stylePreset || "neutral";
+  dom.styleBrief.value = state.draft.styleBrief || "";
+  dom.stylePrompt.value = state.draft.stylePrompt || "";
+  dom.customSystemPrompt.value = state.draft.customSystemPrompt || "";
+  dom.translateBooks.checked = !!state.draft.translateBooks;
+  dom.translateSigns.checked = !!state.draft.translateSigns;
+  dom.translateTitles.checked = !!state.draft.translateTitles;
+  dom.translateFilteredTitles.checked = !!state.draft.translateFilteredTitles;
+  dom.translateCustomNames.checked = !!state.draft.translateCustomNames;
+  dom.translateItemNames.checked = !!state.draft.translateItemNames;
+  dom.translateLore.checked = !!state.draft.translateLore;
+  dom.translateCommandOutput.checked = !!state.draft.translateCommandOutput;
+  dom.skipCommandLikeText.checked = !!state.draft.skipCommandLikeText;
+  dom.resourceEnabled.checked = !!state.draft.resourceEnabled;
+  dom.zipPaths.value = state.draft.zipPaths || "";
+  dom.sourceLangFiles.value = state.draft.sourceLangFiles || "";
+  dom.targetLangFile.value = state.draft.targetLangFile || "ko_kr.json";
+  dom.skipIfTargetExists.checked = !!state.draft.skipIfTargetExists;
+  dom.batchSize.value = state.draft.batchSize || 40;
+  dom.temperature.value = state.draft.temperature || 0.3;
+  dom.backupSuffix.value = state.draft.backupSuffix || ".bak_translate";
+  dom.backup.checked = !!state.draft.backup;
+  dom.dryRun.checked = !!state.draft.dryRun;
+  dom.regionDirs.value = state.draft.regionDirs || "";
+  dom.skipPatterns.value = state.draft.skipPatterns || "";
+  dom.componentPrefixes.value = state.draft.componentPrefixes || "";
+  dom.overrides.value = state.draft.overrides || "";
+  renderStaticUi();
+  persistDraft();
+}
+
+function renderProviderPicker() {
+  const providers = state.meta.providers || FALLBACK_META.providers;
+  const current = state.draft?.provider || buildDefaultDraft().provider;
+  dom.providerPicker.innerHTML = providers
+    .map(
+      (provider) => `
+        <button type="button" class="provider-card ${provider.id === current ? "active" : ""}" data-provider-id="${escapeHtml(provider.id)}">
+          <strong>${escapeHtml(provider.label)}</strong>
+          <span class="provider-url">${escapeHtml(provider.default_base_url)}</span>
+          <span class="provider-env">${escapeHtml(provider.env_var)}</span>
+        </button>
+      `
+    )
+    .join("");
+
+  dom.providerPicker.querySelectorAll("[data-provider-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const providerId = button.dataset.providerId;
+      const prev = state.draft?.provider;
+      const previousDefault = providerDefaultUrl(prev);
+      const nextDefault = providerDefaultUrl(providerId);
+      state.draft = { ...collectDraft(), provider: providerId };
+      if (!dom.baseUrl.value.trim() || dom.baseUrl.value.trim() === previousDefault) {
+        dom.baseUrl.value = nextDefault;
+      }
+      renderProviderPicker();
+      updateBaseUrlHelp();
+      persistDraft();
+    });
+  });
 }
 
 function renderTargetLanguageOptions() {
-  const current = dom.targetLanguagePreset.value || "ko";
+  const current = state.draft?.targetLanguagePreset || "ko";
   const options = [
     ["ko", t("targetPreset_ko")],
     ["en", t("targetPreset_en")],
@@ -814,59 +1059,86 @@ function renderTargetLanguageOptions() {
   dom.targetLanguagePreset.innerHTML = options
     .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
     .join("");
-  dom.targetLanguagePreset.value = options.some(([value]) => value === current) ? current : "ko";
+  dom.targetLanguagePreset.value = current;
 }
 
 function renderStylePresetOptions() {
   const presets = state.meta.style_presets || FALLBACK_META.style_presets;
-  const current = dom.stylePreset.value || "neutral";
+  const current = state.draft?.stylePreset || "neutral";
   dom.stylePreset.innerHTML = presets
     .map((preset) => `<option value="${preset}">${escapeHtml(t(`stylePreset_${preset}`))}</option>`)
     .join("");
   dom.stylePreset.value = presets.includes(current) ? current : "neutral";
 }
 
-function updateStyleHelp() {
+function updateStylePresetHelp() {
   dom.stylePresetHelp.textContent = t(`stylePresetDesc_${dom.stylePreset.value}`);
 }
 
 function toggleCustomLanguageField() {
-  const custom = dom.targetLanguagePreset.value === "custom";
-  dom.customLanguageField.classList.toggle("hidden", !custom);
+  dom.customLanguageField.classList.toggle("hidden", dom.targetLanguagePreset.value !== "custom");
 }
 
-async function submitJob(forceDryRun) {
-  const payload = buildPayload(forceDryRun);
-  setRunButtonsDisabled(true);
+function toggleResourcePanel() {
+  const disabled = !dom.resourceEnabled.checked;
+  dom.resourcePanel.classList.toggle("is-disabled", disabled);
+  dom.resourcePanel.classList.toggle("hidden", disabled);
+}
 
-  try {
-    const res = await fetch("/api/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ config: payload }),
+function updateBaseUrlHelp() {
+  const provider = providerFromPicker();
+  const meta = providerMetaById(provider);
+  dom.baseUrlHelp.textContent = formatTemplate(t("baseUrlHelp"), {
+    url: meta?.default_base_url || "",
+    env: meta?.env_var || "",
+  });
+}
+
+function providerFromPicker() {
+  return state.draft?.provider || buildDefaultDraft().provider;
+}
+
+function providerMetaById(providerId) {
+  return (state.meta.providers || FALLBACK_META.providers).find((item) => item.id === providerId);
+}
+
+function providerDefaultUrl(providerId) {
+  return providerMetaById(providerId)?.default_base_url || "";
+}
+
+function splitLines(text) {
+  return String(text || "")
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseOverrides(text) {
+  const result = {};
+  String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const index = line.indexOf("=");
+      if (index === -1) {
+        return;
+      }
+      const key = line.slice(0, index).trim();
+      const value = line.slice(index + 1).trim();
+      if (key) {
+        result[key] = value;
+      }
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || "Request failed");
-    }
-    state.activeJobId = data.id;
-    state.job = data;
-    state.localEvents = [];
-    pushLocalEvent(forceDryRun ? "localScanStarted" : "localTranslateStarted");
-    startPolling();
-    renderMonitor();
-  } catch (error) {
-    pushLocalEvent("localSubmitError", { message: error.message }, true);
-    setRunButtonsDisabled(false);
-    renderMonitor();
-  }
+  return result;
 }
 
 function buildPayload(forceDryRun) {
   const draft = collectDraft();
   const targetLanguage =
     draft.targetLanguagePreset === "custom"
-      ? (draft.customLanguage || "").trim()
+      ? draft.customLanguage.trim()
       : TARGET_LANGUAGE_VALUES[draft.targetLanguagePreset] || "한국어";
 
   return {
@@ -880,9 +1152,11 @@ function buildPayload(forceDryRun) {
     inherit_translate_py: draft.inheritTranslatePy,
     translate_py_path: draft.translatePyPath.trim(),
     api: {
+      provider: draft.provider,
       api_key: draft.apiKey.trim(),
       base_url: draft.baseUrl.trim(),
       model: draft.model.trim(),
+      request_timeout: Number(draft.requestTimeout) || 120,
     },
     prompt: {
       target_language: targetLanguage || "한국어",
@@ -915,32 +1189,174 @@ function buildPayload(forceDryRun) {
   };
 }
 
-function splitLines(text) {
-  return String(text || "")
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+async function loadModels() {
+  dom.modelCatalogStatus.textContent = t("modelCatalogLoading");
+  dom.loadModelsButton.disabled = true;
+  try {
+    const response = await fetch("/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: buildPayload(true) }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+    state.modelCatalog = data.models || [];
+    dom.modelCatalogStatus.textContent = formatTemplate(t("modelCatalogLoaded"), {
+      count: state.modelCatalog.length,
+    });
+    renderModelCatalog();
+  } catch (error) {
+    state.modelCatalog = [];
+    dom.modelCatalogStatus.textContent = formatTemplate(t("modelCatalogError"), { message: error.message });
+    renderModelCatalog();
+  } finally {
+    dom.loadModelsButton.disabled = false;
+  }
 }
 
-function parseOverrides(text) {
-  const result = {};
-  String(text || "")
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .forEach((line) => {
-      const index = line.indexOf("=");
-      if (index === -1) {
-        return;
-      }
-      const key = line.slice(0, index).trim();
-      const value = line.slice(index + 1).trim();
-      if (key) {
-        result[key] = value;
-      }
+function renderModelCatalog() {
+  const models = state.modelCatalog || [];
+  const datalist = document.getElementById("modelSuggestions");
+  datalist.innerHTML = models
+    .map((model) => `<option value="${escapeHtml(model.id)}"></option>`)
+    .join("");
+
+  if (!models.length) {
+    dom.modelCatalog.innerHTML = `<div class="model-chip"><strong>${escapeHtml(t("modelCatalogIdle"))}</strong></div>`;
+    return;
+  }
+
+  dom.modelCatalog.innerHTML = models
+    .slice(0, 40)
+    .map(
+      (model) => `
+        <button type="button" class="model-chip" data-model-id="${escapeHtml(model.id)}">
+          <strong>${escapeHtml(model.display_name || model.id)}</strong>
+          <span>${escapeHtml(model.id)}</span>
+          <span>${escapeHtml(model.description || "")}</span>
+        </button>
+      `
+    )
+    .join("");
+
+  dom.modelCatalog.querySelectorAll("[data-model-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      dom.model.value = button.dataset.modelId;
+      persistDraft();
     });
-  return result;
+  });
+}
+
+async function improveStylePrompt() {
+  const brief = dom.styleBrief.value.trim();
+  if (!brief) {
+    dom.styleAssistStatus.textContent = t("helpStyleBrief");
+    return;
+  }
+  dom.improveStyleButton.disabled = true;
+  dom.styleAssistStatus.textContent = t("assistLoading");
+  try {
+    const response = await fetch("/api/prompt-assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: buildPayload(true), brief }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+    const current = dom.stylePrompt.value.trim();
+    dom.stylePrompt.value = current ? `${current}\n\n${data.enhanced_prompt}` : data.enhanced_prompt;
+    dom.styleAssistStatus.textContent = t("assistDone");
+    persistDraft();
+  } catch (error) {
+    dom.styleAssistStatus.textContent = formatTemplate(t("assistError"), { message: error.message });
+  } finally {
+    dom.improveStyleButton.disabled = false;
+  }
+}
+
+function applyScopePreset(preset) {
+  const apply = (options) => {
+    dom.translateBooks.checked = options.translateBooks;
+    dom.translateSigns.checked = options.translateSigns;
+    dom.translateTitles.checked = options.translateTitles;
+    dom.translateFilteredTitles.checked = options.translateFilteredTitles;
+    dom.translateCustomNames.checked = options.translateCustomNames;
+    dom.translateItemNames.checked = options.translateItemNames;
+    dom.translateLore.checked = options.translateLore;
+    dom.translateCommandOutput.checked = options.translateCommandOutput;
+    dom.skipCommandLikeText.checked = options.skipCommandLikeText;
+  };
+
+  if (preset === "story") {
+    apply({
+      translateBooks: true,
+      translateSigns: true,
+      translateTitles: true,
+      translateFilteredTitles: true,
+      translateCustomNames: true,
+      translateItemNames: false,
+      translateLore: false,
+      translateCommandOutput: true,
+      skipCommandLikeText: true,
+    });
+    return;
+  }
+
+  if (preset === "all") {
+    apply({
+      translateBooks: true,
+      translateSigns: true,
+      translateTitles: true,
+      translateFilteredTitles: true,
+      translateCustomNames: true,
+      translateItemNames: true,
+      translateLore: true,
+      translateCommandOutput: true,
+      skipCommandLikeText: true,
+    });
+    return;
+  }
+
+  apply({
+    translateBooks: true,
+    translateSigns: true,
+    translateTitles: true,
+    translateFilteredTitles: true,
+    translateCustomNames: true,
+    translateItemNames: true,
+    translateLore: true,
+    translateCommandOutput: true,
+    skipCommandLikeText: true,
+  });
+}
+
+async function submitJob(forceDryRun) {
+  setRunButtonsDisabled(true);
+  try {
+    const response = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: buildPayload(forceDryRun) }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+    state.activeJobId = data.id;
+    state.job = data;
+    state.localEvents = [];
+    pushLocalEvent(forceDryRun ? "localScanStarted" : "localTranslateStarted");
+    startPolling();
+    renderMonitor();
+  } catch (error) {
+    pushLocalEvent("localSubmitError", { message: error.message }, true);
+    setRunButtonsDisabled(false);
+    renderMonitor();
+  }
 }
 
 function startPolling() {
@@ -961,9 +1377,9 @@ async function pollJob() {
     return;
   }
   try {
-    const res = await fetch(`/api/jobs/${state.activeJobId}`);
-    const data = await res.json();
-    if (!res.ok) {
+    const response = await fetch(`/api/jobs/${state.activeJobId}`);
+    const data = await response.json();
+    if (!response.ok) {
       throw new Error(data.error || "Polling failed");
     }
     state.job = data;
@@ -983,8 +1399,6 @@ async function pollJob() {
 function setRunButtonsDisabled(disabled) {
   dom.scanButton.disabled = disabled;
   dom.translateButton.disabled = disabled;
-  dom.scanButton.style.opacity = disabled ? "0.6" : "1";
-  dom.translateButton.style.opacity = disabled ? "0.6" : "1";
 }
 
 function exportSettings() {
@@ -1001,8 +1415,9 @@ function exportSettings() {
 }
 
 function resetForm() {
+  state.modelCatalog = [];
   populateForm(buildDefaultDraft());
-  persistDraft();
+  dom.modelCatalogStatus.textContent = "";
   pushLocalEvent("localReset");
   renderMonitor();
 }
@@ -1013,36 +1428,53 @@ function pushLocalEvent(key, params = {}, error = false) {
     event: key,
     params,
     error,
+    local: true,
   });
   state.localEvents = state.localEvents.slice(0, 20);
 }
 
 function renderMonitor() {
   const job = state.job;
-  const status = job?.status || "idle";
   const progress = job?.progress || {
     phase: "idle",
     percent: 0,
     processed_files: 0,
     total_files: 0,
+    processed_texts: 0,
     changed_file_count: 0,
     candidate_file_count: 0,
+    last_event_at: "",
     current_file: "",
+    current_activity: "",
   };
+  const status = job?.status || "idle";
+  const running = status === "running";
+  const summary = job?.summary || buildPayload(dom.dryRun?.checked || false);
+  const providerId = summary.provider || summary.api?.provider || providerFromPicker();
+  const providerLabel = providerMetaById(providerId)?.label || providerId;
 
   dom.statusPill.textContent = statusLabel(status);
-  dom.monitorSummary.textContent = buildSummary(status, progress, job?.error || "");
+  dom.livePulse.classList.toggle("active", running);
+  dom.progressNumber.textContent = `${Math.round(progress.percent || 0)}%`;
   dom.progressBar.style.width = `${Math.max(0, Math.min(100, progress.percent || 0))}%`;
+  dom.monitorSummary.textContent = buildSummary(status, progress, job?.error || "");
   dom.statPhase.textContent = phaseLabel(progress.phase || "idle");
   dom.statFiles.textContent = `${progress.processed_files || 0} / ${progress.total_files || 0}`;
+  dom.statTexts.textContent = String(progress.processed_texts || 0);
   dom.statChanged.textContent = String(progress.changed_file_count || job?.result?.changed_file_count || 0);
   dom.statCandidates.textContent = String(progress.candidate_file_count || job?.result?.candidate_file_count || 0);
+  dom.statLastUpdate.textContent = formatRelative(progress.last_event_at);
+  dom.currentProvider.textContent = providerLabel;
+  dom.currentModel.textContent = summary.model || summary.api?.model || dom.model.value || "—";
+  dom.currentActivity.textContent = activityLabel(progress.current_activity || progress.phase || "idle");
   dom.currentFile.textContent = progress.current_file || "—";
   dom.resultPanel.textContent = job?.result ? JSON.stringify(job.result, null, 2) : t("emptyResult");
 
-  const items = job ? job.events.map((event) => ({ ...event, local: false })) : [];
-  const timelineItems = items.length ? items : state.localEvents.map((event) => ({ ...event, local: true }));
-  renderTimeline(timelineItems);
+  const timelineEvents = [
+    ...(job?.events || []).map((event) => ({ ...event, local: false })),
+    ...state.localEvents,
+  ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  renderTimeline(timelineEvents.slice(0, 60));
 }
 
 function renderTimeline(events) {
@@ -1050,9 +1482,8 @@ function renderTimeline(events) {
     dom.timeline.innerHTML = `<div class="timeline-item"><p>${escapeHtml(t("emptyTimeline"))}</p></div>`;
     return;
   }
+
   dom.timeline.innerHTML = events
-    .slice()
-    .reverse()
     .map((event) => {
       const text = event.local ? formatLocalEvent(event) : formatServerEvent(event);
       const klass = event.error || event.event === "job_failed" ? "timeline-item error" : "timeline-item";
@@ -1077,27 +1508,33 @@ function formatServerEvent(event) {
     case "resource_pack_start":
       return t("eventResourcePackStart");
     case "resource_pack_done":
-      return formatTemplate(t("eventResourcePackDone"), { count: event.count ?? 0 });
+      return formatTemplate(t("eventResourcePackDone"), { count: event.count || 0 });
     case "scan_start":
-      return formatTemplate(t("eventScanStart"), { total: event.total_files ?? 0 });
+      return formatTemplate(t("eventScanStart"), { total: event.total_files || 0 });
     case "file_start":
       return formatTemplate(t("eventFileStart"), {
-        index: event.index ?? 0,
-        total: event.total ?? 0,
+        index: event.index || 0,
+        total: event.total || 0,
         file: baseName(event.file),
       });
     case "file_done":
       return formatTemplate(t("eventFileDone"), {
-        index: event.index ?? 0,
-        total: event.total ?? 0,
+        index: event.index || 0,
+        total: event.total || 0,
         file: baseName(event.file),
-        changed: event.changed_chunks ?? 0,
-        candidates: event.candidates ?? 0,
+        changed: event.changed_chunks || 0,
+        candidates: event.candidates || 0,
       });
+    case "translation_batch_start":
+      return formatTemplate(t("eventBatchStart"), { count: event.batch_size || 0 });
+    case "translation_batch_done":
+      return formatTemplate(t("eventBatchDone"), { count: event.batch_size || 0 });
+    case "translation_batch_error":
+      return formatTemplate(t("eventBatchError"), { message: event.message || "" });
     case "done":
       return formatTemplate(t("eventDone"), {
-        changed: event.changed_file_count ?? 0,
-        candidates: event.candidate_file_count ?? 0,
+        changed: event.changed_file_count || 0,
+        candidates: event.candidate_file_count || 0,
       });
     case "job_completed":
       return t("eventCompleted");
@@ -1105,6 +1542,24 @@ function formatServerEvent(event) {
       return formatTemplate(t("eventFailed"), { message: event.message || "" });
     default:
       return formatTemplate(t("eventUnknown"), { event: event.event });
+  }
+}
+
+function buildSummary(status, progress, errorMessage) {
+  switch (status) {
+    case "queued":
+      return t("summaryQueued");
+    case "running":
+      return t("summaryRunning");
+    case "completed":
+      return formatTemplate(t("summaryCompleted"), {
+        changed: progress.changed_file_count || 0,
+        candidates: progress.candidate_file_count || 0,
+      });
+    case "failed":
+      return errorMessage ? `${t("summaryFailed")} ${errorMessage}` : t("summaryFailed");
+    default:
+      return t("summaryIdle");
   }
 }
 
@@ -1135,6 +1590,8 @@ function phaseLabel(phase) {
       return t("phaseScanPending");
     case "scan":
       return t("phaseScan");
+    case "translate":
+      return t("phaseTranslate");
     case "done":
       return t("phaseDone");
     case "failed":
@@ -1144,30 +1601,46 @@ function phaseLabel(phase) {
   }
 }
 
-function buildSummary(status, progress, errorMessage) {
-  switch (status) {
-    case "queued":
-      return t("summaryQueued");
-    case "running":
-      return t("summaryRunning");
-    case "completed":
-      return formatTemplate(t("summaryCompleted"), {
-        changed: progress.changed_file_count || 0,
-        candidates: progress.candidate_file_count || 0,
-      });
+function activityLabel(activity) {
+  switch (activity) {
+    case "preparing":
+      return t("activityPreparing");
+    case "resource_pack":
+    case "resource_pack_start":
+      return t("activityResourcePack");
+    case "scan_start":
+      return t("activityScanStart");
+    case "file_start":
+      return t("activityFileStart");
+    case "file_done":
+      return t("activityFileDone");
+    case "translation_batch_start":
+      return t("activityBatchStart");
+    case "translation_batch_done":
+      return t("activityBatchDone");
+    case "translation_batch_error":
+      return t("activityBatchError");
+    case "done":
+      return t("activityDone");
     case "failed":
-      return errorMessage ? `${t("summaryFailed")} ${errorMessage}` : t("summaryFailed");
+      return t("activityFailed");
     default:
-      return t("summaryIdle");
+      return phaseLabel(activity);
   }
 }
 
-function t(key) {
-  return I18N[state.lang]?.[key] ?? I18N.ko[key] ?? key;
-}
-
-function formatTemplate(template, values) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""));
+function formatRelative(iso) {
+  if (!iso) {
+    return "—";
+  }
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSeconds < 5) {
+    return t("relativeNow");
+  }
+  if (diffSeconds < 60) {
+    return formatTemplate(t("relativeSeconds"), { count: diffSeconds });
+  }
+  return formatTemplate(t("relativeMinutes"), { count: Math.floor(diffSeconds / 60) });
 }
 
 function formatTime(iso) {
@@ -1184,6 +1657,14 @@ function formatTime(iso) {
 
 function baseName(path) {
   return String(path || "").split("/").pop() || String(path || "");
+}
+
+function t(key) {
+  return I18N[state.lang]?.[key] ?? I18N.ko[key] ?? key;
+}
+
+function formatTemplate(template, values) {
+  return String(template).replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ""));
 }
 
 function escapeHtml(text) {

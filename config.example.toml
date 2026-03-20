@@ -14,10 +14,14 @@ inherit_translate_py = true
 translate_py_path = "../translate.py"
 
 [api]
-# If left empty, OPENAI_API_KEY or COMET_API_KEY is also checked.
+# Supported: comet, openai, gemini, anthropic, openrouter
+provider = "comet"
+
+# If left empty, the provider-specific env var is checked first.
 api_key = ""
-base_url = ""
+base_url = "https://api.cometapi.com/v1"
 model = ""
+request_timeout = 120
 
 [prompt]
 target_language = "한국어"

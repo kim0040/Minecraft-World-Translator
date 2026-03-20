@@ -14,7 +14,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from mc_world_translator import DEFAULT_CONFIG, STYLE_PRESETS, WorldTranslator, merge_nested, normalize_config
+from llm_backends import PROVIDER_SPECS, default_base_url
+from mc_world_translator import (
+    DEFAULT_CONFIG,
+    STYLE_PRESETS,
+    WorldTranslator,
+    enhance_style_prompt_for_config,
+    list_models_for_config,
+    merge_nested,
+    normalize_config,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -120,9 +129,12 @@ def build_payload_config(payload: dict[str, Any]) -> dict[str, Any]:
     config["inherit_translate_py"] = ensure_bool(raw.get("inherit_translate_py"), True)
     config["translate_py_path"] = ensure_str(raw.get("translate_py_path"), "./translate.py") or "./translate.py"
 
+    provider = ensure_str(api.get("provider"), "comet").lower() or "comet"
+    config["api"]["provider"] = provider
     config["api"]["api_key"] = ensure_str(api.get("api_key"))
-    config["api"]["base_url"] = ensure_str(api.get("base_url"))
+    config["api"]["base_url"] = ensure_str(api.get("base_url"), default_base_url(provider))
     config["api"]["model"] = ensure_str(api.get("model"))
+    config["api"]["request_timeout"] = max(10, ensure_int(api.get("request_timeout"), 120))
 
     config["prompt"]["target_language"] = ensure_str(prompt.get("target_language"), "한국어") or "한국어"
     style_preset = ensure_str(prompt.get("style_preset"), "neutral") or "neutral"
@@ -164,6 +176,7 @@ def build_payload_config(payload: dict[str, Any]) -> dict[str, Any]:
 
 def summarize_config(config: dict[str, Any]) -> dict[str, Any]:
     return {
+        "provider": config["api"]["provider"],
         "world_dir": config["world_dir"],
         "report_path": config["report_path"],
         "backup": config["backup"],
@@ -172,6 +185,7 @@ def summarize_config(config: dict[str, Any]) -> dict[str, Any]:
         "translate_py_path": config["translate_py_path"],
         "model": config["api"]["model"],
         "base_url": config["api"]["base_url"],
+        "request_timeout": config["api"]["request_timeout"],
         "api_key_present": bool(config["api"]["api_key"]),
         "target_language": config["prompt"]["target_language"],
         "style_preset": config["prompt"]["style_preset"],
@@ -189,6 +203,18 @@ def discover_example_paths() -> dict[str, str]:
     }
 
 
+def provider_meta() -> list[dict[str, str]]:
+    return [
+        {
+            "id": provider_id,
+            "label": spec["label"],
+            "default_base_url": spec["base_url"],
+            "env_var": spec["env_var"],
+        }
+        for provider_id, spec in PROVIDER_SPECS.items()
+    ]
+
+
 class JobManager:
     def __init__(self) -> None:
         self.jobs: dict[str, dict[str, Any]] = {}
@@ -201,6 +227,7 @@ class JobManager:
             "id": job_id,
             "status": "queued",
             "created_at": now_iso(),
+            "updated_at": now_iso(),
             "started_at": None,
             "finished_at": None,
             "error": "",
@@ -209,9 +236,13 @@ class JobManager:
                 "percent": 0,
                 "processed_files": 0,
                 "total_files": 0,
+                "processed_batches": 0,
+                "processed_texts": 0,
                 "current_file": "",
+                "current_activity": "",
                 "changed_file_count": 0,
                 "candidate_file_count": 0,
+                "last_event_at": "",
             },
             "summary": summarize_config(config),
             "events": [],
@@ -246,6 +277,8 @@ class JobManager:
 
     def _append_event(self, job: dict[str, Any], event: dict[str, Any]) -> None:
         entry = {"timestamp": now_iso(), **event}
+        job["updated_at"] = entry["timestamp"]
+        job["progress"]["last_event_at"] = entry["timestamp"]
         job["events"].append(entry)
         if len(job["events"]) > MAX_EVENTS:
             job["events"] = job["events"][-MAX_EVENTS:]
@@ -256,17 +289,21 @@ class JobManager:
 
         if name == "resource_pack_start":
             progress["phase"] = "resource_pack"
+            progress["current_activity"] = "resource_pack"
             progress["percent"] = max(progress["percent"], 5)
         elif name == "resource_pack_done":
             progress["phase"] = "scan_pending"
+            progress["current_activity"] = "resource_pack_done"
             progress["percent"] = max(progress["percent"], 12)
         elif name == "scan_start":
             progress["phase"] = "scan"
+            progress["current_activity"] = "scan_start"
             progress["total_files"] = int(event.get("total_files", 0))
             if progress["total_files"] == 0:
                 progress["percent"] = max(progress["percent"], 90)
         elif name == "file_start":
             progress["phase"] = "scan"
+            progress["current_activity"] = "file_start"
             progress["current_file"] = ensure_str(event.get("file"))
             progress["total_files"] = int(event.get("total", progress["total_files"]))
             index = max(0, int(event.get("index", 0)) - 1)
@@ -275,14 +312,27 @@ class JobManager:
             progress["percent"] = max(progress["percent"], 12 + int(index / total * 80))
         elif name == "file_done":
             progress["phase"] = "scan"
+            progress["current_activity"] = "file_done"
             progress["current_file"] = ensure_str(event.get("file"))
             total = max(1, int(event.get("total", 0)))
             index = int(event.get("index", 0))
             progress["processed_files"] = index
             progress["total_files"] = total
             progress["percent"] = max(progress["percent"], 12 + int(index / total * 80))
+        elif name == "translation_batch_start":
+            progress["phase"] = "translate"
+            progress["current_activity"] = "translation_batch_start"
+        elif name == "translation_batch_done":
+            progress["phase"] = "translate"
+            progress["current_activity"] = "translation_batch_done"
+            progress["processed_batches"] += 1
+            progress["processed_texts"] += int(event.get("batch_size", 0))
+        elif name == "translation_batch_error":
+            progress["phase"] = "translate"
+            progress["current_activity"] = "translation_batch_error"
         elif name == "done":
             progress["phase"] = "done"
+            progress["current_activity"] = "done"
             progress["percent"] = 100
             progress["changed_file_count"] = int(event.get("changed_file_count", 0))
             progress["candidate_file_count"] = int(event.get("candidate_file_count", 0))
@@ -293,6 +343,7 @@ class JobManager:
             job["status"] = "running"
             job["started_at"] = now_iso()
             job["progress"]["phase"] = "preparing"
+            job["progress"]["current_activity"] = "preparing"
             self._append_event(job, {"event": "job_started"})
             config = job["_config"]
 
@@ -305,6 +356,7 @@ class JobManager:
                 job["finished_at"] = now_iso()
                 job["result"] = report
                 job["progress"]["phase"] = "done"
+                job["progress"]["current_activity"] = "done"
                 job["progress"]["percent"] = 100
                 job["progress"]["changed_file_count"] = int(report.get("changed_file_count", 0))
                 job["progress"]["candidate_file_count"] = int(report.get("candidate_file_count", 0))
@@ -328,6 +380,7 @@ class JobManager:
             job["finished_at"] = now_iso()
             job["error"] = message
             job["progress"]["phase"] = "failed"
+            job["progress"]["current_activity"] = "failed"
             self._append_event(job, {"event": "job_failed", "message": message})
 
     def _handle_progress(self, job_id: str, event: dict[str, Any]) -> None:
@@ -356,12 +409,15 @@ class AppHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/meta":
             self.send_json(
                 {
+                    "providers": provider_meta(),
                     "style_presets": sorted(STYLE_PRESETS),
                     "example_paths": discover_example_paths(),
                     "defaults": {
                         "batch_size": DEFAULT_CONFIG["batch_size"],
                         "temperature": DEFAULT_CONFIG["temperature"],
                         "backup_suffix": DEFAULT_CONFIG["backup_suffix"],
+                        "provider": DEFAULT_CONFIG["api"]["provider"],
+                        "request_timeout": DEFAULT_CONFIG["api"]["request_timeout"],
                         "region_dirs": DEFAULT_CONFIG["scan"]["region_dirs"],
                         "skip_patterns": DEFAULT_CONFIG["scan"]["skip_patterns"],
                         "resource_pack_source_lang_files": DEFAULT_CONFIG["resource_pack"]["source_lang_files"],
@@ -389,9 +445,6 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path != "/api/jobs":
-            self.send_error_json(HTTPStatus.NOT_FOUND, "Unknown endpoint.")
-            return
 
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length) if length else b"{}"
@@ -402,13 +455,43 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.BAD_REQUEST, "Request body must be valid JSON.")
             return
 
-        try:
-            job = JOB_MANAGER.create_job(payload)
-        except Exception as exc:
-            self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+        if parsed.path == "/api/jobs":
+            try:
+                job = JOB_MANAGER.create_job(payload)
+            except Exception as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self.send_json(job, status=HTTPStatus.CREATED)
             return
 
-        self.send_json(job, status=HTTPStatus.CREATED)
+        if parsed.path == "/api/models":
+            try:
+                config = build_payload_config(payload)
+                models = list_models_for_config(config)
+            except Exception as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self.send_json(
+                {
+                    "provider": config["api"]["provider"],
+                    "model_count": len(models),
+                    "models": models,
+                }
+            )
+            return
+
+        if parsed.path == "/api/prompt-assist":
+            try:
+                config = build_payload_config(payload)
+                brief = ensure_str(payload.get("brief"))
+                enhanced = enhance_style_prompt_for_config(config, brief)
+            except Exception as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self.send_json({"enhanced_prompt": enhanced})
+            return
+
+        self.send_error_json(HTTPStatus.NOT_FOUND, "Unknown endpoint.")
 
     def send_json(
         self,

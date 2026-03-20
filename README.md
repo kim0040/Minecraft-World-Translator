@@ -15,6 +15,12 @@
 ## 특징
 
 - API 키, `base_url`, 모델을 설정 파일이나 CLI 인자로 지정 가능
+- 공급자 전환 지원
+  - `comet`
+  - `openai`
+  - `gemini`
+  - `anthropic`
+  - `openrouter`
 - 대상 언어를 자유롭게 변경 가능
 - 말투/스타일 프리셋 지원
   - `dcinside`
@@ -26,6 +32,8 @@
 - `dry-run`으로 실제 수정 없이 후보 텍스트만 스캔 가능
 - 수정 전 원본 백업 가능
 - 월드 번역과 리소스팩 번역을 하나의 도구에서 처리 가능
+- 공급자별 사용 가능한 모델 목록 조회 가능
+- 짧은 스타일 메모를 API로 보강해 추가 스타일 지시로 확장 가능
 
 ## 폴더 구성
 
@@ -106,12 +114,15 @@ python3 webui_server.py --host 0.0.0.0 --port 9000
 
 웹 UI에서 지원하는 것:
 
+- Comet / OpenAI / Gemini / Anthropic / OpenRouter 전환
 - 영어 / 한국어 / 일본어 인터페이스
 - 라이트 / 다크 테마 전환
 - 월드 경로, API, 모델, 프롬프트, 스타일 프리셋 설정
+- 모델 목록 불러오기
+- 짧은 스타일 메모를 `AI로 디테일 보강`
 - 스캔 범위 on/off
 - 리소스팩 zip 번역 설정
-- 실시간 진행률, 현재 파일, 작업 로그, 결과 JSON 확인
+- 실시간 진행률, 현재 파일, 현재 동작, 마지막 갱신 시각, 작업 로그, 결과 JSON 확인
 - 현재 폼 설정 JSON 내보내기
 
 주의:
@@ -157,15 +168,31 @@ python3 webui_server.py --host 0.0.0.0 --port 9000
 
 ```toml
 [api]
+provider = "comet"
 api_key = ""
 base_url = ""
 model = ""
+request_timeout = 120
 ```
 
 - 비워두면 다음 순서로 채운다.
   1. 설정 파일 값
-  2. 환경변수 `OPENAI_API_KEY` 또는 `COMET_API_KEY`
+  2. 공급자별 환경변수
+     - `COMET_API_KEY`
+     - `OPENAI_API_KEY`
+     - `GEMINI_API_KEY`
+     - `ANTHROPIC_API_KEY`
+     - `OPENROUTER_API_KEY`
   3. `translate.py` 상속값
+
+- `provider`
+  - 공급자 종류
+- `base_url`
+  - 공급자 기본 URL을 그대로 써도 되고, 프록시/호환 엔드포인트가 있으면 바꿀 수 있다
+- `model`
+  - 사용 모델은 자유롭게 직접 입력 가능
+- `request_timeout`
+  - 모델 응답 대기 시간(초)
 
 ### 프롬프트 / 스타일
 
@@ -240,6 +267,7 @@ python3 mc_world_translator.py --help
 - `--config`
 - `--world-dir`
 - `--report-path`
+- `--provider`
 - `--api-key`
 - `--base-url`
 - `--model`
@@ -252,6 +280,34 @@ python3 mc_world_translator.py --help
 - `--dry-run`
 - `--no-backup`
 - `--resource-pack-zip`
+- `--list-models`
+- `--enhance-style-brief`
+
+## 모델 목록 조회
+
+공급자에서 현재 사용 가능한 모델을 가져오고 싶으면 아래처럼 쓸 수 있다.
+
+```bash
+python3 mc_world_translator.py --config config.example.toml --list-models
+```
+
+공급자를 직접 바꿔가며 확인할 수도 있다.
+
+```bash
+python3 mc_world_translator.py --provider openrouter --api-key "$OPENROUTER_API_KEY" --list-models
+python3 mc_world_translator.py --provider gemini --api-key "$GEMINI_API_KEY" --list-models
+python3 mc_world_translator.py --provider anthropic --api-key "$ANTHROPIC_API_KEY" --list-models
+```
+
+## 스타일 메모 보강
+
+짧게 적은 스타일 메모를 더 구체적인 추가 스타일 지시로 확장하고 싶으면:
+
+```bash
+python3 mc_world_translator.py \
+  --config config.example.toml \
+  --enhance-style-brief "중세 공포맵 느낌, 고유명사는 음역, 힌트는 명확하게"
+```
 
 ## 예시
 

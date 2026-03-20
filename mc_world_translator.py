@@ -16,7 +16,15 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from llm_backends import (
+    LLMProviderClient,
+    PROVIDER_SPECS,
+    default_base_url,
+    enhance_style_prompt,
+    infer_provider,
+    provider_choices,
+    resolve_api_key,
+)
 
 try:
     from nbt import nbt
@@ -84,9 +92,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "inherit_translate_py": True,
     "translate_py_path": "./translate.py",
     "api": {
+        "provider": "comet",
         "api_key": "",
         "base_url": "",
         "model": "",
+        "request_timeout": 120,
     },
     "prompt": {
         "target_language": "한국어",
@@ -188,6 +198,8 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
         result["world_dir"] = args.world_dir
     if args.report_path:
         result["report_path"] = args.report_path
+    if args.provider:
+        result["api"]["provider"] = args.provider
     if args.api_key:
         result["api"]["api_key"] = args.api_key
     if args.base_url:
@@ -243,8 +255,15 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
             if legacy_prompt and result["prompt"]["style_preset"] == "dcinside":
                 result["prompt"]["custom_system_prompt"] = legacy_prompt
 
-    api_key = result["api"]["api_key"] or os.getenv("OPENAI_API_KEY") or os.getenv("COMET_API_KEY", "")
-    result["api"]["api_key"] = api_key
+    provider = infer_provider(result["api"].get("provider"), result["api"].get("base_url", ""))
+    if provider not in PROVIDER_SPECS:
+        raise SystemExit(f"Unsupported provider: {provider}")
+    result["api"]["provider"] = provider
+
+    if not result["api"]["base_url"]:
+        result["api"]["base_url"] = default_base_url(provider)
+
+    result["api"]["api_key"] = resolve_api_key(provider, result["api"]["api_key"])
 
     world_dir_raw = str(result["world_dir"]).strip()
     if world_dir_raw:
@@ -276,14 +295,16 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
 
 
 class BatchTranslator:
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], progress_callback: Any = None) -> None:
         self.config = config
+        self.progress_callback = progress_callback
         self.cache: dict[str, str] = {}
         self.overrides: dict[str, str] = dict(config["scan"]["overrides"])
-        self.client = OpenAI(
-            api_key=config["api"]["api_key"],
-            base_url=config["api"]["base_url"] or None,
-        )
+        self.client = LLMProviderClient(config)
+
+    def emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback({"event": event, **payload})
 
     def system_prompt(self) -> str:
         prompt_config = self.config["prompt"]
@@ -327,22 +348,19 @@ class BatchTranslator:
     def _translate_batch(self, texts: list[str], batch_size: int) -> dict[str, str]:
         payload = {str(i): text for i, text in enumerate(texts)}
         try:
-            response = self.client.chat.completions.create(
-                model=self.config["api"]["model"],
-                messages=[
-                    {"role": "system", "content": self.system_prompt()},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
-                ],
-                response_format={"type": "json_object"},
+            self.emit("translation_batch_start", batch_size=len(texts))
+            parsed = self.client.translate_mapping(
+                payload,
+                system_prompt=self.system_prompt(),
                 temperature=float(self.config["temperature"]),
             )
-            content = response.choices[0].message.content or "{}"
-            parsed = json.loads(content)
+            self.emit("translation_batch_done", batch_size=len(texts))
             return {
                 text: parsed.get(str(i), text)
                 for i, text in enumerate(texts)
             }
-        except Exception:
+        except Exception as exc:
+            self.emit("translation_batch_error", batch_size=len(texts), message=str(exc))
             if batch_size > 1:
                 next_size = max(1, batch_size // 5)
                 merged: dict[str, str] = {}
@@ -362,10 +380,12 @@ class WorldTranslator:
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
+            "provider": config["api"]["provider"],
+            "model": config["api"]["model"],
             "changed_files": [],
             "resource_packs": [],
         }
-        self.translator = None if config["dry_run"] else BatchTranslator(config)
+        self.translator = None if config["dry_run"] else BatchTranslator(config, progress_callback=self.emit)
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
@@ -913,6 +933,15 @@ class WorldTranslator:
         )
 
 
+def list_models_for_config(config: dict[str, Any]) -> list[dict[str, Any]]:
+    client = LLMProviderClient(config)
+    return client.list_models()
+
+
+def enhance_style_prompt_for_config(config: dict[str, Any], brief: str) -> str:
+    return enhance_style_prompt(config, brief)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Translate Minecraft world NBT texts and optional resource-pack language files."
@@ -920,6 +949,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=str, help="TOML config path")
     parser.add_argument("--world-dir", type=str, help="Minecraft world directory")
     parser.add_argument("--report-path", type=str, help="JSON report output path")
+    parser.add_argument(
+        "--provider",
+        type=str,
+        choices=provider_choices(),
+        help="LLM provider override",
+    )
     parser.add_argument("--api-key", type=str, help="API key override")
     parser.add_argument("--base-url", type=str, help="Base URL override")
     parser.add_argument("--model", type=str, help="Model override")
@@ -951,6 +986,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable resource-pack zip translation even if config enables it",
     )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available models for the selected provider and exit",
+    )
+    parser.add_argument(
+        "--enhance-style-brief",
+        type=str,
+        help="Expand a short style brief into a more detailed prompt using the configured provider/model",
+    )
     return parser
 
 
@@ -963,6 +1008,26 @@ def main() -> None:
     config = merge_nested(DEFAULT_CONFIG, loaded)
     config = apply_cli_overrides(config, args)
     config = normalize_config(config, config_path)
+
+    if args.list_models:
+        try:
+            models = list_models_for_config(config)
+        except Exception as exc:
+            raise SystemExit(str(exc)) from exc
+        print(json.dumps({"provider": config["api"]["provider"], "models": models}, ensure_ascii=False, indent=2))
+        return
+
+    if args.enhance_style_brief:
+        if not config["api"]["api_key"]:
+            raise SystemExit("API key is missing. Set it in config, environment, or translate.py defaults.")
+        if not config["api"]["model"]:
+            raise SystemExit("Model is missing. Set it in config or translate.py defaults.")
+        try:
+            enhanced = enhance_style_prompt_for_config(config, args.enhance_style_brief)
+        except Exception as exc:
+            raise SystemExit(str(exc)) from exc
+        print(enhanced)
+        return
 
     if not config["world_dir"]:
         raise SystemExit("`world_dir` is required. Set it in config or pass --world-dir.")
