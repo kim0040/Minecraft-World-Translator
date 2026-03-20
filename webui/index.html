@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minecraft World Translator UI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+    <div class="bg-grid"></div>
+
+    <div class="shell">
+      <header class="topbar reveal">
+        <div class="brand-block">
+          <p class="brand-kicker" data-i18n="brandKicker"></p>
+          <h1 class="brand-title" data-i18n="brandTitle"></h1>
+          <p class="brand-copy" data-i18n="brandCopy"></p>
+        </div>
+
+        <div class="toolbar">
+          <div class="segmented" aria-label="UI language">
+            <button type="button" class="seg-btn" data-lang-switch="ko">KO</button>
+            <button type="button" class="seg-btn" data-lang-switch="en">EN</button>
+            <button type="button" class="seg-btn" data-lang-switch="ja">日本語</button>
+          </div>
+
+          <button type="button" class="theme-toggle" id="themeToggle">
+            <span class="theme-toggle__label" data-i18n="themeLight"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="main-layout">
+        <section class="hero card reveal">
+          <div class="hero-copy">
+            <p class="eyebrow" data-i18n="heroEyebrow"></p>
+            <h2 data-i18n="heroTitle"></h2>
+            <p class="hero-text" data-i18n="heroText"></p>
+          </div>
+
+          <div class="hero-steps">
+            <article class="mini-panel">
+              <span class="step-no">01</span>
+              <h3 data-i18n="stepOneTitle"></h3>
+              <p data-i18n="stepOneBody"></p>
+            </article>
+            <article class="mini-panel">
+              <span class="step-no">02</span>
+              <h3 data-i18n="stepTwoTitle"></h3>
+              <p data-i18n="stepTwoBody"></p>
+            </article>
+            <article class="mini-panel">
+              <span class="step-no">03</span>
+              <h3 data-i18n="stepThreeTitle"></h3>
+              <p data-i18n="stepThreeBody"></p>
+            </article>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <form class="stack" id="translatorForm">
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionQuickEyebrow"></p>
+                  <h2 data-i18n="sectionQuickTitle"></h2>
+                </div>
+                <span class="badge" data-i18n="recommendedBadge"></span>
+              </div>
+
+              <div class="tip-grid">
+                <div class="tip-card">
+                  <h3 data-i18n="tipSafeTitle"></h3>
+                  <p data-i18n="tipSafeBody"></p>
+                </div>
+                <div class="tip-card">
+                  <h3 data-i18n="tipPromptTitle"></h3>
+                  <p data-i18n="tipPromptBody"></p>
+                </div>
+                <div class="tip-card">
+                  <h3 data-i18n="tipSecretTitle"></h3>
+                  <p data-i18n="tipSecretBody"></p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionBasicEyebrow"></p>
+                  <h2 data-i18n="sectionBasicTitle"></h2>
+                </div>
+              </div>
+
+              <div class="field-grid two">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldWorldDir"></span>
+                  <input id="worldDir" type="text" />
+                  <span class="field-help" data-i18n="helpWorldDir"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldReportPath"></span>
+                  <input id="reportPath" type="text" />
+                  <span class="field-help" data-i18n="helpReportPath"></span>
+                </label>
+              </div>
+
+              <div class="field-grid two">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldTranslatePy"></span>
+                  <input id="translatePyPath" type="text" />
+                  <span class="field-help" data-i18n="helpTranslatePy"></span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <span class="field-label" data-i18n="fieldInheritTranslatePy"></span>
+                  <span class="toggle-row">
+                    <input id="inheritTranslatePy" type="checkbox" checked />
+                    <span data-i18n="helpInheritTranslatePy"></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="field-grid three">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldApiKey"></span>
+                  <input id="apiKey" type="password" autocomplete="off" />
+                  <span class="field-help" data-i18n="helpApiKey"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldBaseUrl"></span>
+                  <input id="baseUrl" type="text" />
+                  <span class="field-help" data-i18n="helpBaseUrl"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldModel"></span>
+                  <input id="model" type="text" />
+                  <span class="field-help" data-i18n="helpModel"></span>
+                </label>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionPromptEyebrow"></p>
+                  <h2 data-i18n="sectionPromptTitle"></h2>
+                </div>
+              </div>
+
+              <div class="field-grid three">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldTargetLanguage"></span>
+                  <select id="targetLanguagePreset"></select>
+                  <span class="field-help" data-i18n="helpTargetLanguage"></span>
+                </label>
+
+                <label class="field hidden" id="customLanguageField">
+                  <span class="field-label" data-i18n="fieldCustomLanguage"></span>
+                  <input id="customLanguage" type="text" />
+                  <span class="field-help" data-i18n="helpCustomLanguage"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldStylePreset"></span>
+                  <select id="stylePreset"></select>
+                  <span class="field-help" id="stylePresetHelp"></span>
+                </label>
+              </div>
+
+              <div class="field-grid two">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldStylePrompt"></span>
+                  <textarea id="stylePrompt" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpStylePrompt"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldCustomPrompt"></span>
+                  <textarea id="customSystemPrompt" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpCustomPrompt"></span>
+                </label>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionScopeEyebrow"></p>
+                  <h2 data-i18n="sectionScopeTitle"></h2>
+                </div>
+              </div>
+
+              <div class="toggle-grid">
+                <label class="chip-toggle"><input id="translateSigns" type="checkbox" checked /><span data-i18n="scopeSigns"></span></label>
+                <label class="chip-toggle"><input id="translateBooks" type="checkbox" checked /><span data-i18n="scopeBooks"></span></label>
+                <label class="chip-toggle"><input id="translateCustomNames" type="checkbox" checked /><span data-i18n="scopeCustomNames"></span></label>
+                <label class="chip-toggle"><input id="translateItemNames" type="checkbox" checked /><span data-i18n="scopeItemNames"></span></label>
+                <label class="chip-toggle"><input id="translateLore" type="checkbox" checked /><span data-i18n="scopeLore"></span></label>
+                <label class="chip-toggle"><input id="translateTitles" type="checkbox" checked /><span data-i18n="scopeTitles"></span></label>
+                <label class="chip-toggle"><input id="translateFilteredTitles" type="checkbox" checked /><span data-i18n="scopeFilteredTitles"></span></label>
+                <label class="chip-toggle"><input id="translateCommandOutput" type="checkbox" checked /><span data-i18n="scopeCommandOutput"></span></label>
+                <label class="chip-toggle"><input id="skipCommandLikeText" type="checkbox" checked /><span data-i18n="scopeSkipCommands"></span></label>
+              </div>
+
+              <div class="field-grid two">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldPrefixes"></span>
+                  <textarea id="componentPrefixes" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpPrefixes"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldOverrides"></span>
+                  <textarea id="overrides" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpOverrides"></span>
+                </label>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionResourceEyebrow"></p>
+                  <h2 data-i18n="sectionResourceTitle"></h2>
+                </div>
+              </div>
+
+              <div class="field-grid two">
+                <label class="field checkbox-field">
+                  <span class="field-label" data-i18n="fieldResourceEnabled"></span>
+                  <span class="toggle-row">
+                    <input id="resourceEnabled" type="checkbox" />
+                    <span data-i18n="helpResourceEnabled"></span>
+                  </span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <span class="field-label" data-i18n="fieldSkipExistingLang"></span>
+                  <span class="toggle-row">
+                    <input id="skipIfTargetExists" type="checkbox" />
+                    <span data-i18n="helpSkipExistingLang"></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="field-grid three">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldZipPaths"></span>
+                  <textarea id="zipPaths" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpZipPaths"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldSourceLangFiles"></span>
+                  <textarea id="sourceLangFiles" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpSourceLangFiles"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldTargetLangFile"></span>
+                  <input id="targetLangFile" type="text" />
+                  <span class="field-help" data-i18n="helpTargetLangFile"></span>
+                </label>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="sectionAdvancedEyebrow"></p>
+                  <h2 data-i18n="sectionAdvancedTitle"></h2>
+                </div>
+              </div>
+
+              <div class="field-grid three">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldBatchSize"></span>
+                  <input id="batchSize" type="number" min="1" />
+                  <span class="field-help" data-i18n="helpBatchSize"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldTemperature"></span>
+                  <input id="temperature" type="number" min="0" max="2" step="0.1" />
+                  <span class="field-help" data-i18n="helpTemperature"></span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldBackupSuffix"></span>
+                  <input id="backupSuffix" type="text" />
+                  <span class="field-help" data-i18n="helpBackupSuffix"></span>
+                </label>
+              </div>
+
+              <div class="field-grid three">
+                <label class="field checkbox-field">
+                  <span class="field-label" data-i18n="fieldBackup"></span>
+                  <span class="toggle-row">
+                    <input id="backup" type="checkbox" checked />
+                    <span data-i18n="helpBackup"></span>
+                  </span>
+                </label>
+
+                <label class="field checkbox-field">
+                  <span class="field-label" data-i18n="fieldDryRun"></span>
+                  <span class="toggle-row">
+                    <input id="dryRun" type="checkbox" />
+                    <span data-i18n="helpDryRun"></span>
+                  </span>
+                </label>
+
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldRegionDirs"></span>
+                  <textarea id="regionDirs" rows="4"></textarea>
+                  <span class="field-help" data-i18n="helpRegionDirs"></span>
+                </label>
+              </div>
+
+              <div class="field-grid one">
+                <label class="field">
+                  <span class="field-label" data-i18n="fieldSkipPatterns"></span>
+                  <textarea id="skipPatterns" rows="3"></textarea>
+                  <span class="field-help" data-i18n="helpSkipPatterns"></span>
+                </label>
+              </div>
+            </article>
+
+            <article class="action-bar card reveal">
+              <div class="action-copy">
+                <h2 data-i18n="actionsTitle"></h2>
+                <p data-i18n="actionsBody"></p>
+              </div>
+
+              <div class="action-buttons">
+                <button type="button" class="primary-btn" id="scanButton" data-i18n="actionScan"></button>
+                <button type="button" class="primary-btn accent-btn" id="translateButton" data-i18n="actionTranslate"></button>
+                <button type="button" class="ghost-btn" id="exportButton" data-i18n="actionExport"></button>
+                <button type="button" class="ghost-btn" id="resetButton" data-i18n="actionReset"></button>
+              </div>
+            </article>
+          </form>
+
+          <aside class="stack">
+            <article class="card monitor-card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="monitorEyebrow"></p>
+                  <h2 data-i18n="monitorTitle"></h2>
+                </div>
+                <span class="status-pill" id="statusPill"></span>
+              </div>
+
+              <p class="monitor-summary" id="monitorSummary"></p>
+
+              <div class="progress-shell">
+                <div class="progress-bar" id="progressBar"></div>
+              </div>
+
+              <div class="stats-grid">
+                <div class="stat-box">
+                  <span class="stat-label" data-i18n="statPhase"></span>
+                  <strong id="statPhase"></strong>
+                </div>
+                <div class="stat-box">
+                  <span class="stat-label" data-i18n="statFiles"></span>
+                  <strong id="statFiles"></strong>
+                </div>
+                <div class="stat-box">
+                  <span class="stat-label" data-i18n="statChanged"></span>
+                  <strong id="statChanged"></strong>
+                </div>
+                <div class="stat-box">
+                  <span class="stat-label" data-i18n="statCandidates"></span>
+                  <strong id="statCandidates"></strong>
+                </div>
+              </div>
+
+              <div class="current-file">
+                <span class="field-label" data-i18n="currentFile"></span>
+                <code id="currentFile"></code>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="timelineEyebrow"></p>
+                  <h2 data-i18n="timelineTitle"></h2>
+                </div>
+              </div>
+
+              <div class="timeline" id="timeline"></div>
+            </article>
+
+            <article class="card reveal">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow" data-i18n="resultEyebrow"></p>
+                  <h2 data-i18n="resultTitle"></h2>
+                </div>
+              </div>
+
+              <pre class="result-panel" id="resultPanel"></pre>
+            </article>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

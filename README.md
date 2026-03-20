@@ -34,7 +34,12 @@ minecraft-world-translator/
 ├── README.md
 ├── config.example.toml
 ├── mc_world_translator.py
+├── webui_server.py
 └── requirements.txt
+└── webui/
+    ├── index.html
+    ├── styles.css
+    └── app.js
 ```
 
 ## 설치
@@ -60,6 +65,46 @@ python3 mc_world_translator.py --config config.example.toml
 
 첫 번째 명령은 실제 수정 없이 후보 텍스트만 스캔한다.  
 두 번째 명령은 실제 번역을 수행하고 월드 파일을 수정한다.
+
+## 웹 UI 사용법
+
+브라우저에서 설정하고 실행하고 싶다면 웹 UI를 쓸 수 있다.
+
+```bash
+python3 webui_server.py
+```
+
+기본 접속 주소:
+
+- `http://127.0.0.1:8765`
+
+자동으로 브라우저를 열고 싶다면:
+
+```bash
+python3 webui_server.py --open-browser
+```
+
+호스트/포트를 바꾸고 싶다면:
+
+```bash
+python3 webui_server.py --host 0.0.0.0 --port 9000
+```
+
+웹 UI에서 지원하는 것:
+
+- 영어 / 한국어 / 일본어 인터페이스
+- 라이트 / 다크 테마 전환
+- 월드 경로, API, 모델, 프롬프트, 스타일 프리셋 설정
+- 스캔 범위 on/off
+- 리소스팩 zip 번역 설정
+- 실시간 진행률, 현재 파일, 작업 로그, 결과 JSON 확인
+- 현재 폼 설정 JSON 내보내기
+
+주의:
+
+- 웹 UI는 `로컬 서버`다. 외부에 배포하는 용도가 아니라, 현재 PC에서 번역기를 편하게 조작하기 위한 화면이다.
+- API 키는 브라우저 저장소에 남기지 않는다. 새로고침 후 필요하면 다시 입력하면 된다.
+- 실제 번역 전에는 웹 UI에서도 `스캔만 실행`을 먼저 돌리는 걸 권장한다.
 
 ## 설정 파일 설명
 

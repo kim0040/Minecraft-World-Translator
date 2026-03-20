@@ -353,11 +353,12 @@ class BatchTranslator:
 
 
 class WorldTranslator:
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], progress_callback: Any = None) -> None:
         self.config = config
         self.scan_config = config["scan"]
         self.component_prefixes = tuple(self.scan_config["component_translate_key_prefixes"])
         self.skip_patterns = tuple(self.scan_config["skip_patterns"])
+        self.progress_callback = progress_callback
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
@@ -366,20 +367,43 @@ class WorldTranslator:
         }
         self.translator = None if config["dry_run"] else BatchTranslator(config)
 
+    def emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback({"event": event, **payload})
+
     def run(self) -> dict[str, Any]:
         if self.config["resource_pack"]["enabled"]:
+            self.emit("resource_pack_start")
             self.translate_resource_packs()
+            self.emit("resource_pack_done", count=len(self.report["resource_packs"]))
 
-        for file_path in self.iter_region_files():
+        region_files = self.iter_region_files()
+        total_files = len(region_files)
+        self.emit("scan_start", total_files=total_files)
+        for index, file_path in enumerate(region_files, start=1):
+            self.emit("file_start", index=index, total=total_files, file=str(file_path))
             result = self.process_region_file(file_path)
             if result["changed_chunks"] > 0 or result.get("candidates", 0) > 0:
                 self.report["changed_files"].append(result)
+            self.emit(
+                "file_done",
+                index=index,
+                total=total_files,
+                file=str(file_path),
+                changed_chunks=result["changed_chunks"],
+                candidates=result.get("candidates", 0),
+            )
 
         self.report["changed_file_count"] = len(
             [item for item in self.report["changed_files"] if item["changed_chunks"] > 0]
         )
         self.report["candidate_file_count"] = len(self.report["changed_files"])
         self.write_report()
+        self.emit(
+            "done",
+            changed_file_count=self.report["changed_file_count"],
+            candidate_file_count=self.report["candidate_file_count"],
+        )
         return self.report
 
     def iter_region_files(self) -> list[Path]:
