@@ -635,6 +635,33 @@ textarea {
   align-items: center;
 }
 
+.footer-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.footer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.footer-link {
+  color: var(--accent-strong);
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.footer-license {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .run-actions {
   justify-content: flex-end;
 }
@@ -832,6 +859,7 @@ html[data-theme="dark"] .result-panel {
 
   .topbar,
   .run-card,
+  .footer-card,
   .section-head {
     grid-template-columns: 1fr;
     display: flex;
@@ -839,8 +867,11 @@ html[data-theme="dark"] .result-panel {
   }
 
   .top-controls,
-  .run-actions {
+  .run-actions,
+  .footer-meta {
     width: 100%;
+    align-items: stretch;
+    text-align: left;
   }
 
   .lang-switch,

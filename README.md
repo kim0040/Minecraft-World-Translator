@@ -1,59 +1,126 @@
 # Minecraft World Translator
 
-마인크래프트 월드 파일(`.mca`) 안에 들어 있는 텍스트와 선택적으로 리소스팩 언어 파일까지 번역하는 범용 번역기다.
+English | [한국어](./README.ko.md) | [日本語](./README.ja.md)
 
-이 도구는 다음 같은 텍스트를 대상으로 잡는다.
+Minecraft World Translator is a desktop-friendly translation tool for Minecraft worlds. It scans world region files (`.mca`) and can also translate resource-pack language files inside zip archives.
 
-- 표지판 문구
-- 책 페이지
-- 책 제목과 `filtered_title`
-- 커스텀 이름
-- 아이템 이름과 Lore
-- `tellraw`, `title`, `subtitle`, `actionbar` 내부 텍스트
-- 리소스팩 `lang/*.json` 파일
+The project is designed for beginners first:
 
-## 특징
+- You can run it from a browser-based local UI.
+- You can still use a CLI if you prefer.
+- You can keep your existing `translate.py` settings.
+- You can switch between multiple LLM providers without rewriting the app.
 
-- API 키, `base_url`, 모델을 설정 파일이나 CLI 인자로 지정 가능
-- 공급자 전환 지원
+If you have questions or run into errors, contact: `mini0227kim@gmail.com`
+
+## What It Can Translate
+
+- Sign text
+- Book pages
+- Book titles and `filtered_title`
+- Custom names
+- Item names and lore
+- Text inside `tellraw`, `title`, `subtitle`, and `actionbar`
+- Optional resource-pack `lang/*.json` files
+
+## Main Features
+
+- Local web UI with English, Korean, and Japanese
+- Light and dark themes
+- Beginner-friendly workflow with scan-first operation
+- Support for multiple providers:
   - `comet`
   - `openai`
   - `gemini`
   - `anthropic`
   - `openrouter`
-- 대상 언어를 자유롭게 변경 가능
-- 말투/스타일 프리셋 지원
-  - `dcinside`
+- Manual model entry
+- Model catalog lookup from the selected provider
+- Prompt style presets:
   - `neutral`
   - `casual`
   - `formal`
-- 추가 스타일 프롬프트 또는 전체 시스템 프롬프트 직접 지정 가능
-- `translate.py`의 기존 설정값 상속 가능
-- `dry-run`으로 실제 수정 없이 후보 텍스트만 스캔 가능
-- 수정 전 원본 백업 가능
-- 월드 번역과 리소스팩 번역을 하나의 도구에서 처리 가능
-- 공급자별 사용 가능한 모델 목록 조회 가능
-- 짧은 스타일 메모를 API로 보강해 추가 스타일 지시로 확장 가능
+  - `dcinside`
+- AI-assisted style prompt expansion from a short note
+- `translate.py` inheritance for API key, base URL, model, and legacy prompt
+- Dry-run scan mode
+- Backup support before writing changes
+- JSON report output after each run
 
-## 폴더 구성
+## Project Files
 
 ```text
 minecraft-world-translator/
+├── LICENSE
 ├── README.md
+├── README.ko.md
+├── README.ja.md
 ├── config.example.toml
+├── llm_backends.py
 ├── mc_world_translator.py
+├── requirements.txt
 ├── run_web_ui.command
 ├── webui_server.py
-└── requirements.txt
 └── webui/
+    ├── app.js
     ├── index.html
-    ├── styles.css
-    └── app.js
+    └── styles.css
 ```
 
-## 설치
+## System Requirements
 
-Python 3.11+ 기준.
+- Python 3.11 or newer
+- Internet access for LLM API calls
+- A valid API key for the provider you want to use
+- Enough disk space for backup files
+
+## Quick Start
+
+If you want the easiest path:
+
+1. Open the web UI.
+2. Fill in your world path and API settings.
+3. Run `Scan Only` first.
+4. If the result looks good, run the real translation.
+
+### Fastest Web UI Start
+
+On macOS, you can double-click:
+
+- [run_web_ui.command](./run_web_ui.command)
+
+That launcher will:
+
+- create `.venv` if missing
+- install dependencies if needed
+- start the local web server
+- open your browser automatically
+
+## Installation
+
+### Windows
+
+1. Install Python 3.11 or newer from [python.org](https://www.python.org/downloads/windows/).
+2. Open PowerShell in the project folder.
+3. Run:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks activation, you can temporarily allow local scripts:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+### macOS
+
+1. Make sure `python3` is available.
+2. Open Terminal in the project folder.
+3. Run:
 
 ```bash
 python3 -m venv .venv
@@ -61,159 +128,195 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
 
-`nbt` 계열 라이브러리가 필요하다. `requirements.txt`에 포함돼 있다.
+Or use:
 
-## 가장 빠른 사용법
+- [run_web_ui.command](./run_web_ui.command)
 
-현재 이 작업 폴더 기준으로는 예제 설정 파일을 그대로 시작점으로 써도 된다.
+If macOS blocks the launcher, right-click it and choose `Open` once.
+
+### Linux
+
+1. Make sure Python 3.11+ is installed.
+2. Open a terminal in the project folder.
+3. Run:
 
 ```bash
-python3 mc_world_translator.py --config config.example.toml --dry-run
-python3 mc_world_translator.py --config config.example.toml
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
 ```
 
-첫 번째 명령은 실제 수정 없이 후보 텍스트만 스캔한다.  
-두 번째 명령은 실제 번역을 수행하고 월드 파일을 수정한다.
+On some distributions you may need:
 
-## 웹 UI 사용법
+```bash
+sudo apt install python3-venv
+```
 
-브라우저에서 설정하고 실행하고 싶다면 웹 UI를 쓸 수 있다.
+## Running the Web UI
 
-### 원터치 실행
-
-macOS에서는 [run_web_ui.command](./run_web_ui.command) 파일을 더블클릭하면 된다.
-
-이 런처가 자동으로 처리하는 것:
-
-- `.venv` 가상환경 생성
-- `requirements.txt` 의존성 설치
-- 웹 UI 서버 실행
-- 기본 브라우저 열기
-
-처음 실행할 때는 의존성 설치 때문에 조금 걸릴 수 있다.
+Start the local UI server:
 
 ```bash
 python3 webui_server.py
 ```
 
-기본 접속 주소:
+Open:
 
 - `http://127.0.0.1:8765`
 
-자동으로 브라우저를 열고 싶다면:
+Open the browser automatically:
 
 ```bash
 python3 webui_server.py --open-browser
 ```
 
-호스트/포트를 바꾸고 싶다면:
+Change host and port:
 
 ```bash
 python3 webui_server.py --host 0.0.0.0 --port 9000
 ```
 
-웹 UI에서 지원하는 것:
+### What the Web UI Shows
 
-- Comet / OpenAI / Gemini / Anthropic / OpenRouter 전환
-- 영어 / 한국어 / 일본어 인터페이스
-- 라이트 / 다크 테마 전환
-- 월드 경로, API, 모델, 프롬프트, 스타일 프리셋 설정
-- 모델 목록 불러오기
-- 짧은 스타일 메모를 `AI로 디테일 보강`
-- 스캔 범위 on/off
-- 리소스팩 zip 번역 설정
-- 실시간 진행률, 현재 파일, 현재 동작, 마지막 갱신 시각, 작업 로그, 결과 JSON 확인
-- 현재 폼 설정 JSON 내보내기
+- provider selection
+- base URL and model settings
+- model lookup button
+- short style note + AI expansion
+- grouped translation scope controls
+- resource-pack settings
+- live progress
+- current file
+- current activity
+- translated batch count
+- result JSON
+- support contact email
 
-주의:
+## Running the CLI
 
-- 웹 UI는 `로컬 서버`다. 외부에 배포하는 용도가 아니라, 현재 PC에서 번역기를 편하게 조작하기 위한 화면이다.
-- API 키는 브라우저 저장소에 남기지 않는다. 새로고침 후 필요하면 다시 입력하면 된다.
-- 실제 번역 전에는 웹 UI에서도 `스캔만 실행`을 먼저 돌리는 걸 권장한다.
-- 더블클릭 런처를 실행했는데 macOS가 막으면, 파일 우클릭 후 `열기`로 한 번 허용하면 된다.
+### Dry Run
 
-## 설정 파일 설명
+```bash
+python3 mc_world_translator.py --config config.example.toml --dry-run
+```
 
-예제 파일: [config.example.toml](./config.example.toml)
+### Real Translation
 
-주요 항목은 다음과 같다.
+```bash
+python3 mc_world_translator.py --config config.example.toml
+```
 
-### 기본
+### Override Provider and Model
+
+```bash
+python3 mc_world_translator.py \
+  --config config.example.toml \
+  --provider openrouter \
+  --model openai/gpt-4.1
+```
+
+### List Available Models
+
+```bash
+python3 mc_world_translator.py --config config.example.toml --list-models
+```
+
+Examples with direct provider selection:
+
+```bash
+python3 mc_world_translator.py --provider openai --api-key "$OPENAI_API_KEY" --list-models
+python3 mc_world_translator.py --provider gemini --api-key "$GEMINI_API_KEY" --list-models
+python3 mc_world_translator.py --provider anthropic --api-key "$ANTHROPIC_API_KEY" --list-models
+python3 mc_world_translator.py --provider openrouter --api-key "$OPENROUTER_API_KEY" --list-models
+```
+
+### Expand a Short Style Note
+
+```bash
+python3 mc_world_translator.py \
+  --config config.example.toml \
+  --enhance-style-brief "medieval horror tone, transliterate names, keep puzzle hints explicit"
+```
+
+## Configuration
+
+Example file:
+
+- [config.example.toml](./config.example.toml)
+
+### Top-Level Settings
 
 - `world_dir`
-  - 번역할 월드 폴더 경로
+  - Path to the target Minecraft world
 - `report_path`
-  - 작업 결과 JSON 리포트 경로
+  - Output path for the JSON report
 - `dry_run`
-  - `true`면 실제 수정 없이 스캔만 수행
+  - Scan only, do not write files
 - `backup`
-  - `true`면 수정 전 백업 생성
+  - Create backup files before writing
 - `backup_suffix`
-  - 백업 파일 suffix
+  - Suffix used for backup copies
 - `batch_size`
-  - 한 번에 번역 API에 보낼 텍스트 수
+  - Number of strings per API request batch
 - `temperature`
-  - 번역 샘플링 값
-
-### `translate.py` 상속
-
+  - Sampling temperature
 - `inherit_translate_py`
-  - `true`면 `translate.py`에서 `API_KEY`, `BASE_URL`, `MODEL`, `SYSTEM_PROMPT`를 읽어 기본값으로 사용
+  - Reuse values from `translate.py`
 - `translate_py_path`
-  - 상속할 `translate.py` 경로
+  - Path to the legacy config file
 
-이 방식은 기존에 쓰던 번역 설정을 그대로 재사용하고 싶을 때 유용하다.
-
-### API
+### API Section
 
 ```toml
 [api]
 provider = "comet"
 api_key = ""
-base_url = ""
+base_url = "https://api.cometapi.com/v1"
 model = ""
 request_timeout = 120
 ```
 
-- 비워두면 다음 순서로 채운다.
-  1. 설정 파일 값
-  2. 공급자별 환경변수
-     - `COMET_API_KEY`
-     - `OPENAI_API_KEY`
-     - `GEMINI_API_KEY`
-     - `ANTHROPIC_API_KEY`
-     - `OPENROUTER_API_KEY`
-  3. `translate.py` 상속값
+#### Provider Values
 
-- `provider`
-  - 공급자 종류
-- `base_url`
-  - 공급자 기본 URL을 그대로 써도 되고, 프록시/호환 엔드포인트가 있으면 바꿀 수 있다
-- `model`
-  - 사용 모델은 자유롭게 직접 입력 가능
-- `request_timeout`
-  - 모델 응답 대기 시간(초)
+- `comet`
+- `openai`
+- `gemini`
+- `anthropic`
+- `openrouter`
 
-### 프롬프트 / 스타일
+#### API Key Resolution Order
+
+1. config value
+2. provider-specific environment variable
+3. inherited value from `translate.py`
+
+Supported environment variables:
+
+- `COMET_API_KEY`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `OPENROUTER_API_KEY`
+
+### Prompt Section
 
 ```toml
 [prompt]
 target_language = "한국어"
-style_preset = "dcinside"
+style_preset = "neutral"
 style_prompt = ""
 custom_system_prompt = ""
 ```
 
 - `target_language`
-  - 예: `한국어`, `일본어`, `English`, `繁體中文`
+  - Human-readable target language label
 - `style_preset`
-  - 기본 스타일 프리셋
+  - Base translation style
 - `style_prompt`
-  - 프리셋 뒤에 추가 지시를 덧붙임
+  - Additional instructions appended after the preset
 - `custom_system_prompt`
-  - 이 값을 넣으면 프리셋을 무시하고 완전한 시스템 프롬프트로 사용
+  - Full override for the system prompt
 
-### 스캔 범위
+### Scan Section
 
 ```toml
 [scan]
@@ -226,23 +329,12 @@ translate_titles = true
 translate_filtered_titles = true
 translate_command_output = true
 skip_command_like_text = true
-component_translate_key_prefixes = ["brennenburg."]
+component_translate_key_prefixes = []
 ```
 
-- 켜고 끄면서 어떤 텍스트를 번역할지 조절할 수 있다.
-- `skip_command_like_text = true`면 `/kill @p` 같은 실제 명령어는 번역하지 않는다.
-- `component_translate_key_prefixes`는 `{"translate":"brennenburg.some_key"}` 같은 키를 텍스트로 바꿔 번역해야 할 때 사용한다.
+Use this section to choose exactly what gets translated.
 
-### 강제 치환
-
-```toml
-[scan.overrides]
-prison1 = "감옥1"
-```
-
-모델이 자꾸 그대로 두는 문자열이나, 프로젝트 고유 용어를 강제로 맞추고 싶을 때 쓴다.
-
-### 리소스팩 번역
+### Resource Pack Section
 
 ```toml
 [resource_pack]
@@ -253,119 +345,92 @@ target_lang_file = "ko_kr.json"
 skip_if_target_exists = false
 ```
 
-- `enabled = true`면 지정한 zip 내부 `lang` 파일도 같이 번역한다.
-- 상대 경로는 `world_dir` 기준으로 처리된다.
+Use this only if you also want to translate language files in a resource pack archive.
 
-## CLI 인자
+## Beginner Workflow Recommendation
 
-```bash
-python3 mc_world_translator.py --help
+If you are not comfortable with Minecraft world internals:
+
+1. Start the web UI.
+2. Set your provider, API key, and model.
+3. Set the world path.
+4. Keep the style preset on `neutral` unless you want a stronger tone.
+5. Run `Scan Only`.
+6. Review the result and the progress panel.
+7. Keep backups enabled.
+8. Run the real translation only after the scan looks correct.
+
+## Technical Notes
+
+- World translation works by scanning NBT data inside `.mca` region files.
+- The tool rewrites only recognized user-facing text fields.
+- Command-like strings such as `/kill @p` can be skipped intentionally.
+- Resource-pack translation works on `lang/*.json` files inside zip archives.
+- Provider-specific request formats are handled in [llm_backends.py](./llm_backends.py).
+- The web UI is a local server, not a hosted cloud app.
+
+## Safety Notes
+
+- Always keep backups enabled for your first real run.
+- Test on a copy of the world if the map is important.
+- Run a dry run before doing a real translation.
+- Strong style prompts can damage item names, puzzle clues, or tone consistency.
+
+## Troubleshooting
+
+### `API key is missing`
+
+Set the correct key in:
+
+- the web UI
+- `config.example.toml`
+- your environment variable
+- or `translate.py`
+
+### `Model is missing`
+
+Enter a model manually or use `--list-models`.
+
+### Web UI does not open
+
+- Make sure the server is running
+- open `http://127.0.0.1:8765`
+- check whether another app is already using the port
+
+### Translation looks too aggressive
+
+Try:
+
+- `neutral`
+- `formal`
+- a smaller custom style prompt
+
+### Windows script activation issues
+
+Use PowerShell with:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-주요 인자:
+## Support
 
-- `--config`
-- `--world-dir`
-- `--report-path`
-- `--provider`
-- `--api-key`
-- `--base-url`
-- `--model`
-- `--target-language`
-- `--style-preset`
-- `--style-prompt`
-- `--custom-system-prompt`
-- `--batch-size`
-- `--temperature`
-- `--dry-run`
-- `--no-backup`
-- `--resource-pack-zip`
-- `--list-models`
-- `--enhance-style-brief`
+For questions, bug reports, or setup help:
 
-## 모델 목록 조회
+- `mini0227kim@gmail.com`
 
-공급자에서 현재 사용 가능한 모델을 가져오고 싶으면 아래처럼 쓸 수 있다.
+Please include:
 
-```bash
-python3 mc_world_translator.py --config config.example.toml --list-models
-```
+- your operating system
+- your provider
+- your model name
+- what command or UI action you used
+- the error message, if you have one
 
-공급자를 직접 바꿔가며 확인할 수도 있다.
+## License
 
-```bash
-python3 mc_world_translator.py --provider openrouter --api-key "$OPENROUTER_API_KEY" --list-models
-python3 mc_world_translator.py --provider gemini --api-key "$GEMINI_API_KEY" --list-models
-python3 mc_world_translator.py --provider anthropic --api-key "$ANTHROPIC_API_KEY" --list-models
-```
+This project is licensed under the MIT License.
 
-## 스타일 메모 보강
+See:
 
-짧게 적은 스타일 메모를 더 구체적인 추가 스타일 지시로 확장하고 싶으면:
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --enhance-style-brief "중세 공포맵 느낌, 고유명사는 음역, 힌트는 명확하게"
-```
-
-## 예시
-
-### 1. 한국어 자연체로 번역
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --style-preset neutral
-```
-
-### 2. 일본어로 번역
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --target-language 日本語 \
-  --style-preset casual
-```
-
-### 3. 리소스팩 zip도 같이 번역
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --enable-resource-pack-translation \
-  --resource-pack-zip ../Trip\ to\ BrennenBurg\ REMAKE/resources.zip
-```
-
-### 4. 완전 커스텀 프롬프트 사용
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --custom-system-prompt "너는 마인크래프트 공포맵 전문 번역가다. 일본어 텍스트를 한국어 존댓말로 옮기고, 퍼즐 힌트는 명확하게 유지해라."
-```
-
-## 출력 파일
-
-- 리포트 JSON
-  - 기본값: `world_dir/translation_report.json`
-- 백업 파일
-  - 기본값: 원본 파일명 + `.bak_translate`
-
-## 주의
-
-- 월드 파일은 바이너리라서 잘못 건드리면 맵이 깨질 수 있다.
-- 실제 적용 전에는 반드시 `--dry-run`을 먼저 돌리는 걸 권장한다.
-- 커스텀 스타일이 너무 과하면 책 제목이나 아이템 이름까지 과하게 망가질 수 있다.
-  - 이런 경우 `style_preset = "neutral"` 또는 `[scan.overrides]`를 같이 쓰는 편이 낫다.
-- 멀티에서 쓰려면 호스트 월드와 리소스팩, 버전, 필요한 모드/옵티파인 조건을 따로 맞춰야 한다.
-
-## Git 저장
-
-이 폴더만 따로 Git 저장소로 관리하는 걸 권장한다.
-
-```bash
-git init
-git add .
-git commit -m "Add reusable Minecraft world translator"
-```
+- [LICENSE](./LICENSE)
