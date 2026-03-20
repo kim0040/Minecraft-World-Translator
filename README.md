@@ -98,6 +98,14 @@ That launcher will:
 
 ## Installation
 
+Before running the tool, you can prepare a local `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+Then fill in only the keys you need. `.env` is ignored by Git.
+
 ### Windows
 
 1. Install Python 3.11 or newer from [python.org](https://www.python.org/downloads/windows/).
@@ -296,6 +304,8 @@ Supported environment variables:
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `OPENROUTER_API_KEY`
+
+You can also store them in a local `.env` file instead of exporting them in the shell.
 
 ### Prompt Section
 

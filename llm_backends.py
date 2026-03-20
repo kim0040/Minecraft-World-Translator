@@ -12,30 +12,40 @@ PROVIDER_SPECS: dict[str, dict[str, str]] = {
         "label": "Comet API",
         "base_url": "https://api.cometapi.com/v1",
         "env_var": "COMET_API_KEY",
+        "base_url_env_var": "COMET_BASE_URL",
+        "model_env_var": "COMET_MODEL",
         "family": "openai_compatible",
     },
     "openai": {
         "label": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "env_var": "OPENAI_API_KEY",
+        "base_url_env_var": "OPENAI_BASE_URL",
+        "model_env_var": "OPENAI_MODEL",
         "family": "openai_compatible",
     },
     "openrouter": {
         "label": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",
         "env_var": "OPENROUTER_API_KEY",
+        "base_url_env_var": "OPENROUTER_BASE_URL",
+        "model_env_var": "OPENROUTER_MODEL",
         "family": "openai_compatible",
     },
     "gemini": {
         "label": "Gemini",
         "base_url": "https://generativelanguage.googleapis.com/v1beta",
         "env_var": "GEMINI_API_KEY",
+        "base_url_env_var": "GEMINI_BASE_URL",
+        "model_env_var": "GEMINI_MODEL",
         "family": "gemini",
     },
     "anthropic": {
         "label": "Anthropic",
         "base_url": "https://api.anthropic.com/v1",
         "env_var": "ANTHROPIC_API_KEY",
+        "base_url_env_var": "ANTHROPIC_BASE_URL",
+        "model_env_var": "ANTHROPIC_MODEL",
         "family": "anthropic",
     },
 }
@@ -106,6 +116,20 @@ def resolve_api_key(provider: str, current: str) -> str:
 
 def default_base_url(provider: str) -> str:
     return provider_spec(provider)["base_url"]
+
+
+def resolve_base_url(provider: str, current: str) -> str:
+    if current:
+        return current
+    spec = provider_spec(provider)
+    return os.getenv(spec["base_url_env_var"], spec["base_url"])
+
+
+def resolve_model(provider: str, current: str) -> str:
+    if current:
+        return current
+    spec = provider_spec(provider)
+    return os.getenv(spec["model_env_var"], "")
 
 
 def normalize_model_name(provider: str, model: str) -> str:

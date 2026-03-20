@@ -1,6 +1,8 @@
 .DS_Store
 __pycache__/
 .venv/
+.env
+.env.local
 *.pyc
 translation_report.json
 *.bak_translate

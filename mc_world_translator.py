@@ -16,6 +16,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from env_utils import load_dotenv_chain
 from llm_backends import (
     LLMProviderClient,
     PROVIDER_SPECS,
@@ -24,6 +25,8 @@ from llm_backends import (
     infer_provider,
     provider_choices,
     resolve_api_key,
+    resolve_base_url,
+    resolve_model,
 )
 
 try:
@@ -235,6 +238,11 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
 
 def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[str, Any]:
     result = deepcopy(config)
+    project_dir = Path(__file__).resolve().parent
+    load_dotenv_chain(
+        project_dir / ".env",
+        project_dir.parent / ".env",
+    )
 
     translate_py_path = Path(result["translate_py_path"])
     if not translate_py_path.is_absolute() and config_path is not None:
@@ -260,8 +268,8 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
         raise SystemExit(f"Unsupported provider: {provider}")
     result["api"]["provider"] = provider
 
-    if not result["api"]["base_url"]:
-        result["api"]["base_url"] = default_base_url(provider)
+    result["api"]["base_url"] = resolve_base_url(provider, result["api"]["base_url"])
+    result["api"]["model"] = resolve_model(provider, result["api"]["model"])
 
     result["api"]["api_key"] = resolve_api_key(provider, result["api"]["api_key"])
 
