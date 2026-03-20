@@ -1,0 +1,71 @@
+# Required
+world_dir = "../Trip to BrennenBurg REMAKE"
+
+# Optional
+report_path = "./translation_report.json"
+dry_run = false
+backup = true
+backup_suffix = ".bak_translate"
+batch_size = 40
+temperature = 0.3
+
+# If true, empty API/model/base_url values fall back to ./translate.py
+inherit_translate_py = true
+translate_py_path = "../translate.py"
+
+[api]
+# If left empty, OPENAI_API_KEY or COMET_API_KEY is also checked.
+api_key = ""
+base_url = ""
+model = ""
+
+[prompt]
+target_language = "한국어"
+style_preset = "dcinside"
+
+# Extra style instructions appended after the preset.
+style_prompt = ""
+
+# If you set this, it overrides the preset entirely.
+custom_system_prompt = ""
+
+[scan]
+region_dirs = [
+  "region",
+  "entities",
+  "DIM-1/region",
+  "DIM-1/entities",
+]
+
+skip_patterns = ["*.bak_translate"]
+
+translate_signs = true
+translate_books = true
+translate_custom_names = true
+translate_item_names = true
+translate_lore = true
+translate_titles = true
+translate_filtered_titles = true
+translate_command_output = true
+
+# If true, strings that look like raw commands such as /kill @p are skipped.
+skip_command_like_text = true
+
+# If a text component uses {"translate":"prefix.some_key"} and the prefix matches,
+# the tool can turn the key into text and translate that as a fallback.
+component_translate_key_prefixes = ["brennenburg."]
+
+[scan.overrides]
+prison1 = "감옥1"
+
+[resource_pack]
+enabled = false
+
+# Relative paths are resolved from world_dir.
+zip_paths = ["./resources.zip"]
+
+source_lang_files = ["en_us.json", "zh_cn.json"]
+target_lang_file = "ko_kr.json"
+
+# If true, existing target language files in the zip are left untouched.
+skip_if_target_exists = false
