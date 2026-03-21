@@ -1,6 +1,6 @@
 # Minecraft World Translator
 
-[English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 简体中文
+[English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 简体中文
 
 Minecraft World Translator 是一款专为 Minecraft 地图设计的桌面级翻译工具。它不仅能扫描并翻译地图维度文件（`.mca`）内的文本，还能翻译位于 `.zip` 压缩包资源包内的语言文件。
 
@@ -51,9 +51,10 @@ Minecraft World Translator 是一款专为 Minecraft 地图设计的桌面级翻
 minecraft-world-translator/
 ├── LICENSE
 ├── README.md
-├── README.ko.md
-├── README.ja.md
-├── README.zh.md
+├── docs/
+│   ├── README.ko.md
+│   ├── README.ja.md
+│   └── README.zh.md
 ├── config.example.toml
 ├── llm_backends.py
 ├── mc_world_translator.py

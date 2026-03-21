@@ -1,6 +1,6 @@
 # Minecraft World Translator
 
-English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md)
+English | [한국어](./docs/README.ko.md) | [日本語](./docs/README.ja.md) | [简体中文](./docs/README.zh.md)
 
 Minecraft World Translator is a desktop-friendly translation tool designed for Minecraft worlds. It scans and translates text within world region files (`.mca`), and it can also translate resource pack language files located inside zip archives.
 
@@ -51,8 +51,10 @@ If you have questions, feedback, or encounter errors, please contact:
 minecraft-world-translator/
 ├── LICENSE
 ├── README.md
-├── README.ko.md
-├── README.ja.md
+├── docs/
+│   ├── README.ko.md
+│   ├── README.ja.md
+│   └── README.zh.md
 ├── config.example.toml
 ├── llm_backends.py
 ├── mc_world_translator.py
