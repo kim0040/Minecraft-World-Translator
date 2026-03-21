@@ -25,7 +25,7 @@ request_timeout = 120
 
 [prompt]
 target_language = "한국어"
-style_preset = "dcinside"
+style_preset = "neutral"
 
 # Extra style instructions appended after the preset.
 style_prompt = ""

@@ -40,7 +40,8 @@ If you have questions or run into errors, contact: `mini0227kim@gmail.com`
   - `neutral`
   - `casual`
   - `formal`
-  - `dcinside`
+  - `polite`
+  - `story`
 - AI-assisted style prompt expansion from a short note
 - `translate.py` inheritance for API key, base URL, model, and legacy prompt
 - Dry-run scan mode

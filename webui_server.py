@@ -136,6 +136,8 @@ def build_payload_config(payload: dict[str, Any]) -> dict[str, Any]:
     config["api"]["base_url"] = ensure_str(api.get("base_url"), default_base_url(provider))
     config["api"]["model"] = ensure_str(api.get("model"))
     config["api"]["request_timeout"] = max(10, ensure_int(api.get("request_timeout"), 120))
+    config["api"]["rpm_limit"] = max(0, ensure_int(api.get("rpm_limit"), 0))
+    config["api"]["tpm_limit"] = max(0, ensure_int(api.get("tpm_limit"), 0))
 
     config["prompt"]["target_language"] = ensure_str(prompt.get("target_language"), "한국어") or "한국어"
     style_preset = ensure_str(prompt.get("style_preset"), "neutral") or "neutral"
@@ -471,7 +473,7 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json(
                 {
                     "providers": provider_meta(),
-                    "style_presets": sorted(STYLE_PRESETS),
+                    "style_presets": list(STYLE_PRESETS.keys()),
                     "example_paths": discover_example_paths(),
                     "defaults": {
                         "batch_size": DEFAULT_CONFIG["batch_size"],
@@ -479,6 +481,8 @@ class AppHandler(BaseHTTPRequestHandler):
                         "backup_suffix": DEFAULT_CONFIG["backup_suffix"],
                         "provider": DEFAULT_CONFIG["api"]["provider"],
                         "request_timeout": DEFAULT_CONFIG["api"]["request_timeout"],
+                        "rpm_limit": 0,
+                        "tpm_limit": 0,
                         "checkpoint_enabled": DEFAULT_CONFIG["runtime"]["checkpoint_enabled"],
                         "continue_on_file_error": DEFAULT_CONFIG["runtime"]["continue_on_file_error"],
                         "max_batch_retries": DEFAULT_CONFIG["runtime"]["max_batch_retries"],

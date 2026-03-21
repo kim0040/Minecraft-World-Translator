@@ -41,18 +41,6 @@ except ImportError as exc:  # pragma: no cover - runtime dependency guard
 
 
 STYLE_PRESETS: dict[str, str] = {
-    "dcinside": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 {target_language}로 번역하되, 디씨인사이드 같은 인터넷 커뮤니티 말투를 적절히 섞어라.
-[스타일 규칙]
-1. 기본적으로 반말을 쓴다.
-2. 너무 과하게 망가뜨리지 말고, 플레이 중 읽기 쉬운 선에서 익살스럽고 거친 느낌을 유지한다.
-3. 게임 진행 정보, 퍼즐 힌트, UI 텍스트는 의미 전달이 최우선이다.
-4. 고유명사, 인명, 제작자 이름, SNS 핸들, 브랜드명은 함부로 번역하지 말고 필요한 경우만 음역한다.
-5. 특수 기호(§, \\n, {0}, %s, %% 등), JSON 구조, 키 이름은 절대 망가뜨리지 마라.
-6. 원문이 이미 {target_language}면 문맥에 맞게 말투만 다듬어라.
-7. 결과물에는 설명, 사족, 인사말 없이 번역 결과만 반환해라.
-""".strip(),
     "neutral": """
 너는 마인크래프트 월드/맵 전문 번역가다.
 사용자가 주는 텍스트를 자연스러운 {target_language}로 번역해라.
@@ -82,6 +70,28 @@ STYLE_PRESETS: dict[str, str] = {
 4. 특수 기호(§, \\n, {0}, %s, %% 등), JSON 구조, 키 이름은 절대 망가뜨리지 마라.
 5. 결과물에는 설명 없이 번역 결과만 반환해라.
 """.strip(),
+    "polite": """
+너는 마인크래프트 월드/맵 전문 번역가다.
+사용자가 주는 텍스트를 친절하고 정중한 존댓말을 사용하는 {target_language}로 번역해라.
+[스타일 규칙]
+1. '~해요', '~습니다' 등의 존댓말을 사용하여 예의 바른 느낌을 준다.
+2. 플레이어에게 다정하게 안내하는 느낌을 살린다.
+3. 고유명사와 특수 기호는 의미를 훼손하지 않아야 한다.
+4. 결과물에는 설명 없이 번역 결과만 반환해라.
+""".strip(),
+    "story": """
+너는 마인크래프트 월드/맵 전문 번역가다.
+사용자가 주는 텍스트를 몰입감 넘치는 소설이나 이야기풍의 {target_language}로 번역해라.
+[스타일 규칙]
+1. 단순 직역을 피하고 상황과 인물의 감정이 느껴지도록 윤문한다.
+2. 판타지나 어드벤처 소설에 나올 법한 수려하고 극적인 문체를 사용한다.
+3. 하지만 시스템 안내 등 핵심 정보가 묻히지 않도록 주의한다.
+4. 결과물에는 설명 없이 번역 결과만 반환해라.
+""".strip(),
+    "custom": """
+너는 마인크래프트 월드/맵 전문 번역가다.
+사용자가 주는 텍스트를 {target_language}로 번역해라. 사용자의 추가 지시에 전적으로 따라라.
+""".strip(),
 }
 
 
@@ -101,10 +111,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "base_url": "",
         "model": "",
         "request_timeout": 120,
+        "rpm_limit": 0,
+        "tpm_limit": 0,
     },
     "prompt": {
         "target_language": "한국어",
-        "style_preset": "dcinside",
+        "style_preset": "neutral",
         "style_prompt": "",
         "custom_system_prompt": "",
     },
@@ -114,6 +126,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "entities",
             "DIM-1/region",
             "DIM-1/entities",
+            "DIM1/region",
+            "DIM1/entities",
         ],
         "skip_patterns": ["*.bak_translate"],
         "translate_signs": True,
@@ -300,7 +314,7 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
             result["api"]["model"] = legacy.get("MODEL", "")
         if not result["prompt"]["custom_system_prompt"] and not result["prompt"]["style_prompt"]:
             legacy_prompt = legacy.get("SYSTEM_PROMPT", "").strip()
-            if legacy_prompt and result["prompt"]["style_preset"] == "dcinside":
+            if legacy_prompt and result["prompt"]["style_preset"] == "custom":
                 result["prompt"]["custom_system_prompt"] = legacy_prompt
 
     provider = infer_provider(result["api"].get("provider"), result["api"].get("base_url", ""))
@@ -364,6 +378,28 @@ class BatchTranslator:
         self.cache: dict[str, str] = dict(initial_cache or {})
         self.overrides: dict[str, str] = dict(config["scan"]["overrides"])
         self.client = LLMProviderClient(config)
+        self.rpm_limit = int(config["api"].get("rpm_limit", 0))
+        self.tpm_limit = int(config["api"].get("tpm_limit", 0))
+        self.last_request_time = 0.0
+
+    def throttle(self, batch_size: int) -> None:
+        if self.rpm_limit <= 0 and self.tpm_limit <= 0:
+            return
+        
+        now = time.time()
+        delay = 0.0
+        if self.rpm_limit > 0:
+            delay = max(delay, 60.0 / self.rpm_limit)
+        
+        if self.tpm_limit > 0:
+            estimated_tokens = batch_size * 50
+            delay = max(delay, (estimated_tokens / self.tpm_limit) * 60.0)
+            
+        elapsed = now - self.last_request_time
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
+        
+        self.last_request_time = time.time()
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
@@ -420,6 +456,7 @@ class BatchTranslator:
         for attempt in range(1, max_retries + 1):
             self.ensure_not_cancelled()
             try:
+                self.throttle(len(texts))
                 self.emit("translation_batch_start", batch_size=len(texts), attempt=attempt, max_attempts=max_retries)
                 parsed = self.client.translate_mapping(
                     payload,
@@ -654,16 +691,10 @@ class WorldTranslator:
     def iter_region_files(self) -> list[Path]:
         world_dir = Path(self.config["world_dir"])
         files: list[Path] = []
-        for rel_dir in self.scan_config["region_dirs"]:
-            abs_dir = world_dir / rel_dir
-            if not abs_dir.is_dir():
+        for path in sorted(world_dir.rglob("*.mca")):
+            if any(fnmatch.fnmatch(path.name, pattern) for pattern in self.skip_patterns):
                 continue
-            for path in sorted(abs_dir.iterdir()):
-                if not path.name.endswith(".mca"):
-                    continue
-                if any(fnmatch.fnmatch(path.name, pattern) for pattern in self.skip_patterns):
-                    continue
-                files.append(path)
+            files.append(path)
         return files
 
     def should_translate_text(self, text: str) -> bool:

@@ -2,13 +2,15 @@ const STORAGE_KEY = "mc-world-translator-ui-v2";
 
 const FALLBACK_META = {
   providers: [
-    { id: "comet", label: "Comet API", default_base_url: "https://api.cometapi.com/v1", env_var: "COMET_API_KEY" },
     { id: "openai", label: "OpenAI", default_base_url: "https://api.openai.com/v1", env_var: "OPENAI_API_KEY" },
     { id: "gemini", label: "Gemini", default_base_url: "https://generativelanguage.googleapis.com/v1beta", env_var: "GEMINI_API_KEY" },
     { id: "anthropic", label: "Anthropic", default_base_url: "https://api.anthropic.com/v1", env_var: "ANTHROPIC_API_KEY" },
     { id: "openrouter", label: "OpenRouter", default_base_url: "https://openrouter.ai/api/v1", env_var: "OPENROUTER_API_KEY" },
+    { id: "comet", label: "Comet API", default_base_url: "https://api.cometapi.com/v1", env_var: "COMET_API_KEY" },
+    { id: "custom_openai", label: "기타 / Custom (OpenAI 호환)", default_base_url: "https://api.openai.com/v1", env_var: "CUSTOM_OPENAI_API_KEY" },
+    { id: "custom_anthropic", label: "기타 / Custom (Anthropic 호환)", default_base_url: "https://api.anthropic.com/v1", env_var: "CUSTOM_ANTHROPIC_API_KEY" },
   ],
-  style_presets: ["neutral", "casual", "formal", "dcinside"],
+  style_presets: ["neutral", "casual", "formal", "polite", "story", "custom"],
   example_paths: { world_dir: "", translate_py_path: "" },
   defaults: {
     provider: "comet",
@@ -31,13 +33,18 @@ const TARGET_LANGUAGE_VALUES = {
 const I18N = {
   ko: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "월드 번역 운영 패널",
+    brandTitle: "마인크래프트 월드 번역기",
     brandCopy:
       "공급자, 모델, 프롬프트, 범위, 리소스팩, 진행 상태를 한 화면에서 정리합니다. 초반에는 안전하게 스캔하고, 확인이 끝나면 그대로 실번역으로 넘기면 됩니다.",
-    heroKicker: "Refined Workflow",
-    heroTitle: "보기 쉬운 구조로\n번역 작업을 끝까지 밀어붙입니다",
+    heroKicker: "Minecraft Localization",
+    heroTitle: "마인크래프트 월드와 모드팩을\n원하는 언어로 완벽하게 번역하세요",
     heroText:
-      "공급자별 API 형식을 맞춰두고, 모델 카탈로그 조회와 스타일 프롬프트 보정까지 붙였습니다. 지금 보이는 화면은 실제 번역기 코어를 제어하는 로컬 컨트롤 룸입니다.",
+      "단순한 텍스트 번역을 넘어 명령어, NBT 데이터, 그리고 리소스팩까지 안전하게 처리합니다. 다양한 AI를 활용해 고유명사와 말투를 유지하며 몰입감 있는 게임 환경을 만들어보세요.",
+    providerCustom: "기타 / Custom",
+    fieldCustomFormat: "API 형식",
+    optCustomOpenAI: "OpenAI 호환",
+    optCustomAnthropic: "Anthropic 호환",
+    helpCustomFormat: "지원하려는 API 공식 규격에 맞춰 선택하세요.",
     heroPanelOneTitle: "공급자 선택",
     heroPanelOneBody: "Comet, OpenAI, Gemini, Anthropic, OpenRouter 중 하나를 고르고 기본 URL과 모델을 바로 다룹니다.",
     heroPanelTwoTitle: "빠른 조정",
@@ -76,12 +83,12 @@ const I18N = {
     helpTargetLanguage: "한국어, 영어, 일본어는 빠르게 선택하고, 필요하면 직접 입력으로 바꿉니다.",
     fieldCustomLanguage: "직접 입력 언어명",
     helpCustomLanguage: "예: 繁體中文, Deutsch, Brazilian Portuguese",
-    fieldStylePreset: "스타일 프리셋",
-    fieldStyleBrief: "짧은 스타일 메모",
-    helpStyleBrief: "예: 중세 공포맵 느낌, 고유명사는 음역, 힌트는 명확하게",
-    assistTitle: "스타일 보정",
+    fieldStylePreset: "문체/말투 지정",
+    fieldStyleBrief: "추가 지시 (문체, 고유명사 등)",
+    helpStyleBrief: "예: 중세 호러풍, 고유명사는 원문 유지, 반말 사용 등",
+    assistTitle: "AI 지시문 보정",
     assistBody: "짧게 적은 메모를 실제 게임 번역용 추가 지시문으로 확장합니다.",
-    actionImproveStyle: "AI로 디테일 보강",
+    actionImproveStyle: "지시문 구체화",
     assistLoading: "스타일 지시를 보정하는 중입니다...",
     assistDone: "스타일 지시를 추가했습니다.",
     assistError: "스타일 보정 실패: {message}",
@@ -94,14 +101,18 @@ const I18N = {
     targetPreset_en: "영어",
     targetPreset_ja: "일본어",
     targetPreset_custom: "직접 입력",
-    stylePreset_neutral: "neutral",
-    stylePreset_casual: "casual",
-    stylePreset_formal: "formal",
-    stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "책, 퍼즐, 시스템 안내에 가장 안전합니다.",
-    stylePresetDesc_casual: "조금 더 부드럽고 친근한 번역에 적합합니다.",
-    stylePresetDesc_formal: "기록물, 메모, 고풍스러운 안내문에 안정적입니다.",
-    stylePresetDesc_dcinside: "거친 커뮤니티 말투가 섞입니다. 분위기 맵에서는 과할 수 있습니다.",
+    stylePreset_neutral: "차분함",
+    stylePreset_casual: "친근함",
+    stylePreset_formal: "격식있음",
+    stylePreset_polite: "정중함",
+    stylePreset_story: "소설풍",
+    stylePreset_custom: "직접 설정",
+    stylePresetDesc_neutral: "표준 문체입니다. 책, 퍼즐, 시스템 안내에 가장 안전합니다.",
+    stylePresetDesc_casual: "대화형 문체입니다. 조금 더 부드럽고 친근한 번역에 적합합니다.",
+    stylePresetDesc_formal: "격식 있는 문체입니다. 기록물, 메모, 고풍스러운 안내문에 어울립니다.",
+    stylePresetDesc_polite: "플레이어에게 정중한 존댓말로 친절하게 안내하는 번역입니다.",
+    stylePresetDesc_story: "몰입감 있는 이야기나 판타지 세계관에 어울리는 수려한 문체를 사용합니다.",
+    stylePresetDesc_custom: "지정된 문체 없이 아래 추가 지시에 작성한 내용만으로 번역 패턴을 제어합니다.",
     scopeKicker: "Step 3",
     scopeTitle: "무엇을 번역할지",
     scopeCopy: "복잡한 체크박스를 줄이고 의미별 그룹으로 묶었습니다. 프리셋 버튼으로 빠르게 시작한 뒤 세부 조정만 하면 됩니다.",
@@ -153,8 +164,10 @@ const I18N = {
     helpBatchRetries: "API 오류가 나면 이 횟수만큼 먼저 재시도합니다.",
     fieldWriteRetries: "파일 쓰기 재시도 횟수",
     helpWriteRetries: "쓰기 실패 시 원자적 저장으로 다시 시도합니다.",
-    fieldRegionDirs: "스캔할 region 디렉터리",
-    helpRegionDirs: "기본값이면 일반 월드, 엔티티, 네더 영역까지 봅니다.",
+    advGroupPerf: "🚀 성능 및 API 튜닝",
+    advGroupRecover: "💾 저장 및 오류 복구",
+    advGroupDebug: "🛠 테스트 모드",
+    advGroupMisc: "기타 설정",
     fieldSkipPatterns: "건너뛸 파일 패턴",
     helpSkipPatterns: "예: *.bak_translate",
     fieldPrefixes: "번역 키 접두사",
@@ -216,6 +229,8 @@ const I18N = {
     runHintResume: "이전 중단 작업을 이어갈 수 있습니다. `이전 진행 재개`를 누르면 저장된 체크포인트부터 다시 시작합니다.",
     runHintCancelled: "작업이 중지된 상태입니다. 설정을 유지한 채 `이전 진행 재개`를 누르면 이어서 진행합니다.",
     runHintFailed: "오류로 멈췄지만 체크포인트가 있으면 이어서 진행할 수 있습니다. 설정을 확인한 뒤 재개를 시도하세요.",
+    estScale: "예상 규모:",
+    estTime: "예상 시간:",
     statPhase: "단계",
     statFiles: "파일 진행",
     statTexts: "번역 배치 텍스트",
@@ -240,6 +255,11 @@ const I18N = {
     themeDark: "라이트 테마로 전환",
     exportFilename: "translator-config.json",
     localLoadError: "메타데이터를 못 불러와서 내장 기본값으로 시작했습니다.",
+    geminiWarning: "무료 티어 Gemini API는 15 RPM 제한이 있습니다. 에러 방지를 위해 RPM 제한을 15, TPM 제한을 100만 이하로 설정하는 것을 권장합니다.",
+    fieldRpmLimit: "RPM 제한",
+    helpRpmLimit: "분당 최대 요청 수 (비워두면 무제한)",
+    fieldTpmLimit: "TPM 제한",
+    helpTpmLimit: "분당 최대 처리 토큰 수 (비워두면 무제한)",
     localScanStarted: "스캔 작업을 서버에 요청했습니다.",
     localTranslateStarted: "실번역 작업을 서버에 요청했습니다.",
     localResumeStarted: "체크포인트 재개 작업을 서버에 요청했습니다.",
@@ -274,13 +294,18 @@ const I18N = {
   },
   en: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "World Translation Operations Panel",
+    brandTitle: "Minecraft World Translator",
     brandCopy:
       "Manage provider, model, prompt, scan scope, resource-pack options, and live execution state in one place. Start with a scan, review it, then move straight into a full translation run.",
-    heroKicker: "Refined Workflow",
-    heroTitle: "Push translation work\nthrough a cleaner control surface",
+    heroKicker: "Minecraft Localization",
+    heroTitle: "Flawlessly localize your Minecraft worlds and modpacks",
     heroText:
-      "Provider-specific API formats are wired in, model catalog loading is built in, and short style notes can be expanded into usable prompt instructions. This page is a local control room for the actual translator core.",
+      "Go beyond simple text translation. Safely process commands, NBT data, and resource packs while retaining their format. Use diverse AI models to preserve proper nouns and tone, creating immersive localized gameplay.",
+    providerCustom: "Other / Custom",
+    fieldCustomFormat: "API Format",
+    optCustomOpenAI: "OpenAI Compatible",
+    optCustomAnthropic: "Anthropic Compatible",
+    helpCustomFormat: "Select the API format the provider uses.",
     heroPanelOneTitle: "Pick a provider",
     heroPanelOneBody: "Switch between Comet, OpenAI, Gemini, Anthropic, and OpenRouter without manually rewriting the transport layer.",
     heroPanelTwoTitle: "Tune faster",
@@ -319,12 +344,12 @@ const I18N = {
     helpTargetLanguage: "Pick Korean, English, or Japanese quickly, then switch to custom if needed.",
     fieldCustomLanguage: "Custom language label",
     helpCustomLanguage: "Examples: 繁體中文, Deutsch, Brazilian Portuguese",
-    fieldStylePreset: "Style preset",
-    fieldStyleBrief: "Short style note",
-    helpStyleBrief: "Example: medieval horror tone, transliterate names, keep hints explicit",
-    assistTitle: "Style booster",
-    assistBody: "Expand a short note into more actionable prompt instructions.",
-    actionImproveStyle: "Expand with AI",
+    fieldStylePreset: "Tone Setting",
+    fieldStyleBrief: "Style Notes (Tone, Names)",
+    helpStyleBrief: "Example: medieval horror tone, transliterate names, use informal speech",
+    assistTitle: "AI Prompt Booster",
+    assistBody: "Expand short notes into actionable translation instructions.",
+    actionImproveStyle: "Elaborate Instructions",
     assistLoading: "Improving the style instructions...",
     assistDone: "Added the expanded style instructions.",
     assistError: "Style improvement failed: {message}",
@@ -337,14 +362,18 @@ const I18N = {
     targetPreset_en: "English",
     targetPreset_ja: "Japanese",
     targetPreset_custom: "Custom",
-    stylePreset_neutral: "neutral",
-    stylePreset_casual: "casual",
-    stylePreset_formal: "formal",
-    stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "Safest for books, puzzles, and system guidance.",
-    stylePresetDesc_casual: "Better for softer, more conversational output.",
-    stylePresetDesc_formal: "Stable for records, notes, and old-fashioned exposition.",
-    stylePresetDesc_dcinside: "Uses rough community slang. It can overpower atmospheric maps.",
+    stylePreset_neutral: "Neutral",
+    stylePreset_casual: "Casual",
+    stylePreset_formal: "Formal",
+    stylePreset_polite: "Polite",
+    stylePreset_story: "Story-driven",
+    stylePreset_custom: "Custom",
+    stylePresetDesc_neutral: "Standard tone. Safest for books, puzzles, and system guidance.",
+    stylePresetDesc_casual: "Conversational tone. Better for softer dialogue.",
+    stylePresetDesc_formal: "Formal tone. Stable for records, notes, and old-fashioned exposition.",
+    stylePresetDesc_polite: "Uses polite and courteous language to gently guide the player.",
+    stylePresetDesc_story: "Uses immersive and dramatic language suitable for fantasy or adventure maps.",
+    stylePresetDesc_custom: "Translates exactly as instructed in the extra style instructions below without predefined tone.",
     scopeKicker: "Step 3",
     scopeTitle: "What should be translated",
     scopeCopy: "The scope controls are grouped by meaning instead of being thrown into one flat block. Start from a preset and adjust only what you need.",
@@ -396,8 +425,10 @@ const I18N = {
     helpBatchRetries: "Retry API failures this many times before splitting batches smaller.",
     fieldWriteRetries: "File write retry count",
     helpWriteRetries: "Retry atomic file writes if the first write fails.",
-    fieldRegionDirs: "Region directories to scan",
-    helpRegionDirs: "The default set covers common world, entity, and Nether region folders.",
+    advGroupPerf: "🚀 Performance & Tuning",
+    advGroupRecover: "💾 Stability & Recovery",
+    advGroupDebug: "🛠 Test Mode",
+    advGroupMisc: "Misc Settings",
     fieldSkipPatterns: "Skip patterns",
     helpSkipPatterns: "Example: *.bak_translate",
     fieldPrefixes: "Translate key prefixes",
@@ -459,6 +490,8 @@ const I18N = {
     runHintResume: "Previous progress can be resumed. Use `Resume Previous Progress` to continue from the saved checkpoint.",
     runHintCancelled: "The job is stopped. Keep your settings and use `Resume Previous Progress` to continue.",
     runHintFailed: "The job stopped on an error, but you may still be able to continue from a saved checkpoint after fixing the settings.",
+    estScale: "Estimated Scale:",
+    estTime: "Estimated Time:",
     statPhase: "Phase",
     statFiles: "Files",
     statTexts: "Batch text count",
@@ -483,6 +516,11 @@ const I18N = {
     themeDark: "Switch to light theme",
     exportFilename: "translator-config.json",
     localLoadError: "Metadata could not be loaded, so the UI started with built-in defaults.",
+    geminiWarning: "The free tier of Gemini API has a limit of 15 RPM. We strongly recommend setting RPM limit to 15 and TPM limit below 1,000,000.",
+    fieldRpmLimit: "RPM Limit",
+    helpRpmLimit: "Max requests per minute.",
+    fieldTpmLimit: "TPM Limit",
+    helpTpmLimit: "Max generated tokens per minute.",
     localScanStarted: "Submitted a scan job to the server.",
     localTranslateStarted: "Submitted a full translation job to the server.",
     localResumeStarted: "Submitted a resume-from-checkpoint job to the server.",
@@ -517,13 +555,18 @@ const I18N = {
   },
   ja: {
     brandKicker: "Minecraft World Translator",
-    brandTitle: "ワールド翻訳オペレーションパネル",
+    brandTitle: "マインクラフト ワールド翻訳機",
     brandCopy:
       "供給元、モデル、プロンプト、翻訳範囲、リソースパック設定、進行状況を一画面で管理します。まずはスキャンで確認し、そのまま本翻訳へ進めます。",
-    heroKicker: "Refined Workflow",
-    heroTitle: "見やすい構造で\n翻訳作業を最後まで回します",
+    heroKicker: "Minecraft Localization",
+    heroTitle: "マインクラフトのワールドとモッドパックを\nお好みの言語へ完璧に翻訳します",
     heroText:
-      "供給元ごとのAPI形式を合わせ、モデル一覧取得とスタイル指示の補強まで入れました。今の画面は実際の翻訳コアを動かすローカル操作室です。",
+      "単なるテキスト翻訳を超えて、コマンドやNBTデータ、リソースパックまで形式を保ったまま安全に処理します。多様なAIを活用して固有名詞や口調を維持し、没入感のあるゲーム環境を構築しましょう。",
+    providerCustom: "その他 / Custom",
+    fieldCustomFormat: "API フォーマット",
+    optCustomOpenAI: "OpenAI 互換",
+    optCustomAnthropic: "Anthropic 互換",
+    helpCustomFormat: "プロバイダが使用するAPIフォーマットを選択してください。",
     heroPanelOneTitle: "供給元を選ぶ",
     heroPanelOneBody: "Comet、OpenAI、Gemini、Anthropic、OpenRouterを切り替えても通信形式を手で直す必要がありません。",
     heroPanelTwoTitle: "素早く調整",
@@ -562,12 +605,12 @@ const I18N = {
     helpTargetLanguage: "韓国語、英語、日本語はすぐ選べて、必要なら直接入力へ切り替えられます。",
     fieldCustomLanguage: "直接入力の言語名",
     helpCustomLanguage: "例: 繁體中文, Deutsch, Brazilian Portuguese",
-    fieldStylePreset: "スタイルプリセット",
-    fieldStyleBrief: "短いスタイルメモ",
-    helpStyleBrief: "例: 中世ホラーマップ風、固有名詞は音訳、ヒントは明確に",
-    assistTitle: "スタイル補強",
+    fieldStylePreset: "トーン・文体指定",
+    fieldStyleBrief: "追加指示 (文体、固有名詞等)",
+    helpStyleBrief: "例: 中世ホラー風、固有名詞はそのまま、カジュアルな口調",
+    assistTitle: "AI指示補強",
     assistBody: "短いメモを実戦向けの翻訳指示へ拡張します。",
-    actionImproveStyle: "AIで詳細化",
+    actionImproveStyle: "指示を具体化",
     assistLoading: "スタイル指示を補強中です...",
     assistDone: "補強したスタイル指示を追加しました。",
     assistError: "スタイル補強に失敗しました: {message}",
@@ -580,14 +623,18 @@ const I18N = {
     targetPreset_en: "英語",
     targetPreset_ja: "日本語",
     targetPreset_custom: "直接入力",
-    stylePreset_neutral: "neutral",
-    stylePreset_casual: "casual",
-    stylePreset_formal: "formal",
-    stylePreset_dcinside: "dcinside",
-    stylePresetDesc_neutral: "本、パズル、システム案内に最も安全です。",
+    stylePreset_neutral: "標準",
+    stylePreset_casual: "カジュアル",
+    stylePreset_formal: "フォーマル",
+    stylePreset_polite: "丁寧",
+    stylePreset_story: "小説風",
+    stylePreset_custom: "直接設定(カスタム)",
+    stylePresetDesc_neutral: "標準的な文体です。本やパズル、システム案内に最も安全です。",
     stylePresetDesc_casual: "やや柔らかく親しみやすい訳に向きます。",
-    stylePresetDesc_formal: "記録、メモ、古風な説明文に安定しています。",
-    stylePresetDesc_dcinside: "荒いコミュニティ口調が混ざります。雰囲気重視のマップでは強すぎる場合があります。",
+    stylePresetDesc_formal: "記録やメモ、古風な説明文に適した硬い文体です。",
+    stylePresetDesc_polite: "プレイヤーに敬語を使って親切に案内します。",
+    stylePresetDesc_story: "ファンタジーやアドベンチャーマップに適した、没入感のある表現を使います。",
+    stylePresetDesc_custom: "プリセットを使わず、下の追加指示だけで翻訳パターンを制御します。",
     scopeKicker: "Step 3",
     scopeTitle: "何を翻訳するか",
     scopeCopy: "単なるチェックボックスの塊ではなく、意味ごとに整理しました。まずプリセットを選び、必要な部分だけ微調整すれば済みます。",
@@ -639,8 +686,10 @@ const I18N = {
     helpBatchRetries: "API エラー時に小分け前にこの回数だけ再試行します。",
     fieldWriteRetries: "書き込み再試行回数",
     helpWriteRetries: "保存失敗時に原子的書き込みで再試行します。",
-    fieldRegionDirs: "走査する region ディレクトリ",
-    helpRegionDirs: "既定値で通常ワールド、entity、ネザー領域まで対象になります。",
+    advGroupPerf: "🚀 パフォーマンス調整",
+    advGroupRecover: "💾 安定性と回復",
+    advGroupDebug: "🛠 テストモード",
+    advGroupMisc: "その他の設定",
     fieldSkipPatterns: "除外パターン",
     helpSkipPatterns: "例: *.bak_translate",
     fieldPrefixes: "翻訳キー接頭辞",
@@ -702,6 +751,8 @@ const I18N = {
     runHintResume: "前回の進行を再開できます。`前回の進行を再開` を押すと保存済みチェックポイントから続行します。",
     runHintCancelled: "ジョブは停止中です。設定を保ったまま `前回の進行を再開` で続きから進められます。",
     runHintFailed: "エラーで停止しましたが、チェックポイントが残っていれば設定修正後に再開できる場合があります。",
+    estScale: "予想規模:",
+    estTime: "予想時間:",
     statPhase: "段階",
     statFiles: "ファイル進行",
     statTexts: "バッチ文字列数",
@@ -726,6 +777,11 @@ const I18N = {
     themeDark: "ライトテーマへ切替",
     exportFilename: "translator-config.json",
     localLoadError: "メタデータ取得に失敗したため、内蔵既定値で開始しました。",
+    geminiWarning: "無料利用枠のGemini APIは15RPMの制限があります。エラーを防ぐため、RPM制限を15、TPM制限を100万以下に設定することを強くお勧めします。",
+    fieldRpmLimit: "RPM制限",
+    helpRpmLimit: "1分あたりの最大リクエスト数",
+    fieldTpmLimit: "TPM制限",
+    helpTpmLimit: "1分あたりの最大トークン数",
     localScanStarted: "スキャンジョブをサーバーへ送信しました。",
     localTranslateStarted: "本翻訳ジョブをサーバーへ送信しました。",
     localResumeStarted: "チェックポイント再開ジョブをサーバーへ送信しました。",
@@ -806,6 +862,9 @@ function bindDom() {
   Object.assign(dom, {
     themeToggle: document.getElementById("themeToggle"),
     providerPicker: document.getElementById("providerPicker"),
+    geminiWarning: document.getElementById("geminiWarning"),
+    customProviderSettings: document.getElementById("customProviderSettings"),
+    customProviderFormat: document.getElementById("customProviderFormat"),
     worldDir: document.getElementById("worldDir"),
     reportPath: document.getElementById("reportPath"),
     translatePyPath: document.getElementById("translatePyPath"),
@@ -845,6 +904,8 @@ function bindDom() {
     skipIfTargetExists: document.getElementById("skipIfTargetExists"),
     batchSize: document.getElementById("batchSize"),
     temperature: document.getElementById("temperature"),
+    rpmLimit: document.getElementById("rpmLimit"),
+    tpmLimit: document.getElementById("tpmLimit"),
     backupSuffix: document.getElementById("backupSuffix"),
     backup: document.getElementById("backup"),
     dryRun: document.getElementById("dryRun"),
@@ -853,7 +914,6 @@ function bindDom() {
     checkpointPath: document.getElementById("checkpointPath"),
     maxBatchRetries: document.getElementById("maxBatchRetries"),
     maxFileWriteRetries: document.getElementById("maxFileWriteRetries"),
-    regionDirs: document.getElementById("regionDirs"),
     skipPatterns: document.getElementById("skipPatterns"),
     componentPrefixes: document.getElementById("componentPrefixes"),
     overrides: document.getElementById("overrides"),
@@ -864,6 +924,8 @@ function bindDom() {
     exportButton: document.getElementById("exportButton"),
     resetButton: document.getElementById("resetButton"),
     runHint: document.getElementById("runHint"),
+    estScale: document.getElementById("estScale"),
+    estTime: document.getElementById("estTime"),
     statusPill: document.getElementById("statusPill"),
     livePulse: document.getElementById("livePulse"),
     progressNumber: document.getElementById("progressNumber"),
@@ -915,6 +977,12 @@ function bindEvents() {
     persistDraft();
   });
 
+  dom.customProviderFormat.addEventListener("change", (e) => {
+    state.draft.provider = e.target.value;
+    persistDraft();
+    updateBaseUrlHelp();
+  });
+
   dom.loadModelsButton.addEventListener("click", loadModels);
   dom.improveStyleButton.addEventListener("click", improveStylePrompt);
 
@@ -953,6 +1021,8 @@ function bindEvents() {
     dom.skipIfTargetExists,
     dom.batchSize,
     dom.temperature,
+    dom.rpmLimit,
+    dom.tpmLimit,
     dom.backupSuffix,
     dom.backup,
     dom.dryRun,
@@ -961,7 +1031,6 @@ function bindEvents() {
     dom.checkpointPath,
     dom.maxBatchRetries,
     dom.maxFileWriteRetries,
-    dom.regionDirs,
     dom.skipPatterns,
     dom.componentPrefixes,
     dom.overrides,
@@ -1040,6 +1109,8 @@ function buildDefaultDraft() {
     skipIfTargetExists: false,
     batchSize: meta.defaults.batch_size || 40,
     temperature: meta.defaults.temperature || 0.3,
+    rpmLimit: "",
+    tpmLimit: "",
     backupSuffix: meta.defaults.backup_suffix || ".bak_translate",
     backup: true,
     dryRun: false,
@@ -1048,7 +1119,6 @@ function buildDefaultDraft() {
     checkpointPath: "",
     maxBatchRetries: meta.defaults.max_batch_retries ?? 3,
     maxFileWriteRetries: meta.defaults.max_file_write_retries ?? 2,
-    regionDirs: (meta.defaults.region_dirs || []).join("\n"),
     skipPatterns: (meta.defaults.skip_patterns || []).join("\n"),
     componentPrefixes: "",
     overrides: "",
@@ -1106,6 +1176,8 @@ function collectDraft() {
     skipIfTargetExists: dom.skipIfTargetExists.checked,
     batchSize: dom.batchSize.value,
     temperature: dom.temperature.value,
+    rpmLimit: dom.rpmLimit.value,
+    tpmLimit: dom.tpmLimit.value,
     backupSuffix: dom.backupSuffix.value,
     backup: dom.backup.checked,
     dryRun: dom.dryRun.checked,
@@ -1114,7 +1186,6 @@ function collectDraft() {
     checkpointPath: dom.checkpointPath.value,
     maxBatchRetries: dom.maxBatchRetries.value,
     maxFileWriteRetries: dom.maxFileWriteRetries.value,
-    regionDirs: dom.regionDirs.value,
     skipPatterns: dom.skipPatterns.value,
     componentPrefixes: dom.componentPrefixes.value,
     overrides: dom.overrides.value,
@@ -1153,6 +1224,8 @@ function populateForm(draft) {
   dom.skipIfTargetExists.checked = !!state.draft.skipIfTargetExists;
   dom.batchSize.value = state.draft.batchSize || 40;
   dom.temperature.value = state.draft.temperature || 0.3;
+  dom.rpmLimit.value = state.draft.rpmLimit || "";
+  dom.tpmLimit.value = state.draft.tpmLimit || "";
   dom.backupSuffix.value = state.draft.backupSuffix || ".bak_translate";
   dom.backup.checked = !!state.draft.backup;
   dom.dryRun.checked = !!state.draft.dryRun;
@@ -1161,10 +1234,14 @@ function populateForm(draft) {
   dom.checkpointPath.value = state.draft.checkpointPath || "";
   dom.maxBatchRetries.value = state.draft.maxBatchRetries || 3;
   dom.maxFileWriteRetries.value = state.draft.maxFileWriteRetries || 2;
-  dom.regionDirs.value = state.draft.regionDirs || "";
   dom.skipPatterns.value = state.draft.skipPatterns || "";
   dom.componentPrefixes.value = state.draft.componentPrefixes || "";
   dom.overrides.value = state.draft.overrides || "";
+  
+  const isCustom = state.draft.provider === "custom_openai" || state.draft.provider === "custom_anthropic";
+  dom.customProviderSettings.classList.toggle("hidden", !isCustom);
+  if (isCustom) dom.customProviderFormat.value = state.draft.provider;
+
   renderStaticUi();
   persistDraft();
 }
@@ -1172,25 +1249,56 @@ function populateForm(draft) {
 function renderProviderPicker() {
   const providers = state.meta.providers || FALLBACK_META.providers;
   const current = state.draft?.provider || buildDefaultDraft().provider;
-  dom.providerPicker.innerHTML = providers
-    .map(
-      (provider) => `
-        <button type="button" class="provider-card ${provider.id === current ? "active" : ""}" data-provider-id="${escapeHtml(provider.id)}">
+  
+  const groupedProviders = [];
+  let customAdded = false;
+  for (const p of providers) {
+    if (p.id === 'custom_openai' || p.id === 'custom_anthropic') {
+      if (!customAdded) {
+        groupedProviders.push({
+          id: 'custom',
+          label: t('providerCustom') || '기타 / Custom',
+          default_base_url: '',
+          env_var: 'CUSTOM_*_API_KEY'
+        });
+        customAdded = true;
+      }
+    } else {
+      groupedProviders.push(p);
+    }
+  }
+
+  const isCustom = current === 'custom_openai' || current === 'custom_anthropic';
+
+  dom.providerPicker.innerHTML = groupedProviders
+    .map((provider) => {
+      const activeClass = (provider.id === current || (provider.id === 'custom' && isCustom)) ? "active" : "";
+      return `
+        <button type="button" class="provider-card ${activeClass}" data-provider-id="${escapeHtml(provider.id)}">
           <strong>${escapeHtml(provider.label)}</strong>
           <span class="provider-url">${escapeHtml(provider.default_base_url)}</span>
           <span class="provider-env">${escapeHtml(provider.env_var)}</span>
         </button>
-      `
-    )
+      `;
+    })
     .join("");
+
+  dom.geminiWarning.classList.toggle("hidden", current !== "gemini");
+  dom.customProviderSettings.classList.toggle("hidden", !isCustom);
 
   dom.providerPicker.querySelectorAll("[data-provider-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const providerId = button.dataset.providerId;
       const prev = state.draft?.provider;
       const previousDefault = providerDefaultUrl(prev);
-      const nextDefault = providerDefaultUrl(providerId);
-      state.draft = { ...collectDraft(), provider: providerId };
+      
+      let nextProviderId = providerId;
+      if (providerId === 'custom') {
+        nextProviderId = dom.customProviderFormat.value || 'custom_openai';
+      }
+      
+      const nextDefault = providerDefaultUrl(nextProviderId);
+      state.draft = { ...collectDraft(), provider: nextProviderId };
       if (!dom.baseUrl.value.trim() || dom.baseUrl.value.trim() === previousDefault) {
         dom.baseUrl.value = nextDefault;
       }
@@ -1310,6 +1418,8 @@ function buildPayload(forceDryRun, resumeFromCheckpoint = false) {
       base_url: draft.baseUrl.trim(),
       model: draft.model.trim(),
       request_timeout: Number(draft.requestTimeout) || 120,
+      rpm_limit: Number(draft.rpmLimit) || 0,
+      tpm_limit: Number(draft.tpmLimit) || 0,
     },
     prompt: {
       target_language: targetLanguage || "한국어",
@@ -1318,7 +1428,6 @@ function buildPayload(forceDryRun, resumeFromCheckpoint = false) {
       custom_system_prompt: draft.customSystemPrompt,
     },
     scan: {
-      region_dirs: splitLines(draft.regionDirs),
       skip_patterns: splitLines(draft.skipPatterns),
       translate_signs: draft.translateSigns,
       translate_books: draft.translateBooks,
@@ -1687,6 +1796,26 @@ function renderMonitor() {
     ...state.localEvents,
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   renderTimeline(timelineEvents.slice(0, 60));
+
+  const candidateCount = progress.candidate_file_count || job?.result?.candidate_file_count || 0;
+  if (candidateCount > 0 && status !== 'running' && status !== 'queued') {
+      const estimatedTokens = candidateCount * 150;
+      const tpm = Number(dom.tpmLimit.value) || 0;
+      const rpm = Number(dom.rpmLimit.value) || 0;
+      const batchSize = Number(dom.batchSize.value) || 40;
+      
+      let estSeconds = 0;
+      if (tpm > 0) estSeconds = Math.max(estSeconds, (estimatedTokens / tpm) * 60);
+      if (rpm > 0) estSeconds = Math.max(estSeconds, ((candidateCount / batchSize) / rpm) * 60);
+      
+      const timeStr = estSeconds > 0 ? `~ ${Math.ceil(estSeconds / 60)} min` : "(No rate limit)";
+      
+      dom.estScale.innerHTML = `~${estimatedTokens} tokens (${candidateCount} files)`;
+      dom.estTime.innerHTML = timeStr;
+  } else {
+      dom.estScale.innerHTML = `-`;
+      dom.estTime.innerHTML = `-`;
+  }
 }
 
 function renderTimeline(events) {

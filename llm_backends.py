@@ -8,28 +8,12 @@ from urllib import error, parse, request
 
 
 PROVIDER_SPECS: dict[str, dict[str, str]] = {
-    "comet": {
-        "label": "Comet API",
-        "base_url": "https://api.cometapi.com/v1",
-        "env_var": "COMET_API_KEY",
-        "base_url_env_var": "COMET_BASE_URL",
-        "model_env_var": "COMET_MODEL",
-        "family": "openai_compatible",
-    },
     "openai": {
         "label": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "env_var": "OPENAI_API_KEY",
         "base_url_env_var": "OPENAI_BASE_URL",
         "model_env_var": "OPENAI_MODEL",
-        "family": "openai_compatible",
-    },
-    "openrouter": {
-        "label": "OpenRouter",
-        "base_url": "https://openrouter.ai/api/v1",
-        "env_var": "OPENROUTER_API_KEY",
-        "base_url_env_var": "OPENROUTER_BASE_URL",
-        "model_env_var": "OPENROUTER_MODEL",
         "family": "openai_compatible",
     },
     "gemini": {
@@ -46,6 +30,38 @@ PROVIDER_SPECS: dict[str, dict[str, str]] = {
         "env_var": "ANTHROPIC_API_KEY",
         "base_url_env_var": "ANTHROPIC_BASE_URL",
         "model_env_var": "ANTHROPIC_MODEL",
+        "family": "anthropic",
+    },
+    "openrouter": {
+        "label": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_var": "OPENROUTER_API_KEY",
+        "base_url_env_var": "OPENROUTER_BASE_URL",
+        "model_env_var": "OPENROUTER_MODEL",
+        "family": "openai_compatible",
+    },
+    "comet": {
+        "label": "Comet API",
+        "base_url": "https://api.cometapi.com/v1",
+        "env_var": "COMET_API_KEY",
+        "base_url_env_var": "COMET_BASE_URL",
+        "model_env_var": "COMET_MODEL",
+        "family": "openai_compatible",
+    },
+    "custom_openai": {
+        "label": "기타 / Custom (OpenAI 호환)",
+        "base_url": "",
+        "env_var": "CUSTOM_OPENAI_API_KEY",
+        "base_url_env_var": "CUSTOM_OPENAI_BASE_URL",
+        "model_env_var": "CUSTOM_OPENAI_MODEL",
+        "family": "openai_compatible",
+    },
+    "custom_anthropic": {
+        "label": "기타 / Custom (Anthropic 호환)",
+        "base_url": "",
+        "env_var": "CUSTOM_ANTHROPIC_API_KEY",
+        "base_url_env_var": "CUSTOM_ANTHROPIC_BASE_URL",
+        "model_env_var": "CUSTOM_ANTHROPIC_MODEL",
         "family": "anthropic",
     },
 }

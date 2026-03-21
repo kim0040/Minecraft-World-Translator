@@ -68,6 +68,18 @@
             </div>
 
             <div class="provider-picker" id="providerPicker"></div>
+            <div id="geminiWarning" class="field-help hidden" style="color:var(--orange); font-weight:700; margin-bottom:18px;" data-i18n="geminiWarning"></div>
+
+            <div id="customProviderSettings" class="field-grid one hidden" style="margin-bottom:18px;">
+              <label class="field">
+                <span class="field-label" data-i18n="fieldCustomFormat"></span>
+                <select id="customProviderFormat">
+                  <option value="custom_openai" data-i18n="optCustomOpenAI"></option>
+                  <option value="custom_anthropic" data-i18n="optCustomAnthropic"></option>
+                </select>
+                <span class="field-help" data-i18n="helpCustomFormat"></span>
+              </label>
+            </div>
 
             <div class="field-grid two">
               <label class="field">
@@ -274,7 +286,8 @@
               </div>
             </summary>
 
-            <div class="field-grid three">
+            <h3 class="section-subhead" data-i18n="advGroupPerf"></h3>
+            <div class="field-grid four">
               <label class="field">
                 <span class="field-label" data-i18n="fieldBatchSize"></span>
                 <input id="batchSize" type="number" min="1" />
@@ -286,29 +299,32 @@
                 <span class="field-help" data-i18n="helpTemperature"></span>
               </label>
               <label class="field">
-                <span class="field-label" data-i18n="fieldBackupSuffix"></span>
-                <input id="backupSuffix" type="text" />
-                <span class="field-help" data-i18n="helpBackupSuffix"></span>
+                <span class="field-label" data-i18n="fieldRpmLimit"></span>
+                <input id="rpmLimit" type="number" min="1" placeholder="-" />
+                <span class="field-help" data-i18n="helpRpmLimit"></span>
+              </label>
+              <label class="field">
+                <span class="field-label" data-i18n="fieldTpmLimit"></span>
+                <input id="tpmLimit" type="number" min="1" placeholder="-" />
+                <span class="field-help" data-i18n="helpTpmLimit"></span>
               </label>
             </div>
-
+            
             <div class="field-grid two">
-              <label class="field checkbox-field">
-                <span class="field-label" data-i18n="fieldBackup"></span>
-                <span class="toggle-line">
-                  <input id="backup" type="checkbox" checked />
-                  <span data-i18n="helpBackup"></span>
-                </span>
+              <label class="field">
+                <span class="field-label" data-i18n="fieldBatchRetries"></span>
+                <input id="maxBatchRetries" type="number" min="1" />
+                <span class="field-help" data-i18n="helpBatchRetries"></span>
               </label>
-              <label class="field checkbox-field">
-                <span class="field-label" data-i18n="fieldDryRun"></span>
-                <span class="toggle-line">
-                  <input id="dryRun" type="checkbox" />
-                  <span data-i18n="helpDryRun"></span>
-                </span>
+              <label class="field">
+                <span class="field-label" data-i18n="fieldWriteRetries"></span>
+                <input id="maxFileWriteRetries" type="number" min="1" />
+                <span class="field-help" data-i18n="helpWriteRetries"></span>
               </label>
             </div>
 
+            <hr class="section-divider" />
+            <h3 class="section-subhead" data-i18n="advGroupRecover"></h3>
             <div class="field-grid three">
               <label class="field checkbox-field">
                 <span class="field-label" data-i18n="fieldCheckpointEnabled"></span>
@@ -330,34 +346,42 @@
                 <span class="field-help" data-i18n="helpCheckpointPath"></span>
               </label>
             </div>
-
+            
             <div class="field-grid two">
-              <label class="field">
-                <span class="field-label" data-i18n="fieldBatchRetries"></span>
-                <input id="maxBatchRetries" type="number" min="1" />
-                <span class="field-help" data-i18n="helpBatchRetries"></span>
+              <label class="field checkbox-field">
+                <span class="field-label" data-i18n="fieldBackup"></span>
+                <span class="toggle-line">
+                  <input id="backup" type="checkbox" checked />
+                  <span data-i18n="helpBackup"></span>
+                </span>
               </label>
               <label class="field">
-                <span class="field-label" data-i18n="fieldWriteRetries"></span>
-                <input id="maxFileWriteRetries" type="number" min="1" />
-                <span class="field-help" data-i18n="helpWriteRetries"></span>
+                <span class="field-label" data-i18n="fieldBackupSuffix"></span>
+                <input id="backupSuffix" type="text" />
+                <span class="field-help" data-i18n="helpBackupSuffix"></span>
               </label>
             </div>
 
-            <div class="field-grid two">
-              <label class="field">
-                <span class="field-label" data-i18n="fieldRegionDirs"></span>
-                <textarea id="regionDirs" rows="4"></textarea>
-                <span class="field-help" data-i18n="helpRegionDirs"></span>
+            <hr class="section-divider" />
+            <h3 class="section-subhead" data-i18n="advGroupDebug"></h3>
+            <div class="field-grid one">
+              <label class="field checkbox-field">
+                <span class="field-label" data-i18n="fieldDryRun"></span>
+                <span class="toggle-line">
+                  <input id="dryRun" type="checkbox" />
+                  <span data-i18n="helpDryRun"></span>
+                </span>
               </label>
+            </div>
+
+            <hr class="section-divider" />
+            <h3 class="section-subhead" data-i18n="advGroupMisc"></h3>
+            <div class="field-grid two">
               <label class="field">
                 <span class="field-label" data-i18n="fieldSkipPatterns"></span>
                 <textarea id="skipPatterns" rows="4"></textarea>
                 <span class="field-help" data-i18n="helpSkipPatterns"></span>
               </label>
-            </div>
-
-            <div class="field-grid two">
               <label class="field">
                 <span class="field-label" data-i18n="fieldPrefixes"></span>
                 <textarea id="componentPrefixes" rows="4"></textarea>
@@ -377,6 +401,11 @@
               <h2 data-i18n="runTitle"></h2>
               <p class="section-copy" data-i18n="runCopy"></p>
               <p class="run-hint" id="runHint"></p>
+              
+              <div class="estimation-box">
+                <span class="stat-label" data-i18n="estScale"></span> <strong id="estScale"></strong>
+                <span class="stat-label" data-i18n="estTime" style="margin-left:14px;"></span> <strong id="estTime"></strong>
+              </div>
             </div>
             <div class="run-actions">
               <button type="button" class="primary-btn" id="scanButton" data-i18n="actionScan"></button>
