@@ -1,6 +1,6 @@
 # Minecraft World Translator
 
-English | [한국어](./README.ko.md) | [日本語](./README.ja.md)
+English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [简体中文](./README.zh.md)
 
 Minecraft World Translator is a desktop-friendly translation tool designed for Minecraft worlds. It scans and translates text within world region files (`.mca`), and it can also translate resource pack language files located inside zip archives.
 
@@ -376,6 +376,13 @@ skip_if_target_exists = false
 
 Enable this section only if you want to translate the language JSON files located inside a resource pack archive.
 
+#### How to use Resource Pack Translation:
+1. Compress your resource pack folder into a `.zip` file if it isn't already one.
+2. Enter the absolute path to this `.zip` archive in the UI.
+3. Define the source language filename the pack currently uses (e.g., `en_us.json`).
+4. Define the target language filename you want to generate (e.g., `ko_kr.json` or `ja_jp.json`).
+5. Run the translation. The app will automatically translate the text and safely inject the new JSON files back into your `.zip` archive under the correct `assets/*/lang/` directories without altering your textures.
+
 ## Beginner Workflow Recommendation
 
 If you are unfamiliar with Minecraft's internal file structures, simply follow this workflow:
@@ -404,6 +411,7 @@ If you are unfamiliar with Minecraft's internal file structures, simply follow t
 - When working with important maps, execute tests on a copy of your world folder.
 - Perform a dry run before applying significant real translations.
 - Unusually aggressive or strict style prompts can inadvertently corrupt item names, conceal puzzle clues, or break tone consistency.
+- **Note on Codebase:** Because this project evolved quickly to Version 1, you may encounter traces of legacy code, unused experimental logic, or leftover test constants in some modules.
 
 ## Troubleshooting
 
