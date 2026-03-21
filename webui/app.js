@@ -253,7 +253,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>지원 버전:</strong> 해당 번역기는 현재 <strong>마인크래프트 자바(Java) 버전만 지원</strong>합니다 (베드락 버전은 추후 개발 고려 중입니다).</li>
 <li style="margin-bottom:0.5rem;"><strong>아직 완벽하지 않습니다:</strong> 지속적으로 업데이트 중이나, 인공지능이 완벽하지 않아 오역이 발생할 수 있습니다.</li>
 </ul>
-<p style="margin:0;">초보자 문의도 괜찮습니다. 사용 중 막히는 부분, 설치 문제, API 오류, UI 이상 동작 등 어떠한 건의라도 아래 메일로 보내주세요.</p>`,
+<p style="margin:0;">사용 중 막히는 부분, 설치 문제, API 오류, UI 이상 동작 등 어떠한 피드백이라도 아래 메일로 보내주세요.</p>`,
     supportLicense: "MIT License",
     emptyResult: "아직 결과가 없습니다.",
     emptyTimeline: "아직 로그가 없습니다.",
@@ -520,7 +520,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>Supported Versions:</strong> This translator currently supports the <strong>Minecraft Java Edition only</strong> (Bedrock Edition support is being considered for future development).</li>
 <li style="margin-bottom:0.5rem;"><strong>Not Perfect Yet:</strong> While continuously improving, the AI does not yield guaranteed flawless results, meaning occasional mistranslations may occur.</li>
 </ul>
-<p style="margin:0;">Beginner questions and feedback are welcome. If you hit setup problems, API errors, or unexpected UI behavior, please send details to the email below.</p>`,
+<p style="margin:0;">If you hit setup problems, API errors, or unexpected UI behavior, please send feedback or details to the email below.</p>`,
     supportLicense: "MIT License",
     emptyResult: "No result yet.",
     emptyTimeline: "No log entries yet.",
@@ -787,7 +787,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>対応バージョン:</strong> 当機能は現在 <strong>Minecraft Java Edition 専用</strong>です（Bedrock版の対応は今後検討予定）。</li>
 <li style="margin-bottom:0.5rem;"><strong>開発途上:</strong> 継続的に改善を行っていますが、翻訳は完璧ではなく誤訳が生じる可能性があります。</li>
 </ul>
-<p style="margin:0;">初心者の方からの質問も大歓迎です！使用中の不明点、インストール時の問題、APIエラーなどがありましたら、以下のメールアドレスまでお問い合わせください。</p>`,
+<p style="margin:0;">使用中の不明点、インストール時の問題、APIエラー、またはご意見などがありましたら、以下のメールアドレスまでお問い合わせください。</p>`,
     supportLicense: "MIT License",
     emptyResult: "まだ結果がありません。",
     emptyTimeline: "まだログがありません。",
