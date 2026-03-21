@@ -247,7 +247,13 @@ const I18N = {
     resultTitle: "결과 JSON",
     supportKicker: "Support",
     supportTitle: "문의와 오류 제보",
-    supportCopy: "초보자 문의도 괜찮습니다. 사용 중 막히는 부분, 설치 문제, API 오류, UI 이상 동작은 아래 메일로 보내주세요.",
+    supportCopy: `
+<ul style="margin:0 0 1rem 1.5rem; padding:0;">
+<li style="margin-bottom:0.5rem;"><strong>비용 주의:</strong> API 과다 사용은 과도한 비용을 발생시킬 수 있습니다. 번역에는 높은 스펙의 모델까지는 필요하지 않습니다. 빠른 진행과 적은 비용을 위해 <strong>비교적 가벼운 기본 모델 사용을 권장</strong>합니다.</li>
+<li style="margin-bottom:0.5rem;"><strong>지원 버전:</strong> 해당 번역기는 현재 <strong>마인크래프트 자바(Java) 버전만 지원</strong>합니다 (베드락 버전은 추후 개발 고려 중입니다).</li>
+<li style="margin-bottom:0.5rem;"><strong>아직 완벽하지 않습니다:</strong> 지속적으로 업데이트 중이나, 인공지능이 완벽하지 않아 오역이 발생할 수 있습니다.</li>
+</ul>
+<p style="margin:0;">초보자 문의도 괜찮습니다. 사용 중 막히는 부분, 설치 문제, API 오류, UI 이상 동작 등 어떠한 건의라도 아래 메일로 보내주세요.</p>`,
     supportLicense: "MIT License",
     emptyResult: "아직 결과가 없습니다.",
     emptyTimeline: "아직 로그가 없습니다.",
@@ -508,7 +514,13 @@ const I18N = {
     resultTitle: "Result JSON",
     supportKicker: "Support",
     supportTitle: "Questions and Error Reports",
-    supportCopy: "Beginner questions are welcome. If you hit setup problems, API errors, or unexpected UI behavior, send details to the email below.",
+    supportCopy: `
+<ul style="margin:0 0 1rem 1.5rem; padding:0;">
+<li style="margin-bottom:0.5rem;"><strong>Cost Warning:</strong> Excessive API usage can result in high costs. Heavy, expensive models are unnecessary for this translation. We recommend using <strong>faster and cheaper base models</strong> for efficiency.</li>
+<li style="margin-bottom:0.5rem;"><strong>Supported Versions:</strong> This translator currently supports the <strong>Minecraft Java Edition only</strong> (Bedrock Edition support is being considered for future development).</li>
+<li style="margin-bottom:0.5rem;"><strong>Not Perfect Yet:</strong> While continuously improving, the AI does not yield guaranteed flawless results, meaning occasional mistranslations may occur.</li>
+</ul>
+<p style="margin:0;">Beginner questions and feedback are welcome. If you hit setup problems, API errors, or unexpected UI behavior, please send details to the email below.</p>`,
     supportLicense: "MIT License",
     emptyResult: "No result yet.",
     emptyTimeline: "No log entries yet.",
@@ -769,7 +781,13 @@ const I18N = {
     resultTitle: "結果 JSON",
     supportKicker: "Support",
     supportTitle: "問い合わせとエラー報告",
-    supportCopy: "初心者の質問でも大丈夫です。セットアップ、API エラー、UI の不具合などは下のメールへ送ってください。",
+    supportCopy: `
+<ul style="margin:0 0 1rem 1.5rem; padding:0;">
+<li style="margin-bottom:0.5rem;"><strong>料金に関する注意:</strong> APIの過剰利用は高額請求を招く恐れがあります。テキスト翻訳に超高性能なモデルは必要ありません。処理が速く低コストな<strong>ベースモデルの使用を推奨</strong>します。</li>
+<li style="margin-bottom:0.5rem;"><strong>対応バージョン:</strong> 当機能は現在 <strong>Minecraft Java Edition 専用</strong>です（Bedrock版の対応は今後検討予定）。</li>
+<li style="margin-bottom:0.5rem;"><strong>開発途上:</strong> 継続的に改善を行っていますが、翻訳は完璧ではなく誤訳が生じる可能性があります。</li>
+</ul>
+<p style="margin:0;">初心者の方からの質問も大歓迎です！使用中の不明点、インストール時の問題、APIエラーなどがありましたら、以下のメールアドレスまでお問い合わせください。</p>`,
     supportLicense: "MIT License",
     emptyResult: "まだ結果がありません。",
     emptyTimeline: "まだログがありません。",
@@ -1064,6 +1082,9 @@ function renderStaticUi() {
   applyTheme();
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((node) => {
+    node.innerHTML = t(node.dataset.i18nHtml);
   });
   renderProviderPicker();
   renderTargetLanguageOptions();
