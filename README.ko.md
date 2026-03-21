@@ -279,7 +279,12 @@ api_key = ""
 base_url = "https://api.cometapi.com/v1"
 model = ""
 request_timeout = 120
+rpm_limit = 0
+tpm_limit = 0
 ```
+
+- `rpm_limit`: 분당 최대 API 호출 횟수(Requests Per Minute)를 제한합니다. 무료 API 사용 시 설정한 횟수를 넘지 않도록 자동으로 요청 간격을 조절합니다. `0`은 시스템의 최대 속도로 진행된다는 의미입니다(제한 없음).
+- `tpm_limit`: 분당 토큰 사용량(Tokens Per Minute)을 제한합니다. 배치(Batch)의 예상 토큰량을 계산하여 한도를 넘지 않도록 보호합니다. `0`은 제한 없음을 의미합니다.
 
 #### 적용 가능한 공급자 (Provider Values)
 

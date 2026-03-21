@@ -1,8 +1,30 @@
 .DS_Store
 __pycache__/
 .venv/
+venv/
 .env
 .env.local
 *.pyc
-translation_report.json
+*.pyo
+*.pyd
+*.so
 *.bak_translate
+translation_report.json
+translator-config.json
+.translation_checkpoint.json
+
+# Editors & IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+.AppleDouble
+.LSOverride

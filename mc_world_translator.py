@@ -602,6 +602,14 @@ class WorldTranslator:
         )
 
     def run(self) -> dict[str, Any]:
+        world_dir = Path(self.config["world_dir"]).resolve()
+        if not world_dir.exists() or not world_dir.is_dir():
+            msg = f"World directory not found or invalid: {world_dir}"
+            self.emit("file_error", file=str(world_dir), message=msg)
+            self.report["status"] = "failed"
+            self.report["error"] = msg
+            return self.report
+
         try:
             if self.config["resource_pack"]["enabled"]:
                 self.ensure_not_cancelled()

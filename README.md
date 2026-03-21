@@ -293,7 +293,12 @@ api_key = ""
 base_url = "https://api.cometapi.com/v1"
 model = ""
 request_timeout = 120
+rpm_limit = 0
+tpm_limit = 0
 ```
+
+- `rpm_limit`: Limits the Requests Per Minute. If the rate limit is reached, the translator will automatically delay the next API call to protect your free-tier limits. Set to `0` for unlimited.
+- `tpm_limit`: Limits the Tokens Per Minute. Protects your quota by dynamically delaying requests based on token estimations. Set to `0` for unlimited.
 
 #### Provider Values
 

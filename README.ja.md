@@ -277,7 +277,12 @@ api_key = ""
 base_url = "https://api.cometapi.com/v1"
 model = ""
 request_timeout = 120
+rpm_limit = 0
+tpm_limit = 0
 ```
+
+- `rpm_limit`: 1分あたりの最大リクエスト回数 (Requests Per Minute) を制限します。無料枠の API 制限に引っかからないようにリクエストを自動で遅延させます。`0` は無制限を意味します。
+- `tpm_limit`: 1分あたりの最大トークン使用量 (Tokens Per Minute) を制限します。予想トークン量をあらかじめ計算し自動待機を行うことで超過アクセスを防ぎます。`0` は無制限を意味します。
 
 #### プロバイダ指定可能な値
 
