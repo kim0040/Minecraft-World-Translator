@@ -28,21 +28,17 @@ If you have questions or run into errors, contact: `mini0227kim@gmail.com`
 - Local web UI with English, Korean, and Japanese
 - Light and dark themes
 - Beginner-friendly workflow with scan-first operation
+- Pre-translation Scale and Time Estimators
 - Support for multiple providers:
   - `comet`
   - `openai`
   - `gemini`
   - `anthropic`
   - `openrouter`
-- Manual model entry
-- Model catalog lookup from the selected provider
-- Prompt style presets:
-  - `neutral`
-  - `casual`
-  - `formal`
-  - `polite`
-  - `story`
-- AI-assisted style prompt expansion from a short note
+  - Custom API endpoints with OpenAI/Anthropic compatibility
+- Manual model entry and model catalog lookup
+- Prompt style presets and AI-assisted expansion
+- Rate Limit settings (RPM/TPM) for free-tier APIs
 - `translate.py` inheritance for API key, base URL, model, and legacy prompt
 - Dry-run scan mode
 - Backup support before writing changes

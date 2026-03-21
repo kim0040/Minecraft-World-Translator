@@ -164,9 +164,9 @@ const I18N = {
     helpBatchRetries: "API 오류가 나면 이 횟수만큼 먼저 재시도합니다.",
     fieldWriteRetries: "파일 쓰기 재시도 횟수",
     helpWriteRetries: "쓰기 실패 시 원자적 저장으로 다시 시도합니다.",
-    advGroupPerf: "🚀 성능 및 API 튜닝",
-    advGroupRecover: "💾 저장 및 오류 복구",
-    advGroupDebug: "🛠 테스트 모드",
+    advGroupPerf: "성능 및 API 튜닝",
+    advGroupRecover: "저장 및 오류 복구",
+    advGroupDebug: "테스트 모드",
     advGroupMisc: "기타 설정",
     fieldSkipPatterns: "건너뛸 파일 패턴",
     helpSkipPatterns: "예: *.bak_translate",
@@ -253,7 +253,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>지원 버전:</strong> 해당 번역기는 현재 <strong>마인크래프트 자바(Java) 버전만 지원</strong>합니다 (베드락 버전은 추후 개발 고려 중입니다).</li>
 <li style="margin-bottom:0.5rem;"><strong>아직 완벽하지 않습니다:</strong> 지속적으로 업데이트 중이나, 인공지능이 완벽하지 않아 오역이 발생할 수 있습니다.</li>
 </ul>
-<p style="margin:0;">사용 중 막히는 부분, 설치 문제, API 오류, UI 이상 동작 등 어떠한 피드백이라도 아래 메일로 보내주세요.</p>`,
+<p style="margin:0;">오류나 버그 제보뿐만 아니라 아이디어나 개선 사항 등 어떠한 피드백이라도 언제든 아래 메일로 보내주시면 환영입니다.</p>`,
     supportLicense: "MIT License",
     emptyResult: "아직 결과가 없습니다.",
     emptyTimeline: "아직 로그가 없습니다.",
@@ -431,9 +431,9 @@ const I18N = {
     helpBatchRetries: "Retry API failures this many times before splitting batches smaller.",
     fieldWriteRetries: "File write retry count",
     helpWriteRetries: "Retry atomic file writes if the first write fails.",
-    advGroupPerf: "🚀 Performance & Tuning",
-    advGroupRecover: "💾 Stability & Recovery",
-    advGroupDebug: "🛠 Test Mode",
+    advGroupPerf: "Performance & Tuning",
+    advGroupRecover: "Stability & Recovery",
+    advGroupDebug: "Test Mode",
     advGroupMisc: "Misc Settings",
     fieldSkipPatterns: "Skip patterns",
     helpSkipPatterns: "Example: *.bak_translate",
@@ -520,7 +520,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>Supported Versions:</strong> This translator currently supports the <strong>Minecraft Java Edition only</strong> (Bedrock Edition support is being considered for future development).</li>
 <li style="margin-bottom:0.5rem;"><strong>Not Perfect Yet:</strong> While continuously improving, the AI does not yield guaranteed flawless results, meaning occasional mistranslations may occur.</li>
 </ul>
-<p style="margin:0;">If you hit setup problems, API errors, or unexpected UI behavior, please send feedback or details to the email below.</p>`,
+<p style="margin:0;">We welcome not only bug reports and setup issues but also ideas and suggestions for improvement. Please send them to the email below.</p>`,
     supportLicense: "MIT License",
     emptyResult: "No result yet.",
     emptyTimeline: "No log entries yet.",
@@ -698,9 +698,9 @@ const I18N = {
     helpBatchRetries: "API エラー時に小分け前にこの回数だけ再試行します。",
     fieldWriteRetries: "書き込み再試行回数",
     helpWriteRetries: "保存失敗時に原子的書き込みで再試行します。",
-    advGroupPerf: "🚀 パフォーマンス調整",
-    advGroupRecover: "💾 安定性と回復",
-    advGroupDebug: "🛠 テストモード",
+    advGroupPerf: "パフォーマンス調整",
+    advGroupRecover: "安定性と回復",
+    advGroupDebug: "テストモード",
     advGroupMisc: "その他の設定",
     fieldSkipPatterns: "除外パターン",
     helpSkipPatterns: "例: *.bak_translate",
@@ -787,7 +787,7 @@ const I18N = {
 <li style="margin-bottom:0.5rem;"><strong>対応バージョン:</strong> 当機能は現在 <strong>Minecraft Java Edition 専用</strong>です（Bedrock版の対応は今後検討予定）。</li>
 <li style="margin-bottom:0.5rem;"><strong>開発途上:</strong> 継続的に改善を行っていますが、翻訳は完璧ではなく誤訳が生じる可能性があります。</li>
 </ul>
-<p style="margin:0;">使用中の不明点、インストール時の問題、APIエラー、またはご意見などがありましたら、以下のメールアドレスまでお問い合わせください。</p>`,
+<p style="margin:0;">エラーやバグの報告だけでなく、アイデアや改善案などのフィードバックも大歓迎です。以下のメールアドレスまでお送りください。</p>`,
     supportLicense: "MIT License",
     emptyResult: "まだ結果がありません。",
     emptyTimeline: "まだログがありません。",
