@@ -32,6 +32,7 @@ const TARGET_LANGUAGE_VALUES = {
 
 const I18N = {
   ko: {
+    skipToContent: "본문으로 건너뛰기",
     brandKicker: "Minecraft World Translator",
     brandTitle: "마인크래프트 월드 번역기",
     brandCopy:
@@ -299,6 +300,7 @@ const I18N = {
     relativeMinutes: "{count}분 전",
   },
   en: {
+    skipToContent: "Skip to main content",
     brandKicker: "Minecraft World Translator",
     brandTitle: "Minecraft World Translator",
     brandCopy:
@@ -566,6 +568,7 @@ const I18N = {
     relativeMinutes: "{count}m ago",
   },
   ja: {
+    skipToContent: "メインコンテンツへスキップ",
     brandKicker: "Minecraft World Translator",
     brandTitle: "マインクラフト ワールド翻訳機",
     brandCopy:

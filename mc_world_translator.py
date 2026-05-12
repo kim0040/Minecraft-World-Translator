@@ -705,25 +705,76 @@ class WorldTranslator:
             files.append(path)
         return files
 
+    _SKIP_NAMESPACE_PREFIXES = (
+        "minecraft:", "forge:", "neoforge:", "fabric:",
+        "mod:", "kubejs:", "ftbquests:", "chipped:",
+        "tconstruct:", "mekanism:", "thermal:", "botania:",
+        "create:", "immersiveengineering:",
+    )
+
+    _NOISE_PATTERNS = re.compile(
+        r"^(?:"
+        r"[0-9]+(?:\.[0-9]+)?%?"       # pure numbers like "42", "3.14", "100%"
+        r"|[\u2000-\u2BFF\u2600-\u27BF\uFE30-\uFE4F\uFFF0-\uFFFF]+"  # symbols
+        r"|\.{2,}"                      # ellipsis-like dots "..."
+        r"|-{2,}"                       # dashes "---"
+        r"|={2,}"                       # equals "=="
+        r"|#{1,3}"                      # hash markers
+        r")$",
+    )
+
     def should_translate_text(self, text: str) -> bool:
         if not isinstance(text, str):
             return False
         stripped = text.strip()
         if not stripped:
             return False
-        if stripped == "@":
+
+        if stripped in ("@", "#", "!", "?", ".", ",", "-", "~", "/"):
             return False
-        if stripped.startswith("minecraft:") or stripped.startswith("forge:"):
+
+        if stripped.startswith(self._SKIP_NAMESPACE_PREFIXES):
             return False
+
         if self.scan_config["skip_command_like_text"] and stripped.startswith("/"):
             return False
+
         if stripped.startswith("@") and " " not in stripped:
             return False
+
         if all(not ch.isalpha() for ch in stripped):
             return False
-        if len(stripped) <= 4 and all(ch in "IVXLCDM " or ch.isalpha() for ch in stripped):
-            if stripped.upper() == stripped and " " in stripped:
+
+        if self._NOISE_PATTERNS.match(stripped):
+            return False
+
+        has_alpha = any(ch.isalpha() for ch in stripped)
+        has_cjk = any(
+            "\uac00" <= ch <= "\ud7a3"   # Hangul
+            or "\u4e00" <= ch <= "\u9fff" # CJK Unified
+            or "\u3040" <= ch <= "\u309f" # Hiragana
+            or "\u30a0" <= ch <= "\u30ff" # Katakana
+            for ch in stripped
+        )
+
+        if not has_alpha and not has_cjk:
+            return False
+
+        if len(stripped) == 1:
+            return has_cjk
+
+        if len(stripped) <= 3 and not has_cjk:
+            if stripped.isupper():
                 return False
+
+        if len(stripped) <= 4 and not has_cjk:
+            all_upper_alpha = all(ch.isupper() or ch in " .-" for ch in stripped)
+            if all_upper_alpha and " " in stripped:
+                return False
+            is_roman = all(ch in "IVXLCDM " for ch in stripped)
+            if is_roman and stripped.strip():
+                return False
+
         return True
 
     @staticmethod
@@ -826,8 +877,13 @@ class WorldTranslator:
 
             hover_event = node.get("hoverEvent")
             if isinstance(hover_event, dict):
-                for hover_key, hover_value in hover_event.items():
-                    self.collect_json_text_refs(hover_value, refs, f"{path}.hoverEvent.{hover_key}")
+                hover_value = hover_event.get("value")
+                if self.scan_config["translate_command_output"] and isinstance(hover_value, str):
+                    self.collect_command_refs(hover_value, refs, f"{path}.hoverEvent.value")
+                for hover_key, hover_item in hover_event.items():
+                    if hover_key == "value":
+                        continue
+                    self.collect_json_text_refs(hover_item, refs, f"{path}.hoverEvent.{hover_key}")
 
             for key, value in node.items():
                 if key in {"text", "clickEvent", "hoverEvent"}:
@@ -971,6 +1027,10 @@ class WorldTranslator:
                 if isinstance(click_event, dict) and isinstance(click_event.get("value"), str):
                     click_event["value"] = self.patch_command_component(click_event["value"], translations)
 
+                hover_event = node.get("hoverEvent")
+                if isinstance(hover_event, dict) and isinstance(hover_event.get("value"), str):
+                    hover_event["value"] = self.patch_command_component(hover_event["value"], translations)
+
             for key, value in list(node.items()):
                 if isinstance(value, (dict, list)):
                     self.patch_json_component(value, translations)
@@ -992,6 +1052,9 @@ class WorldTranslator:
 
     def apply_translations(self, refs: list[TextRef], translations: dict[str, str]) -> int:
         changed = 0
+        handled_json_text_ids: set[int] = set()
+        handled_translate_key_ids: set[int] = set()
+
         for ref in refs:
             if ref.kind == "plain_tag":
                 original = ref.tag.value
@@ -1007,12 +1070,60 @@ class WorldTranslator:
                 if after != before:
                     ref.tag.value = after
                     changed += 1
+                for child_ref in refs:
+                    if child_ref.kind == "json_text" and id(child_ref.obj) in {
+                        id(n) for n in self._iter_json_nodes(component)
+                    }:
+                        handled_json_text_ids.add(id(child_ref))
+                    elif child_ref.kind == "translate_key" and id(child_ref.obj) in {
+                        id(n) for n in self._iter_json_nodes(component)
+                    }:
+                        handled_translate_key_ids.add(id(child_ref))
             elif ref.kind == "command_tag":
                 updated = self.patch_command_component(ref.tag.value, translations)
                 if updated != ref.tag.value:
                     ref.tag.value = updated
                     changed += 1
+                for child_ref in refs:
+                    if child_ref.kind in {"json_text", "translate_key"}:
+                        try:
+                            extracted = self.extract_command_json(ref.tag.value)
+                            if extracted:
+                                cmd_component = json.loads(extracted[1])
+                                for node in self._iter_json_nodes(cmd_component):
+                                    if id(child_ref.obj) == id(node):
+                                        if child_ref.kind == "json_text":
+                                            handled_json_text_ids.add(id(child_ref))
+                                        else:
+                                            handled_translate_key_ids.add(id(child_ref))
+                        except (json.JSONDecodeError, Exception):
+                            pass
+            elif ref.kind == "json_text" and id(ref.obj) not in handled_json_text_ids:
+                original = ref.obj.get(ref.key, "")
+                if isinstance(original, str):
+                    translated = translations.get(original)
+                    if translated and translated != original:
+                        ref.obj[ref.key] = translated
+                        changed += 1
+            elif ref.kind == "translate_key" and id(ref.obj) not in handled_translate_key_ids:
+                translate_val = ref.obj.get(ref.key, {})
+                if isinstance(translate_val, dict) and "translate" in translate_val:
+                    source = self.text_from_translate_key(translate_val["translate"])
+                    translated = translations.get(source)
+                    if translated:
+                        ref.obj[ref.key] = translated
+                        changed += 1
+
         return changed
+
+    def _iter_json_nodes(self, node: Any):
+        if isinstance(node, dict):
+            yield node
+            for value in node.values():
+                yield from self._iter_json_nodes(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from self._iter_json_nodes(item)
 
     def process_region_file(self, path: Path) -> dict[str, Any]:
         self.ensure_not_cancelled()

@@ -49,6 +49,21 @@ html {
   scroll-behavior: smooth;
 }
 
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -505,6 +520,38 @@ select:focus,
 textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.seg-btn:focus-visible,
+.theme-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.primary-btn:focus-visible,
+.secondary-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.model-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.scope-card:focus-within {
+  border-color: var(--accent);
+}
+
+.toggle-chip:focus-within {
+  border-color: var(--accent);
 }
 
 textarea {
@@ -971,5 +1018,57 @@ html[data-theme="dark"] .result-panel {
   .advanced-details summary {
     margin: -18px -18px 18px;
     padding: 18px;
+  }
+
+  .estimation-box {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .live-detail {
+    gap: 10px;
+  }
+
+  .detail-item {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-title {
+    font-size: 2rem;
+  }
+
+  .hero h2 {
+    font-size: 1.5rem;
+  }
+
+  .hero-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .scope-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-grid.four,
+  .field-grid.three,
+  .field-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .run-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    width: 100%;
   }
 }

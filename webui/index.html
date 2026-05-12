@@ -3,16 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Translate Minecraft world texts using AI-powered batch translation" />
     <title>Minecraft World Translator UI</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="ambient ambient-a"></div>
-    <div class="ambient ambient-b"></div>
-    <div class="grid-mask"></div>
+    <a href="#main-content" class="skip-link" data-i18n="skipToContent"></a>
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="ambient ambient-b" aria-hidden="true"></div>
+    <div class="grid-mask" aria-hidden="true"></div>
 
     <div class="page">
-      <header class="topbar">
+      <header class="topbar" role="banner">
         <div class="brand">
           <p class="kicker" data-i18n="brandKicker"></p>
           <h1 class="brand-title" data-i18n="brandTitle"></h1>
@@ -20,42 +22,42 @@
         </div>
 
         <div class="top-controls">
-          <div class="lang-switch" aria-label="language">
-            <button type="button" class="seg-btn" data-lang-switch="ko">KO</button>
-            <button type="button" class="seg-btn" data-lang-switch="en">EN</button>
-            <button type="button" class="seg-btn" data-lang-switch="ja">日本語</button>
+          <div class="lang-switch" role="group" aria-label="Language selection">
+            <button type="button" class="seg-btn" data-lang-switch="ko" aria-pressed="true">KO</button>
+            <button type="button" class="seg-btn" data-lang-switch="en" aria-pressed="false">EN</button>
+            <button type="button" class="seg-btn" data-lang-switch="ja" aria-pressed="false">日本語</button>
           </div>
-          <button type="button" class="theme-btn" id="themeToggle"></button>
+          <button type="button" class="theme-btn" id="themeToggle" aria-label="Toggle theme"></button>
         </div>
       </header>
 
-      <section class="hero card">
+      <section class="hero card" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="kicker" data-i18n="heroKicker"></p>
-          <h2 data-i18n="heroTitle"></h2>
+          <h2 id="hero-title" data-i18n="heroTitle"></h2>
           <p class="hero-text" data-i18n="heroText"></p>
         </div>
 
-        <div class="hero-panels">
-          <article class="mini-panel">
-            <span class="mini-index">01</span>
+        <div class="hero-panels" role="list">
+          <article class="mini-panel" role="listitem">
+            <span class="mini-index" aria-hidden="true">01</span>
             <h3 data-i18n="heroPanelOneTitle"></h3>
             <p data-i18n="heroPanelOneBody"></p>
           </article>
-          <article class="mini-panel">
-            <span class="mini-index">02</span>
+          <article class="mini-panel" role="listitem">
+            <span class="mini-index" aria-hidden="true">02</span>
             <h3 data-i18n="heroPanelTwoTitle"></h3>
             <p data-i18n="heroPanelTwoBody"></p>
           </article>
-          <article class="mini-panel">
-            <span class="mini-index">03</span>
+          <article class="mini-panel" role="listitem">
+            <span class="mini-index" aria-hidden="true">03</span>
             <h3 data-i18n="heroPanelThreeTitle"></h3>
             <p data-i18n="heroPanelThreeBody"></p>
           </article>
         </div>
       </section>
 
-      <main class="workspace">
+      <main id="main-content" class="workspace" role="main">
         <div class="form-column">
           <section class="card section-card">
             <div class="section-head">
@@ -397,129 +399,129 @@
             </div>
           </details>
 
-          <section class="card run-card">
+          <section class="card run-card" aria-labelledby="run-title">
             <div>
               <p class="kicker" data-i18n="runKicker"></p>
-              <h2 data-i18n="runTitle"></h2>
+              <h2 id="run-title" data-i18n="runTitle"></h2>
               <p class="section-copy" data-i18n="runCopy"></p>
-              <p class="run-hint" id="runHint"></p>
+              <p class="run-hint" id="runHint" role="status" aria-live="polite"></p>
               
-              <div class="estimation-box">
-                <span class="stat-label" data-i18n="estScale"></span> <strong id="estScale"></strong>
-                <span class="stat-label" data-i18n="estTime" style="margin-left:14px;"></span> <strong id="estTime"></strong>
+              <div class="estimation-box" role="region" aria-label="Estimated translation scale">
+                <span class="stat-label" data-i18n="estScale"></span> <strong id="estScale" aria-live="polite"></strong>
+                <span class="stat-label" data-i18n="estTime" style="margin-left:14px;"></span> <strong id="estTime" aria-live="polite"></strong>
               </div>
             </div>
-            <div class="run-actions">
-              <button type="button" class="primary-btn" id="scanButton" data-i18n="actionScan"></button>
-              <button type="button" class="primary-btn accent-btn" id="translateButton" data-i18n="actionTranslate"></button>
-              <button type="button" class="secondary-btn" id="resumeButton" data-i18n="actionResume"></button>
-              <button type="button" class="secondary-btn danger-btn" id="cancelButton" data-i18n="actionCancel"></button>
+            <div class="run-actions" role="group" aria-label="Translation actions">
+              <button type="button" class="primary-btn" id="scanButton" data-i18n="actionScan" aria-describedby="runHint"></button>
+              <button type="button" class="primary-btn accent-btn" id="translateButton" data-i18n="actionTranslate" aria-describedby="runHint"></button>
+              <button type="button" class="secondary-btn" id="resumeButton" data-i18n="actionResume" disabled></button>
+              <button type="button" class="secondary-btn danger-btn" id="cancelButton" data-i18n="actionCancel" disabled></button>
               <button type="button" class="secondary-btn" id="exportButton" data-i18n="actionExport"></button>
               <button type="button" class="secondary-btn" id="resetButton" data-i18n="actionReset"></button>
             </div>
           </section>
         </div>
 
-        <aside class="sidebar">
-          <section class="card live-card">
+        <aside class="sidebar" role="complementary" aria-label="Live monitor">
+          <section class="card live-card" aria-labelledby="live-title">
             <div class="section-head">
               <div>
                 <p class="kicker" data-i18n="liveKicker"></p>
-                <h2 data-i18n="liveTitle"></h2>
+                <h2 id="live-title" data-i18n="liveTitle"></h2>
               </div>
-              <div class="live-status">
-                <span class="pulse" id="livePulse"></span>
+              <div class="live-status" role="status" aria-live="polite">
+                <span class="pulse" id="livePulse" aria-hidden="true"></span>
                 <span class="status-pill" id="statusPill"></span>
               </div>
             </div>
 
             <div class="progress-main">
               <div>
-                <strong class="progress-number" id="progressNumber">0%</strong>
-                <p class="progress-copy" id="monitorSummary"></p>
+                <strong class="progress-number" id="progressNumber" aria-live="polite">0%</strong>
+                <p class="progress-copy" id="monitorSummary" aria-live="polite"></p>
               </div>
-              <div class="progress-shell">
+              <div class="progress-shell" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Translation progress">
                 <div class="progress-bar" id="progressBar"></div>
               </div>
             </div>
 
-            <div class="stat-grid">
+            <div class="stat-grid" role="region" aria-label="Translation statistics">
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statPhase"></span>
-                <strong id="statPhase"></strong>
+                <strong id="statPhase" aria-live="polite"></strong>
               </article>
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statFiles"></span>
-                <strong id="statFiles"></strong>
+                <strong id="statFiles" aria-live="polite"></strong>
               </article>
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statTexts"></span>
-                <strong id="statTexts"></strong>
+                <strong id="statTexts" aria-live="polite"></strong>
               </article>
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statChanged"></span>
-                <strong id="statChanged"></strong>
+                <strong id="statChanged" aria-live="polite"></strong>
               </article>
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statCandidates"></span>
-                <strong id="statCandidates"></strong>
+                <strong id="statCandidates" aria-live="polite"></strong>
               </article>
               <article class="stat-card">
                 <span class="stat-label" data-i18n="statLastUpdate"></span>
-                <strong id="statLastUpdate"></strong>
+                <strong id="statLastUpdate" aria-live="polite"></strong>
               </article>
             </div>
 
             <div class="live-detail">
               <div class="detail-item">
                 <span class="field-label" data-i18n="currentProvider"></span>
-                <code id="currentProvider"></code>
+                <code id="currentProvider" aria-live="polite"></code>
               </div>
               <div class="detail-item">
                 <span class="field-label" data-i18n="currentModel"></span>
-                <code id="currentModel"></code>
+                <code id="currentModel" aria-live="polite"></code>
               </div>
               <div class="detail-item">
                 <span class="field-label" data-i18n="currentActivity"></span>
-                <code id="currentActivity"></code>
+                <code id="currentActivity" aria-live="polite"></code>
               </div>
               <div class="detail-item">
                 <span class="field-label" data-i18n="currentFile"></span>
-                <code id="currentFile"></code>
+                <code id="currentFile" aria-live="polite"></code>
               </div>
             </div>
           </section>
 
-          <section class="card">
+          <section class="card" aria-labelledby="log-title">
             <div class="section-head">
               <div>
                 <p class="kicker" data-i18n="logKicker"></p>
-                <h2 data-i18n="logTitle"></h2>
+                <h2 id="log-title" data-i18n="logTitle"></h2>
               </div>
             </div>
-            <div class="timeline" id="timeline"></div>
+            <div class="timeline" id="timeline" role="log" aria-label="Job activity log" aria-live="polite"></div>
           </section>
 
-          <section class="card">
+          <section class="card" aria-labelledby="result-title">
             <div class="section-head">
               <div>
                 <p class="kicker" data-i18n="resultKicker"></p>
-                <h2 data-i18n="resultTitle"></h2>
+                <h2 id="result-title" data-i18n="resultTitle"></h2>
               </div>
             </div>
-            <pre class="result-panel" id="resultPanel"></pre>
+            <pre class="result-panel" id="resultPanel" role="region" aria-label="Translation result JSON" tabindex="0"></pre>
           </section>
         </aside>
       </main>
 
-      <footer class="card footer-card">
+      <footer class="card footer-card" role="contentinfo">
         <div>
           <p class="kicker" data-i18n="supportKicker"></p>
           <h2 data-i18n="supportTitle"></h2>
           <div class="support-content" data-i18n-html="supportCopy" style="font-size: 14px; line-height: 1.6; color: var(--gray-400); margin-bottom: 24px;"></div>
         </div>
         <div class="footer-meta">
-          <a class="footer-link" href="mailto:mini0227kim@gmail.com">mini0227kim@gmail.com</a>
+          <a class="footer-link" href="mailto:mini0227kim@gmail.com" aria-label="Contact email">mini0227kim@gmail.com</a>
           <span class="footer-license" data-i18n="supportLicense"></span>
         </div>
       </footer>

@@ -150,8 +150,42 @@ def resolve_model(provider: str, current: str) -> str:
 
 def normalize_model_name(provider: str, model: str) -> str:
     cleaned = model.strip()
-    if provider == "gemini" and cleaned and not cleaned.startswith("models/"):
+    if not cleaned:
         return cleaned
+
+    _ALIASES: dict[str, dict[str, str]] = {
+        "openai": {
+            "gpt4": "gpt-4",
+            "gpt4-turbo": "gpt-4-turbo",
+            "gpt4o": "gpt-4o",
+            "gpt4o-mini": "gpt-4o-mini",
+            "gpt35": "gpt-3.5-turbo",
+            "gpt35-turbo": "gpt-3.5-turbo",
+        },
+        "gemini": {
+            "pro": "gemini-pro",
+            "flash": "gemini-flash",
+            "ultra": "gemini-ultra",
+        },
+        "anthropic": {
+            "claude3-opus": "claude-3-opus-20240229",
+            "claude3-sonnet": "claude-3-sonnet-20240229",
+            "claude3-haiku": "claude-3-haiku-20240307",
+            "claude35-sonnet": "claude-3-5-sonnet-20241022",
+            "claude35-haiku": "claude-3-5-haiku-20241022",
+        },
+        "openrouter": {},
+        "comet": {},
+    }
+
+    provider_aliases = _ALIASES.get(provider, {})
+    lower = cleaned.lower().replace(" ", "")
+    if lower in provider_aliases:
+        return provider_aliases[lower]
+
+    if provider == "gemini" and not cleaned.startswith("models/"):
+        pass
+
     return cleaned
 
 

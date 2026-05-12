@@ -18,6 +18,7 @@ from llm_backends import PROVIDER_SPECS, default_base_url
 from mc_world_translator import (
     DEFAULT_CONFIG,
     STYLE_PRESETS,
+    TranslationCancelled,
     WorldTranslator,
     enhance_style_prompt_for_config,
     list_models_for_config,
@@ -430,12 +431,21 @@ class JobManager:
                     "changed_file_count": report.get("changed_file_count", 0),
                     "candidate_file_count": report.get("candidate_file_count", 0),
                 })
+        except TranslationCancelled:
+            with self.lock:
+                job = self.jobs[job_id]
+                job["status"] = "cancelled"
+                job["finished_at"] = now_iso()
+                job["can_resume"] = True
+                job["progress"]["phase"] = "cancelled"
+                job["progress"]["current_activity"] = "cancelled"
+                self._append_event(job, {"event": "job_cancelled"})
         except SystemExit as exc:
-            self._fail_job(job_id, str(exc) or "Translator exited early.")
+            self._fail_job(job_id, str(exc) or "Translator exited early.", recoverable=False)
         except Exception as exc:
-            self._fail_job(job_id, str(exc) or exc.__class__.__name__)
+            self._fail_job(job_id, str(exc) or exc.__class__.__name__, recoverable=True)
 
-    def _fail_job(self, job_id: str, message: str) -> None:
+    def _fail_job(self, job_id: str, message: str, recoverable: bool = True) -> None:
         with self.lock:
             job = self.jobs[job_id]
             job["status"] = "failed"
@@ -443,7 +453,7 @@ class JobManager:
             job["error"] = message
             job["progress"]["phase"] = "failed"
             job["progress"]["current_activity"] = "failed"
-            job["can_resume"] = True
+            job["can_resume"] = recoverable
             self._append_event(job, {"event": "job_failed", "message": message})
 
     def _handle_progress(self, job_id: str, event: dict[str, Any]) -> None:
