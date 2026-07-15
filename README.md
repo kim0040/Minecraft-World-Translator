@@ -203,6 +203,15 @@ When using the one-click launcher, if the default port is busy, the script will 
 - Result JSON preview
 - Contact information for support
 
+### Safe and predictable job behavior
+
+- **Scan only** always runs with `dry_run = true`. It inspects configured region/entity directories and resource-pack language JSON files, counts unique candidate texts, and never writes world or ZIP data.
+- **Run translation** always runs with `dry_run = false` and opens a final confirmation showing the target world and backup state. The two actions cannot be mixed by a saved form setting.
+- `scan.region_dirs` is the authoritative scan scope. Relative paths are resolved inside the world folder, configured order is preserved, and paths escaping the world are rejected.
+- A running job is restored in the monitor after a page reload. The server rejects a second simultaneous job for the same world to prevent competing writes.
+- Checkpoints resume only when the world and translation-affecting settings match. A stale checkpoint is ignored instead of mixing models, prompts, scopes, or resource-pack settings.
+- When multiple source language files exist in a resource pack, their configured order is the priority order; the first source found for a target language path wins.
+
 ## Running the CLI
 
 ### Dry Run

@@ -39,6 +39,8 @@ region_dirs = [
   "entities",
   "DIM-1/region",
   "DIM-1/entities",
+  "DIM1/region",
+  "DIM1/entities",
 ]
 
 skip_patterns = ["*.bak_translate"]

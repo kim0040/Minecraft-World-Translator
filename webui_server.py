@@ -31,6 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "webui"
 CONFIG_BASE_PATH = BASE_DIR / "config.example.toml"
 MAX_EVENTS = 400
+MAX_REQUEST_BODY_BYTES = 1_000_000
 
 
 def now_iso() -> str:
@@ -233,6 +234,7 @@ def provider_meta() -> list[dict[str, str]]:
 class JobManager:
     def __init__(self) -> None:
         self.jobs: dict[str, dict[str, Any]] = {}
+        self.active_world_dirs: set[str] = set()
         self.lock = threading.Lock()
 
     def create_job(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -267,6 +269,7 @@ class JobManager:
                 "current_activity": "",
                 "changed_file_count": 0,
                 "candidate_file_count": 0,
+                "candidate_text_count": 0,
                 "last_event_at": "",
             },
             "summary": summarize_config(config),
@@ -278,10 +281,20 @@ class JobManager:
         }
 
         with self.lock:
+            world_dir = config["world_dir"]
+            if world_dir in self.active_world_dirs:
+                raise ValueError("A translation job is already running for this world directory.")
             self.jobs[job_id] = job
+            self.active_world_dirs.add(world_dir)
 
         thread = threading.Thread(target=self._run_job, args=(job_id,), daemon=True)
-        thread.start()
+        try:
+            thread.start()
+        except Exception:
+            with self.lock:
+                self.jobs.pop(job_id, None)
+                self.active_world_dirs.discard(config["world_dir"])
+            raise
         return self.public_job(job_id)
 
     def public_job(self, job_id: str) -> dict[str, Any]:
@@ -334,6 +347,9 @@ class JobManager:
             progress["phase"] = "scan_pending"
             progress["current_activity"] = "resource_pack_done"
             progress["percent"] = max(progress["percent"], 12)
+            progress["candidate_text_count"] = max(
+                progress["candidate_text_count"], int(event.get("candidate_text_count", 0))
+            )
         elif name == "scan_start":
             progress["phase"] = "scan"
             progress["current_activity"] = "scan_start"
@@ -358,6 +374,9 @@ class JobManager:
             progress["processed_files"] = index
             progress["total_files"] = total
             progress["percent"] = max(progress["percent"], 12 + int(index / total * 80))
+            progress["candidate_text_count"] = int(
+                event.get("candidate_text_count", progress["candidate_text_count"] + int(event.get("candidates", 0)))
+            )
         elif name == "translation_batch_start":
             progress["phase"] = "translate"
             progress["current_activity"] = "translation_batch_start"
@@ -391,6 +410,7 @@ class JobManager:
             progress["percent"] = 100
             progress["changed_file_count"] = int(event.get("changed_file_count", 0))
             progress["candidate_file_count"] = int(event.get("candidate_file_count", 0))
+            progress["candidate_text_count"] = int(event.get("candidate_text_count", progress["candidate_text_count"]))
 
     def _run_job(self, job_id: str) -> None:
         with self.lock:
@@ -426,6 +446,7 @@ class JobManager:
                     job["progress"]["percent"] = 100
                 job["progress"]["changed_file_count"] = int(report.get("changed_file_count", 0))
                 job["progress"]["candidate_file_count"] = int(report.get("candidate_file_count", 0))
+                job["progress"]["candidate_text_count"] = int(report.get("candidate_text_count", 0))
                 self._append_event(job, {
                     "event": "job_cancelled" if final_status == "cancelled" else "job_completed",
                     "changed_file_count": report.get("changed_file_count", 0),
@@ -444,6 +465,11 @@ class JobManager:
             self._fail_job(job_id, str(exc) or "Translator exited early.", recoverable=False)
         except Exception as exc:
             self._fail_job(job_id, str(exc) or exc.__class__.__name__, recoverable=True)
+        finally:
+            with self.lock:
+                job = self.jobs.get(job_id)
+                if job is not None:
+                    self.active_world_dirs.discard(job["_config"]["world_dir"])
 
     def _fail_job(self, job_id: str, message: str, recoverable: bool = True) -> None:
         with self.lock:
@@ -525,13 +551,26 @@ class AppHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
 
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Content-Length must be a valid integer.")
+            return
+        if length < 0:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Content-Length cannot be negative.")
+            return
+        if length > MAX_REQUEST_BODY_BYTES:
+            self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Request body is too large.")
+            return
         raw = self.rfile.read(length) if length else b"{}"
 
         try:
             payload = json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             self.send_error_json(HTTPStatus.BAD_REQUEST, "Request body must be valid JSON.")
+            return
+        if not isinstance(payload, dict):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Request body must be a JSON object.")
             return
 
         if parsed.path == "/api/jobs":

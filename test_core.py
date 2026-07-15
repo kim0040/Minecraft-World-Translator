@@ -3,11 +3,13 @@ import sys
 import os
 import json
 import tempfile
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mc_world_translator import WorldTranslator, DEFAULT_CONFIG, merge_nested, load_json_file
+from llm_backends import LLMProviderClient
 
 
 def create_test_config():
@@ -384,6 +386,14 @@ def test_config_normalization():
     assert result["temperature"] == 0.5
     assert "world_dir" in result
 
+    invalid = merge_nested(config, {"api": {"provider": "unsupported-provider"}})
+    try:
+        normalize_config(invalid, None)
+    except ValueError as exc:
+        assert "Unsupported provider" in str(exc)
+    else:
+        raise AssertionError("Unsupported provider did not raise ValueError")
+
     print("  [PASS] config_normalization")
 
 
@@ -547,6 +557,163 @@ def test_hover_event_patching():
     print("  [PASS] hover_event_patching")
 
 
+def test_region_directory_scope_and_skip_patterns():
+    """Configured region directories define the exact scan scope and order."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        world = Path(temp_dir).resolve()
+        for relative in ("region", "entities", "DIM-1/region", "unconfigured/region"):
+            (world / relative).mkdir(parents=True)
+        for relative in (
+            "region/r.0.0.mca",
+            "entities/r.0.0.mca",
+            "DIM-1/region/r.1.0.mca",
+            "unconfigured/region/r.9.9.mca",
+        ):
+            (world / relative).touch()
+
+        config = merge_nested(create_test_config(), {
+            "world_dir": str(world),
+            "scan": {
+                "region_dirs": ["region", "entities", "DIM-1/region"],
+                "skip_patterns": ["entities/*.mca"],
+            },
+        })
+        files = [path.relative_to(world).as_posix() for path in WorldTranslator(config).iter_region_files()]
+
+        assert files == ["region/r.0.0.mca", "DIM-1/region/r.1.0.mca"]
+        assert "unconfigured/region/r.9.9.mca" not in files
+
+    print("  [PASS] region_directory_scope_and_skip_patterns")
+
+
+def test_resource_pack_dry_run_counts_candidates_without_writing():
+    """Dry-run scans configured language JSON files without modifying the ZIP."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        zip_path = Path(temp_dir) / "pack.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("assets/demo/lang/en_us.json", json.dumps({
+                "demo.greeting": "Hello adventurer",
+                "demo.duplicate": "Hello adventurer",
+                "demo.id": "minecraft:stone",
+            }))
+            archive.writestr("assets/demo/lang/not_en_us.json", json.dumps({
+                "demo.unrelated": "This file must not match by suffix",
+            }))
+            archive.writestr("pack.mcmeta", "{}")
+        original = zip_path.read_bytes()
+
+        config = merge_nested(create_test_config(), {
+            "world_dir": temp_dir,
+            "resource_pack": {
+                "enabled": True,
+                "zip_paths": [str(zip_path)],
+                "source_lang_files": ["en_us.json"],
+                "target_lang_file": "ko_kr.json",
+            },
+        })
+        translator = WorldTranslator(config)
+        result = translator.scan_resource_pack_zip(zip_path)
+
+        assert result["source_files"] == 1
+        assert result["candidates"] == 1
+        assert translator.candidate_texts == {"Hello adventurer"}
+        assert zip_path.read_bytes() == original
+        assert not Path(f"{zip_path}{config['backup_suffix']}").exists()
+
+        missing_path = Path(temp_dir) / "missing.zip"
+        missing_config = merge_nested(config, {
+            "resource_pack": {"zip_paths": [str(missing_path)]},
+        })
+        missing_translator = WorldTranslator(missing_config)
+        missing_translator.translate_resource_packs()
+        assert missing_translator.completed_resource_pack_paths == set()
+
+    print("  [PASS] resource_pack_dry_run_counts_candidates_without_writing")
+
+
+def test_checkpoint_rejects_different_translation_settings():
+    """A checkpoint must not leak cached translations into a changed job."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        checkpoint = Path(temp_dir) / "checkpoint.json"
+        base = merge_nested(create_test_config(), {
+            "world_dir": temp_dir,
+            "runtime": {
+                "checkpoint_enabled": True,
+                "checkpoint_path": str(checkpoint),
+                "resume_from_checkpoint": False,
+            },
+        })
+        first = WorldTranslator(base)
+        first.completed_region_files.add(str(Path(temp_dir) / "region/r.0.0.mca"))
+        first.candidate_texts.add("Original text")
+        first.save_checkpoint()
+
+        events = []
+        changed = merge_nested(base, {
+            "prompt": {"target_language": "日本語"},
+            "runtime": {"resume_from_checkpoint": True},
+        })
+        resumed = WorldTranslator(changed, progress_callback=events.append)
+
+        assert resumed.completed_region_files == set()
+        assert resumed.candidate_texts == set()
+        assert any(event["event"] == "checkpoint_ignored" for event in events)
+
+    print("  [PASS] checkpoint_rejects_different_translation_settings")
+
+
+def test_llm_mapping_requires_every_requested_key():
+    """Partial model JSON must trigger retry handling instead of silent source fallback."""
+    client = object.__new__(LLMProviderClient)
+    client.complete_text = lambda **_: '{"first": "첫째"}'
+
+    try:
+        client.translate_mapping(
+            {"first": "First", "second": "Second"},
+            system_prompt="Translate",
+            temperature=0.2,
+        )
+    except RuntimeError as exc:
+        assert "incomplete" in str(exc)
+    else:
+        raise AssertionError("Incomplete model output was accepted")
+
+    print("  [PASS] llm_mapping_requires_every_requested_key")
+
+
+def test_atomic_write_preserves_existing_permissions():
+    """Replacing world data atomically must not silently change its file mode."""
+    from mc_world_translator import write_bytes_atomic, write_text_atomic
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        binary_path = Path(temp_dir) / "region.mca"
+        text_path = Path(temp_dir) / "report.json"
+        binary_path.write_bytes(b"old")
+        text_path.write_text("old", encoding="utf-8")
+        binary_path.chmod(0o640)
+        text_path.chmod(0o644)
+
+        write_bytes_atomic(binary_path, b"new")
+        write_text_atomic(text_path, "new")
+
+        assert binary_path.stat().st_mode & 0o777 == 0o640
+        assert text_path.stat().st_mode & 0o777 == 0o644
+
+    print("  [PASS] atomic_write_preserves_existing_permissions")
+
+
+def test_malformed_legacy_config_is_ignored():
+    """A broken optional translate.py must not terminate the Web API process."""
+    from mc_world_translator import load_legacy_translate_defaults
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        legacy_path = Path(temp_dir) / "translate.py"
+        legacy_path.write_text("API_KEY = 'unterminated", encoding="utf-8")
+        assert load_legacy_translate_defaults(legacy_path) == {}
+
+    print("  [PASS] malformed_legacy_config_is_ignored")
+
+
 if __name__ == "__main__":
     print("=== Core Functionality Tests ===\n")
     test_should_translate_text_filters()
@@ -562,4 +729,10 @@ if __name__ == "__main__":
     test_iter_json_nodes()
     test_apply_translations_comprehensive()
     test_hover_event_patching()
+    test_region_directory_scope_and_skip_patterns()
+    test_resource_pack_dry_run_counts_candidates_without_writing()
+    test_checkpoint_rejects_different_translation_settings()
+    test_llm_mapping_requires_every_requested_key()
+    test_atomic_write_preserves_existing_permissions()
+    test_malformed_legacy_config_is_ignored()
     print("\n=== All tests passed! ===")

@@ -366,18 +366,6 @@
               </div>
             </div>
             <div class="advanced-box">
-              <h3 class="section-subhead" data-i18n="advGroupDebug"></h3>
-              <div class="field-grid one">
-                <label class="field checkbox-field">
-                  <span class="field-label" data-i18n="fieldDryRun"></span>
-                  <span class="toggle-line">
-                    <input id="dryRun" type="checkbox" />
-                    <span data-i18n="helpDryRun"></span>
-                  </span>
-                </label>
-              </div>
-            </div>
-            <div class="advanced-box">
               <h3 class="section-subhead" data-i18n="advGroupMisc"></h3>
               <div class="field-grid two">
                 <label class="field">
@@ -440,7 +428,7 @@
                 <strong class="progress-number" id="progressNumber" aria-live="polite">0%</strong>
                 <p class="progress-copy" id="monitorSummary" aria-live="polite"></p>
               </div>
-              <div class="progress-shell" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Translation progress">
+              <div class="progress-shell" id="progressShell" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Translation progress">
                 <div class="progress-bar" id="progressBar"></div>
               </div>
             </div>
@@ -513,6 +501,28 @@
           </section>
         </aside>
       </main>
+
+      <dialog class="confirm-dialog" id="translationConfirmDialog" aria-labelledby="confirm-title" aria-describedby="confirm-copy">
+        <div class="confirm-dialog__content">
+          <p class="kicker" data-i18n="confirmKicker"></p>
+          <h2 id="confirm-title" data-i18n="confirmTitle"></h2>
+          <p class="section-copy" id="confirm-copy" data-i18n="confirmCopy"></p>
+          <dl class="confirm-summary">
+            <div>
+              <dt data-i18n="confirmWorldLabel"></dt>
+              <dd><code id="confirmWorldPath"></code></dd>
+            </div>
+            <div>
+              <dt data-i18n="confirmBackupLabel"></dt>
+              <dd id="confirmBackupState"></dd>
+            </div>
+          </dl>
+          <div class="confirm-actions">
+            <button type="button" class="secondary-btn" id="confirmCancelButton" data-i18n="confirmCancel"></button>
+            <button type="button" class="primary-btn accent-btn" id="confirmContinueButton" data-i18n="confirmContinue"></button>
+          </div>
+        </div>
+      </dialog>
 
       <footer class="card footer-card" role="contentinfo">
         <div>

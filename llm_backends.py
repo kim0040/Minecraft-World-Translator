@@ -296,10 +296,13 @@ class LLMProviderClient:
             expect_json=True,
         )
         parsed = extract_json_object(raw)
-        return {
-            key: parsed.get(key, value) if isinstance(parsed.get(key, value), str) else value
-            for key, value in payload.items()
-        }
+        missing_keys = [key for key in payload if not isinstance(parsed.get(key), str)]
+        if missing_keys:
+            raise RuntimeError(
+                "The model returned an incomplete translation JSON mapping "
+                f"({len(payload) - len(missing_keys)}/{len(payload)} values)."
+            )
+        return {key: parsed[key] for key in payload}
 
     def _request_json(
         self,

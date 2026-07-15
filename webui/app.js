@@ -1,4 +1,5 @@
 const STORAGE_KEY = "mc-world-translator-ui-v2";
+const ACTIVE_JOB_KEY = "mc-world-translator-active-job";
 
 const FALLBACK_META = {
   providers: [
@@ -222,7 +223,7 @@ const I18N = {
     summaryQueued: "작업이 큐에 들어갔습니다. 준비가 끝나면 바로 실행합니다.",
     summaryRunning: "현재 파일과 번역 배치를 기준으로 상태를 갱신 중입니다. 마지막 업데이트 시각도 같이 확인하세요.",
     summaryCancelled: "작업이 중지됐습니다. 체크포인트가 남아 있으니 `이전 진행 재개`로 이어갈 수 있습니다.",
-    summaryCompleted: "{changed}개 파일이 수정됐고, 후보 파일은 {candidates}개였습니다.",
+    summaryCompleted: "{changed}개 파일이 수정됐고, 번역 후보 텍스트는 {candidates}개였습니다.",
     summaryFailed: "작업이 중단됐습니다. 경로, 공급자, 모델, API 키를 확인하세요.",
     runHintIdle: "월드 폴더를 먼저 지정한 뒤 `스캔만 실행`으로 안전하게 시작하는 편이 좋습니다.",
     runHintReady: "지금 바로 새 작업을 시작할 수 있습니다. 체크포인트 저장이 켜져 있으면 나중에 이어서 할 수 있습니다.",
@@ -236,7 +237,7 @@ const I18N = {
     statFiles: "파일 진행",
     statTexts: "번역 배치 텍스트",
     statChanged: "수정 파일",
-    statCandidates: "후보 파일",
+    statCandidates: "후보 텍스트",
     statLastUpdate: "마지막 갱신",
     currentProvider: "현재 공급자",
     currentModel: "현재 모델",
@@ -291,7 +292,21 @@ const I18N = {
     eventCancelRequested: "중지 요청을 보냈습니다.",
     eventCancelled: "작업이 중지됐고 체크포인트가 저장됐습니다.",
     eventFatalError: "치명적 오류 발생 · {message}",
-    eventDone: "전체 작업 완료 · 수정 파일 {changed} · 후보 파일 {candidates}",
+    eventDone: "전체 작업 완료 · 수정 파일 {changed} · 후보 텍스트 {candidates}",
+    eventCheckpointIgnored: "설정 또는 대상 월드가 달라 이전 체크포인트를 사용하지 않았습니다.",
+    localJobRecovered: "새로고침 전부터 실행 중인 작업을 다시 연결했습니다.",
+    estimateScale: "약 {tokens} tokens · 텍스트 {texts}개",
+    estimateTimeLimited: "약 {minutes}분",
+    estimateTimeUnlimited: "속도 제한 없음",
+    confirmKicker: "Final check",
+    confirmTitle: "원본 월드에 번역을 적용할까요?",
+    confirmCopy: "실제 번역은 월드와 리소스팩 zip을 수정합니다. 아래 경로와 백업 설정을 확인한 뒤 계속하세요.",
+    confirmWorldLabel: "대상 월드",
+    confirmBackupLabel: "백업",
+    confirmBackupEnabled: "켜짐 · 원본 보존",
+    confirmBackupDisabled: "꺼짐 · 원본이 직접 수정됩니다",
+    confirmCancel: "취소",
+    confirmContinue: "백업 확인 후 번역",
     eventCompleted: "리포트를 저장했습니다.",
     eventFailed: "작업 실패: {message}",
     eventUnknown: "이벤트: {event}",
@@ -490,7 +505,7 @@ const I18N = {
     summaryQueued: "The job is queued and will start as soon as setup finishes.",
     summaryRunning: "The status is being refreshed from current-file and translation-batch activity. Keep an eye on the last update time as well.",
     summaryCancelled: "The job was stopped. A checkpoint should be available, so you can continue with `Resume Previous Progress`.",
-    summaryCompleted: "{changed} files were modified, and {candidates} files contained translation candidates.",
+    summaryCompleted: "{changed} files were modified, with {candidates} translation candidates found.",
     summaryFailed: "The job stopped early. Check paths, provider settings, model name, and API credentials.",
     runHintIdle: "Pick the world directory first, then start with `Run Scan Only` for the safest first pass.",
     runHintReady: "You can start a new job now. If checkpoint saving is enabled, you can stop and continue later.",
@@ -504,7 +519,7 @@ const I18N = {
     statFiles: "Files",
     statTexts: "Batch text count",
     statChanged: "Changed files",
-    statCandidates: "Candidate files",
+    statCandidates: "Candidate texts",
     statLastUpdate: "Last update",
     currentProvider: "Current provider",
     currentModel: "Current model",
@@ -559,7 +574,21 @@ const I18N = {
     eventCancelRequested: "Sent a cancellation request.",
     eventCancelled: "The job was cancelled and a checkpoint was saved.",
     eventFatalError: "Fatal error encountered · {message}",
-    eventDone: "Job finished · changed files {changed} · candidate files {candidates}",
+    eventDone: "Job finished · changed files {changed} · candidate texts {candidates}",
+    eventCheckpointIgnored: "The saved checkpoint was not used because its world or translation settings differ.",
+    localJobRecovered: "Reconnected to the job that was still running before this page reloaded.",
+    estimateScale: "~{tokens} tokens · {texts} texts",
+    estimateTimeLimited: "~{minutes} min",
+    estimateTimeUnlimited: "No rate limit set",
+    confirmKicker: "Final check",
+    confirmTitle: "Apply translations to the original world?",
+    confirmCopy: "A full translation modifies the world and any configured resource-pack ZIP files. Verify the path and backup setting before continuing.",
+    confirmWorldLabel: "Target world",
+    confirmBackupLabel: "Backup",
+    confirmBackupEnabled: "On · originals will be preserved",
+    confirmBackupDisabled: "Off · originals will be modified directly",
+    confirmCancel: "Cancel",
+    confirmContinue: "Translate with backup",
     eventCompleted: "Saved the report.",
     eventFailed: "Job failed: {message}",
     eventUnknown: "Event: {event}",
@@ -758,7 +787,7 @@ const I18N = {
     summaryQueued: "ジョブをキューに入れました。準備が終わり次第すぐに実行されます。",
     summaryRunning: "現在のファイルと翻訳バッチを基準に状態を更新中です。最終更新時刻も併せて確認してください。",
     summaryCancelled: "ジョブは停止しました。チェックポイントが残るので `前回の進行を再開` で続きから実行できます。",
-    summaryCompleted: "{changed}個のファイルが変更され、候補ファイルは {candidates} 個でした。",
+    summaryCompleted: "{changed}個のファイルが変更され、翻訳候補テキストは {candidates} 個でした。",
     summaryFailed: "ジョブが途中で停止しました。パス、供給元、モデル、APIキーを確認してください。",
     runHintIdle: "まずワールドフォルダを指定し、最初は `スキャンのみ実行` から始めるのが安全です。",
     runHintReady: "新しいジョブを開始できます。チェックポイント保存が有効なら途中停止して後で再開できます。",
@@ -772,7 +801,7 @@ const I18N = {
     statFiles: "ファイル進行",
     statTexts: "バッチ文字列数",
     statChanged: "変更ファイル",
-    statCandidates: "候補ファイル",
+    statCandidates: "候補テキスト",
     statLastUpdate: "最終更新",
     currentProvider: "現在の供給元",
     currentModel: "現在のモデル",
@@ -827,7 +856,21 @@ const I18N = {
     eventCancelRequested: "停止要求を送りました。",
     eventCancelled: "ジョブを停止し、チェックポイントを保存しました。",
     eventFatalError: "致命的エラー発生 · {message}",
-    eventDone: "全体完了 · 変更ファイル {changed} · 候補ファイル {candidates}",
+    eventDone: "全体完了 · 変更ファイル {changed} · 候補テキスト {candidates}",
+    eventCheckpointIgnored: "ワールドまたは翻訳設定が異なるため、保存済みチェックポイントを使用しませんでした。",
+    localJobRecovered: "ページ更新前から実行中のジョブに再接続しました。",
+    estimateScale: "約 {tokens} tokens · テキスト {texts} 件",
+    estimateTimeLimited: "約 {minutes} 分",
+    estimateTimeUnlimited: "速度制限なし",
+    confirmKicker: "Final check",
+    confirmTitle: "元のワールドへ翻訳を適用しますか？",
+    confirmCopy: "本翻訳はワールドと設定済みリソースパック ZIP を変更します。続ける前にパスとバックアップ設定を確認してください。",
+    confirmWorldLabel: "対象ワールド",
+    confirmBackupLabel: "バックアップ",
+    confirmBackupEnabled: "オン · 元ファイルを保存",
+    confirmBackupDisabled: "オフ · 元ファイルを直接変更",
+    confirmCancel: "キャンセル",
+    confirmContinue: "バックアップして翻訳",
     eventCompleted: "レポートを保存しました。",
     eventFailed: "ジョブ失敗: {message}",
     eventUnknown: "イベント: {event}",
@@ -847,6 +890,7 @@ const state = {
   job: null,
   localEvents: [],
   pollTimer: null,
+  pollInFlight: false,
   renderTimer: null,
 };
 
@@ -876,7 +920,8 @@ async function init() {
   renderStaticUi();
   populateForm(draft);
   renderMonitor();
-  state.renderTimer = window.setInterval(() => renderMonitor(), 1000);
+  await recoverActiveJob();
+  state.renderTimer = window.setInterval(refreshRelativeTime, 1000);
 }
 
 function bindDom() {
@@ -929,7 +974,6 @@ function bindDom() {
     tpmLimit: document.getElementById("tpmLimit"),
     backupSuffix: document.getElementById("backupSuffix"),
     backup: document.getElementById("backup"),
-    dryRun: document.getElementById("dryRun"),
     checkpointEnabled: document.getElementById("checkpointEnabled"),
     continueOnFileError: document.getElementById("continueOnFileError"),
     checkpointPath: document.getElementById("checkpointPath"),
@@ -950,6 +994,7 @@ function bindDom() {
     statusPill: document.getElementById("statusPill"),
     livePulse: document.getElementById("livePulse"),
     progressNumber: document.getElementById("progressNumber"),
+    progressShell: document.getElementById("progressShell"),
     progressBar: document.getElementById("progressBar"),
     monitorSummary: document.getElementById("monitorSummary"),
     statPhase: document.getElementById("statPhase"),
@@ -964,6 +1009,11 @@ function bindDom() {
     currentFile: document.getElementById("currentFile"),
     timeline: document.getElementById("timeline"),
     resultPanel: document.getElementById("resultPanel"),
+    translationConfirmDialog: document.getElementById("translationConfirmDialog"),
+    confirmWorldPath: document.getElementById("confirmWorldPath"),
+    confirmBackupState: document.getElementById("confirmBackupState"),
+    confirmCancelButton: document.getElementById("confirmCancelButton"),
+    confirmContinueButton: document.getElementById("confirmContinueButton"),
   });
 }
 
@@ -1046,7 +1096,6 @@ function bindEvents() {
     dom.tpmLimit,
     dom.backupSuffix,
     dom.backup,
-    dom.dryRun,
     dom.checkpointEnabled,
     dom.continueOnFileError,
     dom.checkpointPath,
@@ -1137,7 +1186,6 @@ function buildDefaultDraft() {
     tpmLimit: "",
     backupSuffix: meta.defaults.backup_suffix || ".bak_translate",
     backup: true,
-    dryRun: false,
     checkpointEnabled: meta.defaults.checkpoint_enabled ?? true,
     continueOnFileError: meta.defaults.continue_on_file_error ?? true,
     checkpointPath: "",
@@ -1204,7 +1252,6 @@ function collectDraft() {
     tpmLimit: dom.tpmLimit.value,
     backupSuffix: dom.backupSuffix.value,
     backup: dom.backup.checked,
-    dryRun: dom.dryRun.checked,
     checkpointEnabled: dom.checkpointEnabled.checked,
     continueOnFileError: dom.continueOnFileError.checked,
     checkpointPath: dom.checkpointPath.value,
@@ -1252,7 +1299,6 @@ function populateForm(draft) {
   dom.tpmLimit.value = state.draft.tpmLimit || "";
   dom.backupSuffix.value = state.draft.backupSuffix || ".bak_translate";
   dom.backup.checked = !!state.draft.backup;
-  dom.dryRun.checked = !!state.draft.dryRun;
   dom.checkpointEnabled.checked = !!state.draft.checkpointEnabled;
   dom.continueOnFileError.checked = !!state.draft.continueOnFileError;
   dom.checkpointPath.value = state.draft.checkpointPath || "";
@@ -1429,7 +1475,7 @@ function buildPayload(forceDryRun, resumeFromCheckpoint = false) {
   return {
     world_dir: draft.worldDir.trim(),
     report_path: draft.reportPath.trim(),
-    dry_run: forceDryRun ? true : draft.dryRun,
+    dry_run: Boolean(forceDryRun),
     backup: draft.backup,
     backup_suffix: draft.backupSuffix.trim(),
     batch_size: Number(draft.batchSize) || 40,
@@ -1629,6 +1675,9 @@ function applyScopePreset(preset) {
 }
 
 async function submitJob(forceDryRun) {
+  if (!forceDryRun && !(await requestTranslationConfirmation())) {
+    return;
+  }
   return startJob({
     forceDryRun,
     resumeFromCheckpoint: false,
@@ -1637,6 +1686,9 @@ async function submitJob(forceDryRun) {
 }
 
 async function resumeJob() {
+  if (!(await requestTranslationConfirmation())) {
+    return;
+  }
   return startJob({
     forceDryRun: false,
     resumeFromCheckpoint: true,
@@ -1657,6 +1709,7 @@ async function startJob({ forceDryRun, resumeFromCheckpoint, localEventKey }) {
       throw new Error(data.error || "Request failed");
     }
     state.activeJobId = data.id;
+    sessionStorage.setItem(ACTIVE_JOB_KEY, data.id);
     state.job = data;
     state.localEvents = [];
     pushLocalEvent(localEventKey);
@@ -1708,9 +1761,10 @@ function stopPolling() {
 }
 
 async function pollJob() {
-  if (!state.activeJobId) {
+  if (!state.activeJobId || state.pollInFlight) {
     return;
   }
+  state.pollInFlight = true;
   try {
     const response = await fetch(`/api/jobs/${state.activeJobId}`);
     const data = await response.json();
@@ -1721,6 +1775,7 @@ async function pollJob() {
     if (["completed", "failed", "cancelled"].includes(data.status)) {
       setRunButtonsDisabled(false);
       stopPolling();
+      sessionStorage.removeItem(ACTIVE_JOB_KEY);
     }
     renderMonitor();
   } catch (error) {
@@ -1728,7 +1783,48 @@ async function pollJob() {
     setRunButtonsDisabled(false);
     stopPolling();
     renderMonitor();
+  } finally {
+    state.pollInFlight = false;
   }
+}
+
+async function recoverActiveJob() {
+  const jobId = sessionStorage.getItem(ACTIVE_JOB_KEY);
+  if (!jobId) return;
+
+  try {
+    const response = await fetch(`/api/jobs/${jobId}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Job recovery failed");
+
+    state.activeJobId = jobId;
+    state.job = data;
+    pushLocalEvent("localJobRecovered");
+    if (["queued", "running"].includes(data.status)) {
+      startPolling();
+    } else {
+      sessionStorage.removeItem(ACTIVE_JOB_KEY);
+    }
+    renderMonitor();
+  } catch {
+    sessionStorage.removeItem(ACTIVE_JOB_KEY);
+  }
+}
+
+function requestTranslationConfirmation() {
+  const draft = collectDraft();
+  dom.confirmWorldPath.textContent = draft.worldDir.trim() || "—";
+  dom.confirmBackupState.textContent = t(draft.backup ? "confirmBackupEnabled" : "confirmBackupDisabled");
+  dom.confirmContinueButton.textContent = t(draft.backup ? "confirmContinue" : "translateButton");
+
+  return new Promise((resolve) => {
+    const dialog = dom.translationConfirmDialog;
+    const finish = () => resolve(dialog.returnValue === "confirm");
+    dialog.addEventListener("close", finish, { once: true });
+    dom.confirmCancelButton.onclick = () => dialog.close("cancel");
+    dom.confirmContinueButton.onclick = () => dialog.close("confirm");
+    dialog.showModal();
+  });
 }
 
 function setRunButtonsDisabled(disabled) {
@@ -1744,7 +1840,7 @@ function setRunButtonsDisabled(disabled) {
 }
 
 function exportSettings() {
-  const payload = buildPayload(dom.dryRun.checked);
+  const payload = buildPayload(false);
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1785,6 +1881,7 @@ function renderMonitor() {
     processed_texts: 0,
     changed_file_count: 0,
     candidate_file_count: 0,
+    candidate_text_count: 0,
     last_event_at: "",
     current_file: "",
     current_activity: "",
@@ -1792,7 +1889,7 @@ function renderMonitor() {
   const status = job?.status || "idle";
   const running = status === "running";
   const resumable = canResumeFromState(job);
-  const summary = job?.summary || buildPayload(dom.dryRun?.checked || false);
+  const summary = job?.summary || buildPayload(false);
   const providerId = summary.provider || summary.api?.provider || providerFromPicker();
   const providerLabel = providerMetaById(providerId)?.label || providerId;
 
@@ -1800,14 +1897,17 @@ function renderMonitor() {
   dom.statusPill.textContent = statusLabel(status);
   dom.livePulse.classList.toggle("active", running);
   dom.progressNumber.textContent = `${Math.round(progress.percent || 0)}%`;
-  dom.progressBar.style.width = `${Math.max(0, Math.min(100, progress.percent || 0))}%`;
+  const boundedPercent = Math.max(0, Math.min(100, progress.percent || 0));
+  dom.progressBar.style.width = `${boundedPercent}%`;
+  dom.progressShell.setAttribute("aria-valuenow", String(Math.round(boundedPercent)));
+  dom.progressShell.setAttribute("aria-valuetext", `${Math.round(boundedPercent)}% · ${phaseLabel(progress.phase || "idle")}`);
   dom.monitorSummary.textContent = buildSummary(status, progress, job?.error || "", resumable);
   dom.runHint.textContent = runHintLabel(status, resumable);
   dom.statPhase.textContent = phaseLabel(progress.phase || "idle");
   dom.statFiles.textContent = `${progress.processed_files || 0} / ${progress.total_files || 0}`;
   dom.statTexts.textContent = String(progress.processed_texts || 0);
   dom.statChanged.textContent = String(progress.changed_file_count || job?.result?.changed_file_count || 0);
-  dom.statCandidates.textContent = String(progress.candidate_file_count || job?.result?.candidate_file_count || 0);
+  dom.statCandidates.textContent = String(progress.candidate_text_count || job?.result?.candidate_text_count || 0);
   dom.statLastUpdate.textContent = formatRelative(progress.last_event_at);
   dom.currentProvider.textContent = providerLabel;
   dom.currentModel.textContent = summary.model || summary.api?.model || dom.model.value || "—";
@@ -1821,7 +1921,7 @@ function renderMonitor() {
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   renderTimeline(timelineEvents.slice(0, 60));
 
-  const candidateCount = progress.candidate_file_count || job?.result?.candidate_file_count || 0;
+  const candidateCount = progress.candidate_text_count || job?.result?.candidate_text_count || 0;
   if (candidateCount > 0 && status !== 'running' && status !== 'queued') {
       const estimatedTokens = candidateCount * 150;
       const tpm = Number(dom.tpmLimit.value) || 0;
@@ -1830,16 +1930,24 @@ function renderMonitor() {
       
       let estSeconds = 0;
       if (tpm > 0) estSeconds = Math.max(estSeconds, (estimatedTokens / tpm) * 60);
-      if (rpm > 0) estSeconds = Math.max(estSeconds, ((candidateCount / batchSize) / rpm) * 60);
-      
-      const timeStr = estSeconds > 0 ? `~ ${Math.ceil(estSeconds / 60)} min` : "(No rate limit)";
-      
-      dom.estScale.innerHTML = `~${estimatedTokens} tokens (${candidateCount} files)`;
-      dom.estTime.innerHTML = timeStr;
+      if (rpm > 0) estSeconds = Math.max(estSeconds, (Math.ceil(candidateCount / batchSize) / rpm) * 60);
+
+      dom.estScale.textContent = formatTemplate(t("estimateScale"), {
+        tokens: estimatedTokens.toLocaleString(),
+        texts: candidateCount.toLocaleString(),
+      });
+      dom.estTime.textContent = estSeconds > 0
+        ? formatTemplate(t("estimateTimeLimited"), { minutes: Math.max(1, Math.ceil(estSeconds / 60)) })
+        : t("estimateTimeUnlimited");
   } else {
-      dom.estScale.innerHTML = `-`;
-      dom.estTime.innerHTML = `-`;
+      dom.estScale.textContent = "—";
+      dom.estTime.textContent = "—";
   }
+}
+
+function refreshRelativeTime() {
+  if (!dom.statLastUpdate) return;
+  dom.statLastUpdate.textContent = formatRelative(state.job?.progress?.last_event_at || "");
 }
 
 function renderTimeline(events) {
@@ -1903,6 +2011,8 @@ function formatServerEvent(event) {
         files: event.completed_region_files || 0,
         packs: event.completed_resource_packs || 0,
       });
+    case "checkpoint_ignored":
+      return t("eventCheckpointIgnored");
     case "file_error":
       return formatTemplate(t("eventFileError"), { message: event.message || "" });
     case "file_write_retry":
@@ -1916,7 +2026,7 @@ function formatServerEvent(event) {
     case "done":
       return formatTemplate(t("eventDone"), {
         changed: event.changed_file_count || 0,
-        candidates: event.candidate_file_count || 0,
+        candidates: event.candidate_text_count || 0,
       });
     case "job_cancelled":
       return t("eventCancelled");
@@ -1940,7 +2050,7 @@ function buildSummary(status, progress, errorMessage, resumable) {
     case "completed":
       return formatTemplate(t("summaryCompleted"), {
         changed: progress.changed_file_count || 0,
-        candidates: progress.candidate_file_count || 0,
+        candidates: progress.candidate_text_count || 0,
       });
     case "failed":
       return errorMessage ? `${t("summaryFailed")} ${errorMessage}`.trim() : t("summaryFailed");

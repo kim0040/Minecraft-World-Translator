@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import fnmatch
+import hashlib
 import io
 import json
 import math
@@ -200,18 +201,38 @@ def load_toml_config(path: Path | None) -> dict[str, Any]:
 
 def write_text_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=str(path.parent)) as tmp:
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
-    os.replace(tmp_path, path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=str(path.parent)) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = Path(tmp.name)
+        if path.exists():
+            shutil.copymode(path, tmp_path)
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def write_bytes_atomic(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(path.parent)) as tmp:
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
-    os.replace(tmp_path, path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(path.parent)) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = Path(tmp.name)
+        if path.exists():
+            shutil.copymode(path, tmp_path)
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def load_json_file(path: Path) -> dict[str, Any]:
@@ -227,8 +248,11 @@ def load_legacy_translate_defaults(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
 
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
+    try:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return {}
     names = {"API_KEY", "BASE_URL", "MODEL", "SYSTEM_PROMPT"}
     values: dict[str, str] = {}
 
@@ -319,7 +343,7 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
 
     provider = infer_provider(result["api"].get("provider"), result["api"].get("base_url", ""))
     if provider not in PROVIDER_SPECS:
-        raise SystemExit(f"Unsupported provider: {provider}")
+        raise ValueError(f"Unsupported provider: {provider}")
     result["api"]["provider"] = provider
 
     result["api"]["base_url"] = resolve_base_url(provider, result["api"]["base_url"])
@@ -510,6 +534,7 @@ class WorldTranslator:
         self.completed_region_files: set[str] = set()
         self.completed_resource_pack_paths: set[str] = set()
         self.translation_cache: dict[str, str] = {}
+        self.candidate_texts: set[str] = set()
         self.file_errors: list[dict[str, Any]] = []
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
@@ -542,17 +567,38 @@ class WorldTranslator:
             self.save_checkpoint()
             raise TranslationCancelled("Translation was cancelled by the user.")
 
+    def checkpoint_config_fingerprint(self) -> str:
+        """Identify settings that would make a resumed translation inconsistent."""
+        relevant_config = {
+            "world_dir": self.config["world_dir"],
+            "dry_run": self.config["dry_run"],
+            "batch_size": self.config["batch_size"],
+            "temperature": self.config["temperature"],
+            "api": {
+                "provider": self.config["api"]["provider"],
+                "base_url": self.config["api"]["base_url"],
+                "model": self.config["api"]["model"],
+            },
+            "prompt": self.config["prompt"],
+            "scan": self.config["scan"],
+            "resource_pack": self.config["resource_pack"],
+        }
+        encoded = json.dumps(relevant_config, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
     def checkpoint_payload(self) -> dict[str, Any]:
         self.refresh_report_counts()
         return {
-            "version": 1,
+            "version": 2,
             "world_dir": self.config["world_dir"],
             "provider": self.config["api"]["provider"],
             "model": self.config["api"]["model"],
             "dry_run": self.config["dry_run"],
+            "config_fingerprint": self.checkpoint_config_fingerprint(),
             "completed_region_files": sorted(self.completed_region_files),
             "completed_resource_pack_paths": sorted(self.completed_resource_pack_paths),
             "translation_cache": self.translator.cache if self.translator is not None else self.translation_cache,
+            "candidate_texts": sorted(self.candidate_texts),
             "report": self.report,
             "saved_at": time.time(),
         }
@@ -564,10 +610,15 @@ class WorldTranslator:
         if not checkpoint:
             return
         if checkpoint.get("world_dir") != self.config["world_dir"]:
+            self.emit("checkpoint_ignored", reason="world_dir")
+            return
+        if checkpoint.get("config_fingerprint") != self.checkpoint_config_fingerprint():
+            self.emit("checkpoint_ignored", reason="settings")
             return
         self.completed_region_files = set(checkpoint.get("completed_region_files", []))
         self.completed_resource_pack_paths = set(checkpoint.get("completed_resource_pack_paths", []))
         self.translation_cache = dict(checkpoint.get("translation_cache", {}))
+        self.candidate_texts = set(checkpoint.get("candidate_texts", []))
         saved_report = checkpoint.get("report")
         if isinstance(saved_report, dict):
             self.report.update(saved_report)
@@ -600,6 +651,7 @@ class WorldTranslator:
         self.report["candidate_file_count"] = len(
             [item for item in self.report["changed_files"] if item.get("candidates", 0) > 0]
         )
+        self.report["candidate_text_count"] = len(self.candidate_texts)
 
     def run(self) -> dict[str, Any]:
         world_dir = Path(self.config["world_dir"]).resolve()
@@ -615,7 +667,11 @@ class WorldTranslator:
                 self.ensure_not_cancelled()
                 self.emit("resource_pack_start")
                 self.translate_resource_packs()
-                self.emit("resource_pack_done", count=len(self.report["resource_packs"]))
+                self.emit(
+                    "resource_pack_done",
+                    count=len(self.report["resource_packs"]),
+                    candidate_text_count=len(self.candidate_texts),
+                )
 
             region_files = self.iter_region_files()
             pending_files = [path for path in region_files if str(path) not in self.completed_region_files]
@@ -647,7 +703,8 @@ class WorldTranslator:
                     if not self.runtime_config["continue_on_file_error"]:
                         raise
 
-                self.completed_region_files.add(str(file_path))
+                if result.get("skipped") not in {"file_error", "parse_error"}:
+                    self.completed_region_files.add(str(file_path))
                 if result["changed_chunks"] > 0 or result.get("candidates", 0) > 0 or result.get("skipped"):
                     self.report["changed_files"].append(result)
                 self.save_checkpoint()
@@ -658,6 +715,7 @@ class WorldTranslator:
                     file=str(file_path),
                     changed_chunks=result["changed_chunks"],
                     candidates=result.get("candidates", 0),
+                    candidate_text_count=len(self.candidate_texts),
                     skipped=result.get("skipped", ""),
                 )
 
@@ -669,6 +727,7 @@ class WorldTranslator:
                 "done",
                 changed_file_count=self.report["changed_file_count"],
                 candidate_file_count=self.report["candidate_file_count"],
+                candidate_text_count=self.report["candidate_text_count"],
                 error_count=len(self.report["errors"]),
             )
             return self.report
@@ -681,6 +740,7 @@ class WorldTranslator:
                 "cancelled",
                 changed_file_count=self.report.get("changed_file_count", 0),
                 candidate_file_count=self.report.get("candidate_file_count", 0),
+                candidate_text_count=self.report.get("candidate_text_count", 0),
             )
             return self.report
         except Exception as exc:
@@ -697,12 +757,27 @@ class WorldTranslator:
             raise
 
     def iter_region_files(self) -> list[Path]:
-        world_dir = Path(self.config["world_dir"])
+        world_dir = Path(self.config["world_dir"]).resolve()
         files: list[Path] = []
-        for path in sorted(world_dir.rglob("*.mca")):
-            if any(fnmatch.fnmatch(path.name, pattern) for pattern in self.skip_patterns):
+        seen: set[Path] = set()
+        for configured_dir in self.scan_config.get("region_dirs", []):
+            directory = Path(str(configured_dir)).expanduser()
+            directory = directory.resolve() if directory.is_absolute() else (world_dir / directory).resolve()
+            if directory != world_dir and world_dir not in directory.parents:
+                raise ValueError(f"Configured region directory is outside the world folder: {configured_dir}")
+            if not directory.is_dir():
                 continue
-            files.append(path)
+            for path in sorted(directory.glob("*.mca")):
+                relative_path = path.relative_to(world_dir).as_posix()
+                if any(
+                    fnmatch.fnmatch(path.name, pattern) or fnmatch.fnmatch(relative_path, pattern)
+                    for pattern in self.skip_patterns
+                ):
+                    continue
+                resolved_path = path.resolve()
+                if resolved_path not in seen:
+                    seen.add(resolved_path)
+                    files.append(resolved_path)
         return files
 
     _SKIP_NAMESPACE_PREFIXES = (
@@ -1180,11 +1255,12 @@ class WorldTranslator:
             entries.append((length, full_chunk, timestamp))
 
         if parse_error:
+            self.candidate_texts.update(unique_texts)
             return {
                 "file": str(path),
                 "changed_chunks": 0,
-                "unique_texts": 0,
-                "candidates": 0,
+                "unique_texts": len(unique_texts),
+                "candidates": candidate_count,
                 "skipped": "parse_error",
             }
 
@@ -1222,6 +1298,7 @@ class WorldTranslator:
             if last_error is not None:
                 raise last_error
 
+        self.candidate_texts.update(unique_texts)
         return {
             "file": str(path),
             "changed_chunks": changed_chunks,
@@ -1230,13 +1307,6 @@ class WorldTranslator:
         }
 
     def translate_resource_packs(self) -> None:
-        if self.config["dry_run"]:
-            for zip_path in self.config["resource_pack"]["zip_paths"]:
-                self.report["resource_packs"].append(
-                    {"zip_path": zip_path, "translated_files": 0, "candidates": 0, "dry_run": True}
-                )
-            return
-
         for zip_path_str in self.config["resource_pack"]["zip_paths"]:
             self.ensure_not_cancelled()
             if zip_path_str in self.completed_resource_pack_paths:
@@ -1244,7 +1314,11 @@ class WorldTranslator:
                 continue
             zip_path = Path(zip_path_str)
             try:
-                result = self.translate_resource_pack_zip(zip_path)
+                result = (
+                    self.scan_resource_pack_zip(zip_path)
+                    if self.config["dry_run"]
+                    else self.translate_resource_pack_zip(zip_path)
+                )
             except TranslationCancelled:
                 raise
             except Exception as exc:
@@ -1260,8 +1334,59 @@ class WorldTranslator:
                 if not self.runtime_config["continue_on_file_error"]:
                     raise
             self.report["resource_packs"].append(result)
-            self.completed_resource_pack_paths.add(zip_path_str)
+            if result.get("skipped") not in {"missing", "resource_pack_error"}:
+                self.completed_resource_pack_paths.add(zip_path_str)
             self.save_checkpoint()
+
+    def resource_pack_language_files(self, names: list[str]) -> list[tuple[str, str]]:
+        """Return language files once, in configured source-language priority order."""
+        found: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for source_name in self.config["resource_pack"]["source_lang_files"]:
+            for name in names:
+                if name in seen or name.rsplit("/", 1)[-1] != source_name or "/lang/" not in name:
+                    continue
+                seen.add(name)
+                found.append((name, source_name))
+        return found
+
+    def scan_resource_pack_zip(self, zip_path: Path) -> dict[str, Any]:
+        import zipfile
+
+        self.ensure_not_cancelled()
+        if not zip_path.exists():
+            return {
+                "zip_path": str(zip_path),
+                "translated_files": 0,
+                "candidates": 0,
+                "dry_run": True,
+                "skipped": "missing",
+            }
+
+        candidate_texts: set[str] = set()
+        source_files = 0
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            for source_path, _ in self.resource_pack_language_files(zf.namelist()):
+                self.ensure_not_cancelled()
+                try:
+                    payload = json.loads(zf.read(source_path).decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                source_files += 1
+                candidate_texts.update(
+                    value for value in payload.values() if isinstance(value, str) and self.should_translate_text(value)
+                )
+
+        self.candidate_texts.update(candidate_texts)
+        return {
+            "zip_path": str(zip_path),
+            "translated_files": 0,
+            "source_files": source_files,
+            "candidates": len(candidate_texts),
+            "dry_run": True,
+        }
 
     def translate_resource_pack_zip(self, zip_path: Path) -> dict[str, Any]:
         import zipfile
@@ -1270,70 +1395,79 @@ class WorldTranslator:
         if not zip_path.exists():
             return {"zip_path": str(zip_path), "translated_files": 0, "candidates": 0, "skipped": "missing"}
 
-        source_names = self.config["resource_pack"]["source_lang_files"]
         target_name = self.config["resource_pack"]["target_lang_file"]
         replacements: dict[str, bytes] = {}
         translated_files = 0
-        candidate_count = 0
+        candidate_texts: set[str] = set()
 
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
-            for source_name in source_names:
+            for source_path, source_name in self.resource_pack_language_files(names):
                 self.ensure_not_cancelled()
-                targets = [name for name in names if name.endswith(source_name) and "/lang/" in name]
-                for source_path in targets:
-                    self.ensure_not_cancelled()
-                    target_path = source_path[: -len(source_name)] + target_name
-                    if self.config["resource_pack"]["skip_if_target_exists"] and target_path in names:
-                        continue
-                    try:
-                        payload = json.loads(zf.read(source_path).decode("utf-8"))
-                    except Exception:
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    texts = [value for value in payload.values() if isinstance(value, str) and self.should_translate_text(value)]
-                    candidate_count += len(texts)
-                    if not texts:
-                        continue
-                    translations = self.translator.translate_texts(texts)
-                    translated_payload = {}
-                    for key, value in payload.items():
-                        if isinstance(value, str):
-                            translated_payload[key] = translations.get(value, value)
-                        else:
-                            translated_payload[key] = value
-                    replacements[target_path] = json.dumps(
-                        translated_payload, ensure_ascii=False, indent=2
-                    ).encode("utf-8")
-                    translated_files += 1
+                target_path = source_path[: -len(source_name)] + target_name
+                if target_path in replacements:
+                    continue
+                if self.config["resource_pack"]["skip_if_target_exists"] and target_path in names:
+                    continue
+                try:
+                    payload = json.loads(zf.read(source_path).decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                texts = list(
+                    dict.fromkeys(
+                        value for value in payload.values() if isinstance(value, str) and self.should_translate_text(value)
+                    )
+                )
+                candidate_texts.update(texts)
+                if not texts:
+                    continue
+                translations = self.translator.translate_texts(texts)
+                translated_payload = {
+                    key: translations.get(value, value) if isinstance(value, str) else value
+                    for key, value in payload.items()
+                }
+                replacements[target_path] = json.dumps(
+                    translated_payload, ensure_ascii=False, indent=2
+                ).encode("utf-8")
+                translated_files += 1
+
+        self.candidate_texts.update(candidate_texts)
 
         if replacements:
             self.backup_once(zip_path)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
-                tmp_path = Path(tmp.name)
-
-            import zipfile
-
-            with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as dst:
-                written_targets = set()
-                for info in src.infolist():
-                    self.ensure_not_cancelled()
-                    if info.filename in replacements:
-                        dst.writestr(info.filename, replacements[info.filename])
-                        written_targets.add(info.filename)
-                    else:
-                        dst.writestr(info, src.read(info.filename))
-                for target_path, payload in replacements.items():
-                    self.ensure_not_cancelled()
-                    if target_path not in written_targets:
-                        dst.writestr(target_path, payload)
-            shutil.move(str(tmp_path), str(zip_path))
+            tmp_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip", dir=str(zip_path.parent)) as tmp:
+                    tmp_path = Path(tmp.name)
+                with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as dst:
+                    dst.comment = src.comment
+                    written_targets = set()
+                    for info in src.infolist():
+                        self.ensure_not_cancelled()
+                        if info.filename in replacements:
+                            dst.writestr(info, replacements[info.filename])
+                            written_targets.add(info.filename)
+                        else:
+                            dst.writestr(info, src.read(info.filename))
+                    for target_path, payload in replacements.items():
+                        self.ensure_not_cancelled()
+                        if target_path not in written_targets:
+                            dst.writestr(target_path, payload)
+                shutil.copymode(zip_path, tmp_path)
+                with tmp_path.open("rb") as tmp_file:
+                    os.fsync(tmp_file.fileno())
+                os.replace(tmp_path, zip_path)
+            except Exception:
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
+                raise
 
         return {
             "zip_path": str(zip_path),
             "translated_files": translated_files,
-            "candidates": candidate_count,
+            "candidates": len(candidate_texts),
         }
 
     def write_report(self) -> None:
@@ -1419,7 +1553,10 @@ def main() -> None:
     loaded = load_toml_config(config_path)
     config = merge_nested(DEFAULT_CONFIG, loaded)
     config = apply_cli_overrides(config, args)
-    config = normalize_config(config, config_path)
+    try:
+        config = normalize_config(config, config_path)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     if args.list_models:
         try:
