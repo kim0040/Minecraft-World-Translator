@@ -22,7 +22,6 @@ from env_utils import load_dotenv_chain
 from llm_backends import (
     LLMProviderClient,
     PROVIDER_SPECS,
-    default_base_url,
     enhance_style_prompt,
     infer_provider,
     provider_choices,
@@ -35,10 +34,15 @@ try:
     from nbt import nbt
 except ImportError as exc:  # pragma: no cover - runtime dependency guard
     raise SystemExit(
-        "Missing dependency: `nbt`.\n"
-        "Install it first, for example:\n"
-        "  python3 -m pip install nbtlib anvil-parser nbt"
+        "Missing dependency: `NBT`.\n"
+        "Install project dependencies first:\n"
+        "  python3 -m pip install -r requirements.txt"
     ) from exc
+
+MAX_REGION_SECTORS = 255
+CLICK_EVENT_KEYS = ("clickEvent", "click_event")
+HOVER_EVENT_KEYS = ("hoverEvent", "hover_event")
+CLICK_EVENT_VALUE_KEYS = ("value", "command")
 
 
 STYLE_PRESETS: dict[str, str] = {
@@ -244,6 +248,65 @@ def load_json_file(path: Path) -> dict[str, Any]:
         return {}
 
 
+def project_dir() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def config_fingerprint(config: dict[str, Any]) -> str:
+    """Identify settings that would make a resumed translation inconsistent."""
+    relevant_config = {
+        "world_dir": config["world_dir"],
+        "dry_run": config["dry_run"],
+        "batch_size": config["batch_size"],
+        "temperature": config["temperature"],
+        "api": {
+            "provider": config["api"]["provider"],
+            "base_url": config["api"]["base_url"],
+            "model": config["api"]["model"],
+        },
+        "prompt": config["prompt"],
+        "scan": config["scan"],
+        "resource_pack": config["resource_pack"],
+    }
+    encoded = json.dumps(relevant_config, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def checkpoint_status(config: dict[str, Any]) -> dict[str, Any]:
+    path = str(config.get("runtime", {}).get("checkpoint_path") or "").strip()
+    if not path:
+        return {"resumable": False, "reason": "no_path", "checkpoint_path": ""}
+    checkpoint_path = Path(path).expanduser()
+    payload = {
+        "resumable": False,
+        "reason": "missing",
+        "checkpoint_path": str(checkpoint_path),
+    }
+    if not checkpoint_path.is_file():
+        return payload
+    checkpoint = load_json_file(checkpoint_path)
+    if not checkpoint:
+        payload["reason"] = "empty"
+        return payload
+    if checkpoint.get("world_dir") != config.get("world_dir"):
+        payload["reason"] = "world_dir"
+        return payload
+    if checkpoint.get("config_fingerprint") != config_fingerprint(config):
+        payload["reason"] = "settings"
+        return payload
+    return {
+        "resumable": True,
+        "reason": "ok",
+        "checkpoint_path": str(checkpoint_path),
+        "completed_region_files": len(checkpoint.get("completed_region_files", [])),
+        "completed_resource_pack_paths": len(checkpoint.get("completed_resource_pack_paths", [])),
+    }
+
+
+def matching_checkpoint_exists(config: dict[str, Any]) -> bool:
+    return bool(checkpoint_status(config).get("resumable"))
+
+
 def load_legacy_translate_defaults(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
@@ -316,10 +379,10 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
 
 def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[str, Any]:
     result = deepcopy(config)
-    project_dir = Path(__file__).resolve().parent
+    root_dir = project_dir()
     load_dotenv_chain(
-        project_dir / ".env",
-        project_dir.parent / ".env",
+        root_dir / ".env",
+        root_dir.parent / ".env",
     )
 
     translate_py_path = Path(result["translate_py_path"])
@@ -328,14 +391,9 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
     else:
         translate_py_path = translate_py_path.resolve()
 
+    legacy: dict[str, str] = {}
     if result.get("inherit_translate_py", True):
         legacy = load_legacy_translate_defaults(translate_py_path)
-        if not result["api"]["api_key"]:
-            result["api"]["api_key"] = legacy.get("API_KEY", "")
-        if not result["api"]["base_url"]:
-            result["api"]["base_url"] = legacy.get("BASE_URL", "")
-        if not result["api"]["model"]:
-            result["api"]["model"] = legacy.get("MODEL", "")
         if not result["prompt"]["custom_system_prompt"] and not result["prompt"]["style_prompt"]:
             legacy_prompt = legacy.get("SYSTEM_PROMPT", "").strip()
             if legacy_prompt and result["prompt"]["style_preset"] == "custom":
@@ -346,10 +404,23 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
         raise ValueError(f"Unsupported provider: {provider}")
     result["api"]["provider"] = provider
 
-    result["api"]["base_url"] = resolve_base_url(provider, result["api"]["base_url"])
-    result["api"]["model"] = resolve_model(provider, result["api"]["model"])
+    # TOML/UI value → provider env → inherited translate.py → provider default.
+    # Never copy another provider's key, and never let translate.py beat env.
+    if not result["api"]["api_key"]:
+        result["api"]["api_key"] = resolve_api_key(provider, "")
+    if not result["api"]["api_key"]:
+        result["api"]["api_key"] = legacy.get("API_KEY", "")
 
-    result["api"]["api_key"] = resolve_api_key(provider, result["api"]["api_key"])
+    if not result["api"]["base_url"]:
+        env_base = os.getenv(PROVIDER_SPECS[provider]["base_url_env_var"], "")
+        result["api"]["base_url"] = env_base or legacy.get("BASE_URL", "")
+    result["api"]["base_url"] = resolve_base_url(provider, result["api"]["base_url"])
+
+    if not result["api"]["model"]:
+        result["api"]["model"] = resolve_model(provider, "")
+    if not result["api"]["model"]:
+        result["api"]["model"] = legacy.get("MODEL", "")
+    result["api"]["model"] = resolve_model(provider, result["api"]["model"])
 
     world_dir_raw = str(result["world_dir"]).strip()
     if world_dir_raw:
@@ -360,12 +431,18 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
             world_dir = world_dir.resolve()
         result["world_dir"] = str(world_dir)
 
-        report_path = result["report_path"] or str(world_dir / "translation_report.json")
+        # Dry-run/scan defaults stay outside the world so preview never touches it.
+        default_output_dir = (
+            (root_dir / "translation_reports" / world_dir.name) if result.get("dry_run") else world_dir
+        )
+        report_path = result["report_path"] or str(default_output_dir / "translation_report.json")
         report_path = Path(report_path).expanduser()
         if not report_path.is_absolute():
             report_path = (world_dir / report_path).resolve()
         result["report_path"] = str(report_path)
-        checkpoint_path = result["runtime"]["checkpoint_path"] or str(world_dir / ".translation_checkpoint.json")
+        checkpoint_path = result["runtime"]["checkpoint_path"] or str(
+            default_output_dir / ".translation_checkpoint.json"
+        )
         checkpoint_path = Path(checkpoint_path).expanduser()
         if not checkpoint_path.is_absolute():
             checkpoint_path = (world_dir / checkpoint_path).resolve()
@@ -427,7 +504,7 @@ class BatchTranslator:
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
-            self.progress_callback({"event": event, **payload})
+            self.progress_callback(event, **payload)
 
     def ensure_not_cancelled(self) -> None:
         if self.cancel_check is not None and self.cancel_check():
@@ -435,15 +512,15 @@ class BatchTranslator:
 
     def system_prompt(self) -> str:
         prompt_config = self.config["prompt"]
-        if prompt_config["custom_system_prompt"]:
-            base = prompt_config["custom_system_prompt"].strip()
+        custom = prompt_config["custom_system_prompt"].strip()
+        if custom:
+            base = custom
         else:
             preset = STYLE_PRESETS[prompt_config["style_preset"]]
-            base = preset.format(target_language=prompt_config["target_language"])
-
-        extra = prompt_config["style_prompt"].strip()
-        if extra:
-            base = f"{base}\n\n[추가 스타일 지시]\n{extra}"
+            base = preset.replace("{target_language}", prompt_config["target_language"])
+            extra = prompt_config["style_prompt"].strip()
+            if extra:
+                base = f"{base}\n\n[추가 스타일 지시]\n{extra}"
 
         return (
             f"{base}\n\n"
@@ -472,11 +549,18 @@ class BatchTranslator:
             for original, localized in translated.items():
                 self.cache[original] = localized
 
-        return {text: self.cache.get(text, text) for text in texts}
+        unresolved = [text for text in texts if text not in self.cache]
+        if unresolved:
+            raise RuntimeError(
+                "Translation batch completed without results for "
+                f"{len(unresolved)} text(s); refusing to cache identity fallbacks."
+            )
+        return {text: self.cache[text] for text in texts}
 
     def _translate_batch(self, texts: list[str], batch_size: int) -> dict[str, str]:
         payload = {str(i): text for i, text in enumerate(texts)}
         max_retries = max(1, int(self.config["runtime"]["max_batch_retries"]))
+        last_error = "unknown error"
         for attempt in range(1, max_retries + 1):
             self.ensure_not_cancelled()
             try:
@@ -488,19 +572,17 @@ class BatchTranslator:
                     temperature=float(self.config["temperature"]),
                 )
                 self.emit("translation_batch_done", batch_size=len(texts), attempt=attempt)
-                return {
-                    text: parsed.get(str(i), text)
-                    for i, text in enumerate(texts)
-                }
+                return {text: parsed[str(i)] for i, text in enumerate(texts)}
             except TranslationCancelled:
                 raise
             except Exception as exc:
+                last_error = str(exc) or exc.__class__.__name__
                 self.emit(
                     "translation_batch_error",
                     batch_size=len(texts),
                     attempt=attempt,
                     max_attempts=max_retries,
-                    message=str(exc),
+                    message=last_error,
                 )
                 if attempt < max_retries:
                     time.sleep(min(1.5 * attempt, 4.0))
@@ -512,7 +594,10 @@ class BatchTranslator:
                 self.ensure_not_cancelled()
                 merged.update(self._translate_batch(texts[i : i + next_size], next_size))
             return merged
-        return {text: text for text in texts}
+        raise RuntimeError(
+            "Translation batch failed after "
+            f"{max_retries} retries ({len(texts)} texts): {last_error}"
+        )
 
 
 class WorldTranslator:
@@ -536,6 +621,7 @@ class WorldTranslator:
         self.translation_cache: dict[str, str] = {}
         self.candidate_texts: set[str] = set()
         self.file_errors: list[dict[str, Any]] = []
+        self._progress_context: dict[str, Any] = {}
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
@@ -556,7 +642,8 @@ class WorldTranslator:
 
     def emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
-            self.progress_callback({"event": event, **payload})
+            merged = {**self._progress_context, **payload}
+            self.progress_callback({"event": event, **merged})
 
     def is_cancelled(self) -> bool:
         return bool(self.cancel_check is not None and self.cancel_check())
@@ -569,22 +656,7 @@ class WorldTranslator:
 
     def checkpoint_config_fingerprint(self) -> str:
         """Identify settings that would make a resumed translation inconsistent."""
-        relevant_config = {
-            "world_dir": self.config["world_dir"],
-            "dry_run": self.config["dry_run"],
-            "batch_size": self.config["batch_size"],
-            "temperature": self.config["temperature"],
-            "api": {
-                "provider": self.config["api"]["provider"],
-                "base_url": self.config["api"]["base_url"],
-                "model": self.config["api"]["model"],
-            },
-            "prompt": self.config["prompt"],
-            "scan": self.config["scan"],
-            "resource_pack": self.config["resource_pack"],
-        }
-        encoded = json.dumps(relevant_config, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()
+        return config_fingerprint(self.config)
 
     def checkpoint_payload(self) -> dict[str, Any]:
         self.refresh_report_counts()
@@ -683,6 +755,12 @@ class WorldTranslator:
             )
             for index, file_path in enumerate(pending_files, start=1):
                 self.ensure_not_cancelled()
+                self._progress_context = {
+                    "file_index": index,
+                    "file_total": total_files,
+                    "file": str(file_path),
+                    "file_candidates": 0,
+                }
                 self.emit("file_start", index=index, total=total_files, file=str(file_path))
                 try:
                     result = self.process_region_file(file_path)
@@ -703,7 +781,7 @@ class WorldTranslator:
                     if not self.runtime_config["continue_on_file_error"]:
                         raise
 
-                if result.get("skipped") not in {"file_error", "parse_error"}:
+                if result.get("skipped") not in {"file_error"}:
                     self.completed_region_files.add(str(file_path))
                 if result["changed_chunks"] > 0 or result.get("candidates", 0) > 0 or result.get("skipped"):
                     self.report["changed_files"].append(result)
@@ -912,6 +990,16 @@ class WorldTranslator:
         backup_path = path.with_name(path.name + self.config["backup_suffix"])
         if not backup_path.exists():
             shutil.copy2(path, backup_path)
+            return
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        stamped_path = path.with_name(f"{path.name}{self.config['backup_suffix']}.{stamp}")
+        shutil.copy2(path, stamped_path)
+        self.emit(
+            "backup_exists",
+            file=str(path),
+            existing_backup=str(backup_path),
+            new_backup=str(stamped_path),
+        )
 
     def extract_command_json(self, command: str) -> tuple[str, str] | None:
         if not isinstance(command, str):
@@ -932,6 +1020,104 @@ class WorldTranslator:
                 return tail.replace("_", " ").replace(".", " ")
         return key
 
+    def _path_has(self, path: str, *needles: str) -> bool:
+        return any(needle in path for needle in needles)
+
+    def _component_leaf(self, path: str) -> str:
+        return path.replace("minecraft:", "").rstrip("/")
+
+    def _is_sign_text_path(self, path: str, key: str = "") -> bool:
+        if key in {"Text1", "Text2", "Text3", "Text4"}:
+            return True
+        return self._path_has(
+            path,
+            "/front_text/messages",
+            "/back_text/messages",
+            "/front_text/filtered_messages",
+            "/back_text/filtered_messages",
+        )
+
+    def _is_item_name_path(self, path: str) -> bool:
+        if "/display/Name" in path:
+            return True
+        leaf = self._component_leaf(path)
+        return "/components/" in path and leaf.endswith("/custom_name")
+
+    def _is_lore_path(self, path: str) -> bool:
+        if "/display/Lore" in path:
+            return True
+        if "minecraft:lore" in path:
+            return True
+        return "/components/" in path and "/lore/" in self._component_leaf(path) + "/"
+
+    def _is_book_page_path(self, path: str) -> bool:
+        return "/pages/" in path or "written_book_content/pages" in path
+
+    def _is_book_title_path(self, path: str, key: str = "") -> bool:
+        if key == "title":
+            return True
+        return "written_book_content/title" in path and key in {"", "raw", "title"}
+
+    def _is_book_filtered_title_path(self, path: str, key: str = "") -> bool:
+        if key == "filtered_title":
+            return True
+        if key == "filtered" and "written_book_content/title" in path:
+            return True
+        return "written_book_content/filtered_title" in path
+
+    def _should_collect_nbt_string(self, key: str, path: str) -> bool:
+        scan = self.scan_config
+        if scan["translate_signs"] and self._is_sign_text_path(path, key):
+            return True
+        if scan["translate_custom_names"] and key == "CustomName":
+            return True
+        if scan["translate_item_names"] and self._is_item_name_path(path):
+            return True
+        if scan["translate_lore"] and self._is_lore_path(path):
+            return True
+        if scan["translate_books"] and self._is_book_page_path(path):
+            return True
+        if scan["translate_titles"] and self._is_book_title_path(path, key):
+            return True
+        if scan["translate_filtered_titles"] and self._is_book_filtered_title_path(path, key):
+            return True
+        return False
+
+    def _collect_nbt_string(self, tag: Any, refs: list[TextRef], path: str) -> None:
+        raw = tag.value
+        try:
+            component = self.parse_text_component(raw)
+        except json.JSONDecodeError:
+            if self.should_translate_text(raw):
+                refs.append(TextRef("plain_tag", tag=tag, path=path))
+            return
+        if isinstance(component, str):
+            if self.should_translate_text(component):
+                refs.append(TextRef("plain_tag", tag=tag, path=path))
+            return
+        self.collect_json_text_refs(component, refs, path)
+        refs.append(TextRef("json_tag", tag=tag, path=path))
+
+    def _collect_json_string_field(self, obj: dict[str, Any], key: str, refs: list[TextRef], path: str) -> None:
+        value = obj.get(key)
+        if not isinstance(value, str):
+            return
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            if self.scan_config["translate_command_output"] and self.extract_command_json(value):
+                self.collect_command_refs(value, refs, path)
+                refs.append(TextRef("json_string_field", obj=obj, key=key, path=path))
+                return
+            if self.should_translate_text(value):
+                refs.append(TextRef("json_text", obj=obj, key=key, path=path))
+            return
+        if isinstance(parsed, str):
+            if self.should_translate_text(parsed):
+                refs.append(TextRef("json_text", obj=obj, key=key, path=path))
+            return
+        refs.append(TextRef("json_string_field", obj=obj, key=key, path=path))
+
     def collect_json_text_refs(self, node: Any, refs: list[TextRef], path: str) -> None:
         if isinstance(node, dict):
             text_value = node.get("text")
@@ -945,23 +1131,31 @@ class WorldTranslator:
             ):
                 refs.append(TextRef("translate_key", obj=node, key="text", path=path))
 
-            if self.scan_config["translate_command_output"]:
-                click_event = node.get("clickEvent")
-                if isinstance(click_event, dict) and isinstance(click_event.get("value"), str):
-                    self.collect_command_refs(click_event["value"], refs, f"{path}.clickEvent.value")
+            for event_key in CLICK_EVENT_KEYS:
+                click_event = node.get(event_key)
+                if not isinstance(click_event, dict):
+                    continue
+                for value_key in CLICK_EVENT_VALUE_KEYS:
+                    if isinstance(click_event.get(value_key), str):
+                        self._collect_json_string_field(
+                            click_event, value_key, refs, f"{path}.{event_key}.{value_key}"
+                        )
 
-            hover_event = node.get("hoverEvent")
-            if isinstance(hover_event, dict):
-                hover_value = hover_event.get("value")
-                if self.scan_config["translate_command_output"] and isinstance(hover_value, str):
-                    self.collect_command_refs(hover_value, refs, f"{path}.hoverEvent.value")
+            for event_key in HOVER_EVENT_KEYS:
+                hover_event = node.get(event_key)
+                if not isinstance(hover_event, dict):
+                    continue
                 for hover_key, hover_item in hover_event.items():
-                    if hover_key == "value":
-                        continue
-                    self.collect_json_text_refs(hover_item, refs, f"{path}.hoverEvent.{hover_key}")
+                    if isinstance(hover_item, str):
+                        self._collect_json_string_field(
+                            hover_event, hover_key, refs, f"{path}.{event_key}.{hover_key}"
+                        )
+                    else:
+                        self.collect_json_text_refs(hover_item, refs, f"{path}.{event_key}.{hover_key}")
 
+            skip_keys = {"text", *CLICK_EVENT_KEYS, *HOVER_EVENT_KEYS}
             for key, value in node.items():
-                if key in {"text", "clickEvent", "hoverEvent"}:
+                if key in skip_keys:
                     continue
                 self.collect_json_text_refs(value, refs, f"{path}.{key}")
         elif isinstance(node, list):
@@ -984,48 +1178,19 @@ class WorldTranslator:
             for key, value in tag.items():
                 child_path = f"{path}/{key}"
                 if isinstance(value, nbt.TAG_String):
-                    raw = value.value
-                    is_sign = key in {"Text1", "Text2", "Text3", "Text4"} and self.scan_config["translate_signs"]
-                    is_custom_name = key == "CustomName" and self.scan_config["translate_custom_names"]
-                    is_item_name = "/display/Name" in child_path and self.scan_config["translate_item_names"]
-                    if is_sign or is_custom_name or is_item_name:
-                        try:
-                            component = self.parse_text_component(raw)
-                        except json.JSONDecodeError:
-                            if self.should_translate_text(raw):
-                                refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                        else:
-                            self.collect_json_text_refs(component, refs, child_path)
-                            refs.append(TextRef("json_tag", tag=value, path=child_path))
-                    elif key == "Command" and self.scan_config["translate_command_output"]:
-                        self.collect_command_refs(raw, refs, child_path)
+                    if key == "Command" and self.scan_config["translate_command_output"]:
+                        self.collect_command_refs(value.value, refs, child_path)
                         refs.append(TextRef("command_tag", tag=value, path=child_path))
-                    elif key == "title" and self.scan_config["translate_titles"]:
-                        if self.should_translate_text(raw):
-                            refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                    elif key == "filtered_title" and self.scan_config["translate_filtered_titles"]:
-                        if self.should_translate_text(raw):
-                            refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                    else:
-                        self.collect_tag_refs(value, refs, child_path)
+                    elif self._should_collect_nbt_string(key, child_path):
+                        self._collect_nbt_string(value, refs, child_path)
                 else:
                     self.collect_tag_refs(value, refs, child_path)
         elif isinstance(tag, nbt.TAG_List):
             for idx, item in enumerate(tag):
                 child_path = f"{path}/{idx}"
                 if isinstance(item, nbt.TAG_String):
-                    raw = item.value
-                    is_page = "/pages/" in child_path and self.scan_config["translate_books"]
-                    is_lore = "/display/Lore/" in child_path and self.scan_config["translate_lore"]
-                    if is_page or is_lore:
-                        try:
-                            component = self.parse_text_component(raw)
-                        except json.JSONDecodeError:
-                            if self.should_translate_text(raw):
-                                refs.append(TextRef("plain_tag", tag=item, path=child_path))
-                        else:
-                            self.collect_json_text_refs(component, refs, child_path)
-                            refs.append(TextRef("json_tag", tag=item, path=child_path))
+                    if self._should_collect_nbt_string("", child_path):
+                        self._collect_nbt_string(item, refs, child_path)
                 else:
                     self.collect_tag_refs(item, refs, child_path)
 
@@ -1045,14 +1210,21 @@ class WorldTranslator:
                 add_text(ref.obj[ref.key])
             elif ref.kind == "translate_key":
                 add_text(self.text_from_translate_key(ref.obj[ref.key]["translate"]))
-            elif ref.kind in {"json_tag", "command_tag"}:
-                raw = ref.tag.value if ref.kind != "command_tag" else self.extract_command_json(ref.tag.value)
+            elif ref.kind in {"json_tag", "command_tag", "json_string_field"}:
                 if ref.kind == "command_tag":
+                    raw = self.extract_command_json(ref.tag.value)
                     if raw is None:
                         continue
                     raw_json = raw[1]
+                elif ref.kind == "json_string_field":
+                    raw_json = ref.obj.get(ref.key, "")
+                    if not isinstance(raw_json, str):
+                        continue
+                    extracted = self.extract_command_json(raw_json)
+                    if extracted:
+                        raw_json = extracted[1]
                 else:
-                    raw_json = raw
+                    raw_json = ref.tag.value
                 try:
                     component = json.loads(raw_json)
                 except json.JSONDecodeError:
@@ -1079,6 +1251,21 @@ class WorldTranslator:
 
         return ordered
 
+    def _patch_event_string(self, value: str, translations: dict[str, str]) -> str:
+        if not isinstance(value, str) or not value:
+            return value
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return self.patch_command_component(value, translations)
+        if isinstance(parsed, str):
+            translated = translations.get(parsed)
+            return translated if translated else value
+        if isinstance(parsed, (dict, list)):
+            self.patch_json_component(parsed, translations)
+            return self.serialize_text_component(parsed)
+        return value
+
     def patch_json_component(self, node: Any, translations: dict[str, str]) -> None:
         if isinstance(node, dict):
             text_value = node.get("text")
@@ -1097,16 +1284,29 @@ class WorldTranslator:
                 if translated:
                     node["text"] = translated
 
-            if self.scan_config["translate_command_output"]:
-                click_event = node.get("clickEvent")
-                if isinstance(click_event, dict) and isinstance(click_event.get("value"), str):
-                    click_event["value"] = self.patch_command_component(click_event["value"], translations)
+            for event_key in CLICK_EVENT_KEYS:
+                click_event = node.get(event_key)
+                if isinstance(click_event, dict):
+                    for value_key in CLICK_EVENT_VALUE_KEYS:
+                        if isinstance(click_event.get(value_key), str):
+                            click_event[value_key] = self._patch_event_string(
+                                click_event[value_key], translations
+                            )
 
-                hover_event = node.get("hoverEvent")
-                if isinstance(hover_event, dict) and isinstance(hover_event.get("value"), str):
-                    hover_event["value"] = self.patch_command_component(hover_event["value"], translations)
+            for event_key in HOVER_EVENT_KEYS:
+                hover_event = node.get(event_key)
+                if isinstance(hover_event, dict):
+                    for hover_key, hover_item in list(hover_event.items()):
+                        if isinstance(hover_item, str):
+                            hover_event[hover_key] = self._patch_event_string(hover_item, translations)
 
+            event_keys = {*CLICK_EVENT_KEYS, *HOVER_EVENT_KEYS}
             for key, value in list(node.items()):
+                if key in event_keys and isinstance(value, dict):
+                    for nested in value.values():
+                        if isinstance(nested, (dict, list)):
+                            self.patch_json_component(nested, translations)
+                    continue
                 if isinstance(value, (dict, list)):
                     self.patch_json_component(value, translations)
         elif isinstance(node, list):
@@ -1154,6 +1354,13 @@ class WorldTranslator:
                         id(n) for n in self._iter_json_nodes(component)
                     }:
                         handled_translate_key_ids.add(id(child_ref))
+            elif ref.kind == "json_string_field":
+                original = ref.obj.get(ref.key, "")
+                if isinstance(original, str) and original:
+                    updated = self._patch_event_string(original, translations)
+                    if updated != original:
+                        ref.obj[ref.key] = updated
+                        changed += 1
             elif ref.kind == "command_tag":
                 updated = self.patch_command_component(ref.tag.value, translations)
                 if updated != ref.tag.value:
@@ -1212,7 +1419,7 @@ class WorldTranslator:
         changed_chunks = 0
         unique_texts: set[str] = set()
         candidate_count = 0
-        parse_error = False
+        chunk_errors: list[dict[str, Any]] = []
         entries: list[tuple[int, bytes, int]] = []
 
         for idx in range(1024):
@@ -1224,19 +1431,33 @@ class WorldTranslator:
                 entries.append((0, b"", 0))
                 continue
 
+            original_offset = sector_offset * 4096
+
+            def original_chunk() -> tuple[int, bytes, int]:
+                if original_offset + 5 > len(data):
+                    return (0, b"", 0)
+                orig_length = int.from_bytes(data[original_offset : original_offset + 4], "big")
+                if orig_length <= 1 or original_offset + 4 + orig_length > len(data):
+                    return (0, b"", 0)
+                orig_bytes = data[original_offset : original_offset + 4 + orig_length]
+                orig_ts = int.from_bytes(timestamps[idx * 4 : idx * 4 + 4], "big")
+                return (orig_length, orig_bytes, orig_ts)
+
             try:
                 compression, payload, length = self.load_chunk_payload(data, sector_offset)
                 raw_nbt = self.decompress_payload(compression, payload)
                 root = self.parse_nbt_bytes(raw_nbt)
-            except Exception:
-                parse_error = True
-                break
+            except Exception as exc:
+                chunk_errors.append({"chunk": idx, "reason": "parse_error", "error": str(exc)})
+                entries.append(original_chunk())
+                continue
 
             refs: list[TextRef] = []
             self.collect_tag_refs(root, refs, f"{path.name}#{idx}")
             texts = self.extract_unique_texts(refs)
             unique_texts.update(texts)
             candidate_count += len(texts)
+            self._progress_context["file_candidates"] = candidate_count
 
             if texts and not self.config["dry_run"]:
                 translations = self.translator.translate_texts(texts)
@@ -1251,18 +1472,29 @@ class WorldTranslator:
                 length = len(payload) + 1
 
             full_chunk = length.to_bytes(4, "big") + bytes([compression]) + payload
+            if math.ceil(len(full_chunk) / 4096) > MAX_REGION_SECTORS:
+                chunk_errors.append({
+                    "chunk": idx,
+                    "reason": "oversized_chunk",
+                    "error": "Chunk exceeds 255 sectors; external .mcc files are unsupported",
+                })
+                if local_changes > 0:
+                    changed_chunks -= 1
+                entries.append(original_chunk())
+                continue
+
             timestamp = int.from_bytes(timestamps[idx * 4 : idx * 4 + 4], "big")
             entries.append((length, full_chunk, timestamp))
 
-        if parse_error:
-            self.candidate_texts.update(unique_texts)
-            return {
-                "file": str(path),
-                "changed_chunks": 0,
-                "unique_texts": len(unique_texts),
-                "candidates": candidate_count,
-                "skipped": "parse_error",
-            }
+        if chunk_errors:
+            self.file_errors.extend({"file": str(path), **error} for error in chunk_errors)
+            self.report["errors"].extend({"file": str(path), **error} for error in chunk_errors)
+            self.emit(
+                "file_error",
+                file=str(path),
+                message=f"{len(chunk_errors)} chunk(s) skipped",
+                chunk_errors=chunk_errors,
+            )
 
         if changed_chunks > 0 and not self.config["dry_run"]:
             self.backup_once(path)
@@ -1275,6 +1507,8 @@ class WorldTranslator:
                 if length == 0:
                     continue
                 needed_sectors = math.ceil(len(chunk_bytes) / 4096)
+                if needed_sectors > MAX_REGION_SECTORS:
+                    continue
                 header_locations[idx * 4 : idx * 4 + 3] = sector_cursor.to_bytes(3, "big")
                 header_locations[idx * 4 + 3] = needed_sectors
                 header_timestamps[idx * 4 : idx * 4 + 4] = timestamp.to_bytes(4, "big")
@@ -1299,12 +1533,16 @@ class WorldTranslator:
                 raise last_error
 
         self.candidate_texts.update(unique_texts)
-        return {
+        result = {
             "file": str(path),
             "changed_chunks": changed_chunks,
             "unique_texts": len(unique_texts),
             "candidates": candidate_count,
         }
+        if chunk_errors:
+            result["skipped_chunks"] = len(chunk_errors)
+            result["chunk_errors"] = chunk_errors
+        return result
 
     def translate_resource_packs(self) -> None:
         for zip_path_str in self.config["resource_pack"]["zip_paths"]:

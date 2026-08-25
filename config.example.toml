@@ -1,36 +1,40 @@
-# Required
-world_dir = "../Trip to BrennenBurg REMAKE"
+# Required. Point this at a Minecraft Java world folder.
+world_dir = "./world"
 
-# Optional
-report_path = "./translation_report.json"
+# Optional. Leave empty to use the default location:
+# real runs write inside the world; scans write under ./translation_reports/<world>/.
+report_path = ""
 dry_run = false
 backup = true
 backup_suffix = ".bak_translate"
 batch_size = 40
 temperature = 0.3
 
-# If true, empty API/model/base_url values fall back to ./translate.py
+# If true, empty API/model/base_url values fall back to translate.py after env vars.
 inherit_translate_py = true
-translate_py_path = "../translate.py"
+translate_py_path = "./translate.py"
 
 [api]
-# Supported: comet, openai, gemini, anthropic, openrouter
+# Supported: comet, openai, gemini, anthropic, openrouter, custom_openai, custom_anthropic
 provider = "comet"
 
-# If left empty, the provider-specific env var is checked first.
+# Resolution order: this value → provider-specific env var → translate.py (if inherit is on).
 api_key = ""
 base_url = "https://api.cometapi.com/v1"
 model = ""
 request_timeout = 120
+rpm_limit = 0
+tpm_limit = 0
 
 [prompt]
 target_language = "한국어"
 style_preset = "neutral"
 
 # Extra style instructions appended after the preset.
+# Ignored when custom_system_prompt is set.
 style_prompt = ""
 
-# If you set this, it overrides the preset entirely.
+# If you set this, it replaces the preset and extra style instructions entirely.
 custom_system_prompt = ""
 
 [scan]
@@ -59,10 +63,10 @@ skip_command_like_text = true
 
 # If a text component uses {"translate":"prefix.some_key"} and the prefix matches,
 # the tool can turn the key into text and translate that as a fallback.
-component_translate_key_prefixes = ["brennenburg."]
+component_translate_key_prefixes = []
 
 [scan.overrides]
-prison1 = "감옥1"
+# Optional exact replacements: "Source text" = "Translated text"
 
 [resource_pack]
 enabled = false
@@ -75,3 +79,11 @@ target_lang_file = "ko_kr.json"
 
 # If true, existing target language files in the zip are left untouched.
 skip_if_target_exists = false
+
+[runtime]
+checkpoint_enabled = true
+checkpoint_path = ""
+resume_from_checkpoint = false
+continue_on_file_error = true
+max_batch_retries = 3
+max_file_write_retries = 2

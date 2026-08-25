@@ -19,7 +19,7 @@ const FALLBACK_META = {
     temperature: 0.3,
     backup_suffix: ".bak_translate",
     request_timeout: 120,
-    region_dirs: ["region", "entities", "DIM-1/region", "DIM-1/entities"],
+    region_dirs: ["region", "entities", "DIM-1/region", "DIM-1/entities", "DIM1/region", "DIM1/entities"],
     skip_patterns: ["*.bak_translate"],
     resource_pack_source_lang_files: ["en_us.json", "zh_cn.json"],
   },
@@ -39,7 +39,7 @@ const I18N = {
     brandCopy:
       "공급자, 모델, 프롬프트, 범위, 리소스팩, 진행 상태를 한 화면에서 정리합니다. 초반에는 안전하게 스캔하고, 확인이 끝나면 그대로 실번역으로 넘기면 됩니다.",
     heroKicker: "Minecraft Localization",
-    heroTitle: "마인크래프트 월드와 모드팩을\n원하는 언어로 완벽하게 번역하세요",
+    heroTitle: "마인크래프트 월드와 모드팩을\n원하는 언어로 번역하세요",
     heroText:
       "단순한 텍스트 번역을 넘어 명령어, NBT 데이터, 그리고 리소스팩까지 안전하게 처리합니다. 다양한 AI를 활용해 고유명사와 말투를 유지하며 몰입감 있는 게임 환경을 만들어보세요.",
     providerCustom: "기타 / Custom",
@@ -60,7 +60,7 @@ const I18N = {
     fieldWorldDir: "월드 폴더 경로",
     helpWorldDir: "region, entities, resources.zip이 들어 있는 월드 폴더를 지정합니다.",
     fieldReportPath: "리포트 저장 경로",
-    helpReportPath: "비워두면 월드 내부 `translation_report.json`을 사용합니다.",
+    helpReportPath: "비워두면 실번역은 월드 내부 `translation_report.json`, 스캔은 프로젝트 `translation_reports/`에 저장합니다.",
     fieldTranslatePy: "translate.py 경로",
     helpTranslatePy: "기존 API 키, base_url, 모델, 시스템 프롬프트를 상속할 원본 파일입니다.",
     fieldInheritTranslatePy: "translate.py 상속",
@@ -161,7 +161,7 @@ const I18N = {
     fieldContinueOnError: "파일 오류 시 계속 진행",
     helpContinueOnError: "문제가 있는 파일만 건너뛰고 나머지 작업을 계속합니다.",
     fieldCheckpointPath: "체크포인트 경로",
-    helpCheckpointPath: "비워두면 월드 폴더 안 `.translation_checkpoint.json`을 사용합니다.",
+    helpCheckpointPath: "비워두면 실번역은 월드 안 `.translation_checkpoint.json`, 스캔은 `translation_reports/`를 사용합니다.",
     fieldBatchRetries: "배치 재시도 횟수",
     helpBatchRetries: "API 오류가 나면 이 횟수만큼 먼저 재시도합니다.",
     fieldWriteRetries: "파일 쓰기 재시도 횟수",
@@ -227,7 +227,7 @@ const I18N = {
     summaryFailed: "작업이 중단됐습니다. 경로, 공급자, 모델, API 키를 확인하세요.",
     runHintIdle: "월드 폴더를 먼저 지정한 뒤 `스캔만 실행`으로 안전하게 시작하는 편이 좋습니다.",
     runHintReady: "지금 바로 새 작업을 시작할 수 있습니다. 체크포인트 저장이 켜져 있으면 나중에 이어서 할 수 있습니다.",
-    runHintRunning: "현재 작업이 실행 중입니다. 중지가 필요하면 `현재 작업 중지`를 누르면 체크포인트를 저장한 뒤 멈춥니다.",
+    runHintRunning: "현재 작업이 실행 중입니다. 중지는 파일/배치 사이에서 반영되며, 요청 중에는 `중지 요청됨`으로 표시됩니다.",
     runHintResume: "이전 중단 작업을 이어갈 수 있습니다. `이전 진행 재개`를 누르면 저장된 체크포인트부터 다시 시작합니다.",
     runHintCancelled: "작업이 중지된 상태입니다. 설정을 유지한 채 `이전 진행 재개`를 누르면 이어서 진행합니다.",
     runHintFailed: "오류로 멈췄지만 체크포인트가 있으면 이어서 진행할 수 있습니다. 설정을 확인한 뒤 재개를 시도하세요.",
@@ -294,6 +294,7 @@ const I18N = {
     eventFatalError: "치명적 오류 발생 · {message}",
     eventDone: "전체 작업 완료 · 수정 파일 {changed} · 후보 텍스트 {candidates}",
     eventCheckpointIgnored: "설정 또는 대상 월드가 달라 이전 체크포인트를 사용하지 않았습니다.",
+    eventBackupExists: "기존 백업이 있어 현재 파일을 추가 백업했습니다 · {file}",
     localJobRecovered: "새로고침 전부터 실행 중인 작업을 다시 연결했습니다.",
     estimateScale: "약 {tokens} tokens · 텍스트 {texts}개",
     estimateTimeLimited: "약 {minutes}분",
@@ -307,6 +308,7 @@ const I18N = {
     confirmBackupDisabled: "꺼짐 · 원본이 직접 수정됩니다",
     confirmCancel: "취소",
     confirmContinue: "백업 확인 후 번역",
+    confirmContinueNoBackup: "백업 없이 번역",
     eventCompleted: "리포트를 저장했습니다.",
     eventFailed: "작업 실패: {message}",
     eventUnknown: "이벤트: {event}",
@@ -321,7 +323,7 @@ const I18N = {
     brandCopy:
       "Manage provider, model, prompt, scan scope, resource-pack options, and live execution state in one place. Start with a scan, review it, then move straight into a full translation run.",
     heroKicker: "Minecraft Localization",
-    heroTitle: "Flawlessly localize your Minecraft worlds and modpacks",
+    heroTitle: "Localize your Minecraft worlds and modpacks",
     heroText:
       "Go beyond simple text translation. Safely process commands, NBT data, and resource packs while retaining their format. Use diverse AI models to preserve proper nouns and tone, creating immersive localized gameplay.",
     providerCustom: "Other / Custom",
@@ -342,7 +344,7 @@ const I18N = {
     fieldWorldDir: "World directory",
     helpWorldDir: "Point to the world folder that contains region, entities, and optionally resources.zip.",
     fieldReportPath: "Report output path",
-    helpReportPath: "Leave blank to use `translation_report.json` inside the world folder.",
+    helpReportPath: "Leave blank to write `translation_report.json` inside the world for real runs, or under `translation_reports/` for scans.",
     fieldTranslatePy: "translate.py path",
     helpTranslatePy: "Legacy file used to inherit API key, base_url, model, and prompt defaults.",
     fieldInheritTranslatePy: "Inherit from translate.py",
@@ -443,7 +445,7 @@ const I18N = {
     fieldContinueOnError: "Continue after file errors",
     helpContinueOnError: "Skip broken files and keep the rest of the job moving.",
     fieldCheckpointPath: "Checkpoint path",
-    helpCheckpointPath: "Leave blank to use `.translation_checkpoint.json` inside the world folder.",
+    helpCheckpointPath: "Leave blank to use `.translation_checkpoint.json` in the world for real runs, or `translation_reports/` for scans.",
     fieldBatchRetries: "Batch retry count",
     helpBatchRetries: "Retry API failures this many times before splitting batches smaller.",
     fieldWriteRetries: "File write retry count",
@@ -509,7 +511,7 @@ const I18N = {
     summaryFailed: "The job stopped early. Check paths, provider settings, model name, and API credentials.",
     runHintIdle: "Pick the world directory first, then start with `Run Scan Only` for the safest first pass.",
     runHintReady: "You can start a new job now. If checkpoint saving is enabled, you can stop and continue later.",
-    runHintRunning: "A job is running right now. Use `Stop Current Job` if you need to stop safely and keep a checkpoint.",
+    runHintRunning: "A job is running. Stop is honored between files/batches; the monitor shows `stop requested` until then.",
     runHintResume: "Previous progress can be resumed. Use `Resume Previous Progress` to continue from the saved checkpoint.",
     runHintCancelled: "The job is stopped. Keep your settings and use `Resume Previous Progress` to continue.",
     runHintFailed: "The job stopped on an error, but you may still be able to continue from a saved checkpoint after fixing the settings.",
@@ -576,6 +578,7 @@ const I18N = {
     eventFatalError: "Fatal error encountered · {message}",
     eventDone: "Job finished · changed files {changed} · candidate texts {candidates}",
     eventCheckpointIgnored: "The saved checkpoint was not used because its world or translation settings differ.",
+    eventBackupExists: "An existing backup was found, so the current file was copied to a timestamped backup · {file}",
     localJobRecovered: "Reconnected to the job that was still running before this page reloaded.",
     estimateScale: "~{tokens} tokens · {texts} texts",
     estimateTimeLimited: "~{minutes} min",
@@ -589,6 +592,7 @@ const I18N = {
     confirmBackupDisabled: "Off · originals will be modified directly",
     confirmCancel: "Cancel",
     confirmContinue: "Translate with backup",
+    confirmContinueNoBackup: "Translate without backup",
     eventCompleted: "Saved the report.",
     eventFailed: "Job failed: {message}",
     eventUnknown: "Event: {event}",
@@ -603,7 +607,7 @@ const I18N = {
     brandCopy:
       "供給元、モデル、プロンプト、翻訳範囲、リソースパック設定、進行状況を一画面で管理します。まずはスキャンで確認し、そのまま本翻訳へ進めます。",
     heroKicker: "Minecraft Localization",
-    heroTitle: "マインクラフトのワールドとモッドパックを\nお好みの言語へ完璧に翻訳します",
+    heroTitle: "マインクラフトのワールドとモッドパックを\nお好みの言語へ翻訳します",
     heroText:
       "単なるテキスト翻訳を超えて、コマンドやNBTデータ、リソースパックまで形式を保ったまま安全に処理します。多様なAIを活用して固有名詞や口調を維持し、没入感のあるゲーム環境を構築しましょう。",
     providerCustom: "その他 / Custom",
@@ -624,7 +628,7 @@ const I18N = {
     fieldWorldDir: "ワールドフォルダ",
     helpWorldDir: "region、entities、resources.zip を含むワールドフォルダを指定します。",
     fieldReportPath: "レポート保存先",
-    helpReportPath: "空欄ならワールド内の `translation_report.json` を使います。",
+    helpReportPath: "空欄なら本翻訳はワールド内の `translation_report.json`、スキャンはプロジェクトの `translation_reports/` に保存します。",
     fieldTranslatePy: "translate.py のパス",
     helpTranslatePy: "APIキー、base_url、モデル、プロンプト既定値を継承する元ファイルです。",
     fieldInheritTranslatePy: "translate.py を継承",
@@ -725,7 +729,7 @@ const I18N = {
     fieldContinueOnError: "ファイルエラー後も継続",
     helpContinueOnError: "壊れたファイルだけ飛ばして残りを続行します。",
     fieldCheckpointPath: "チェックポイント保存先",
-    helpCheckpointPath: "空欄ならワールド内の `.translation_checkpoint.json` を使います。",
+    helpCheckpointPath: "空欄なら本翻訳はワールド内の `.translation_checkpoint.json`、スキャンは `translation_reports/` を使います。",
     fieldBatchRetries: "バッチ再試行回数",
     helpBatchRetries: "API エラー時に小分け前にこの回数だけ再試行します。",
     fieldWriteRetries: "書き込み再試行回数",
@@ -791,7 +795,7 @@ const I18N = {
     summaryFailed: "ジョブが途中で停止しました。パス、供給元、モデル、APIキーを確認してください。",
     runHintIdle: "まずワールドフォルダを指定し、最初は `スキャンのみ実行` から始めるのが安全です。",
     runHintReady: "新しいジョブを開始できます。チェックポイント保存が有効なら途中停止して後で再開できます。",
-    runHintRunning: "現在ジョブが動作中です。安全に止めたい場合は `現在の作業を停止` を使ってください。",
+    runHintRunning: "ジョブ実行中です。停止はファイル/バッチの区切りで反映され、それまでは「停止要求済み」と表示されます。",
     runHintResume: "前回の進行を再開できます。`前回の進行を再開` を押すと保存済みチェックポイントから続行します。",
     runHintCancelled: "ジョブは停止中です。設定を保ったまま `前回の進行を再開` で続きから進められます。",
     runHintFailed: "エラーで停止しましたが、チェックポイントが残っていれば設定修正後に再開できる場合があります。",
@@ -858,6 +862,7 @@ const I18N = {
     eventFatalError: "致命的エラー発生 · {message}",
     eventDone: "全体完了 · 変更ファイル {changed} · 候補テキスト {candidates}",
     eventCheckpointIgnored: "ワールドまたは翻訳設定が異なるため、保存済みチェックポイントを使用しませんでした。",
+    eventBackupExists: "既存バックアップがあるため、現在のファイルをタイムスタンプ付きで追加保存しました · {file}",
     localJobRecovered: "ページ更新前から実行中のジョブに再接続しました。",
     estimateScale: "約 {tokens} tokens · テキスト {texts} 件",
     estimateTimeLimited: "約 {minutes} 分",
@@ -871,6 +876,7 @@ const I18N = {
     confirmBackupDisabled: "オフ · 元ファイルを直接変更",
     confirmCancel: "キャンセル",
     confirmContinue: "バックアップして翻訳",
+    confirmContinueNoBackup: "バックアップなしで翻訳",
     eventCompleted: "レポートを保存しました。",
     eventFailed: "ジョブ失敗: {message}",
     eventUnknown: "イベント: {event}",
@@ -892,6 +898,8 @@ const state = {
   pollTimer: null,
   pollInFlight: false,
   renderTimer: null,
+  checkpointResumable: false,
+  checkpointStatusTimer: null,
 };
 
 const dom = {};
@@ -921,6 +929,7 @@ async function init() {
   populateForm(draft);
   renderMonitor();
   await recoverActiveJob();
+  await refreshCheckpointStatus();
   state.renderTimer = window.setInterval(refreshRelativeTime, 1000);
 }
 
@@ -1125,7 +1134,9 @@ function applyTheme() {
 function applyLanguage() {
   document.documentElement.lang = state.lang;
   document.querySelectorAll("[data-lang-switch]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.langSwitch === state.lang);
+    const active = button.dataset.langSwitch === state.lang;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   });
 }
 
@@ -1213,6 +1224,7 @@ function persistDraft() {
   state.draft = collectDraft();
   const stored = { ...state.draft, apiKey: "" };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  scheduleCheckpointStatusRefresh();
 }
 
 function collectDraft() {
@@ -1498,6 +1510,7 @@ function buildPayload(forceDryRun, resumeFromCheckpoint = false) {
       custom_system_prompt: draft.customSystemPrompt,
     },
     scan: {
+      region_dirs: state.meta?.defaults?.region_dirs || FALLBACK_META.defaults.region_dirs,
       skip_patterns: splitLines(draft.skipPatterns),
       translate_signs: draft.translateSigns,
       translate_books: draft.translateBooks,
@@ -1813,9 +1826,9 @@ async function recoverActiveJob() {
 
 function requestTranslationConfirmation() {
   const draft = collectDraft();
-  dom.confirmWorldPath.textContent = draft.worldDir.trim() || "—";
+  dom.confirmWorldPath.textContent = (draft.worldDir.trim() || "—").replace(/\\/g, "/");
   dom.confirmBackupState.textContent = t(draft.backup ? "confirmBackupEnabled" : "confirmBackupDisabled");
-  dom.confirmContinueButton.textContent = t(draft.backup ? "confirmContinue" : "translateButton");
+  dom.confirmContinueButton.textContent = t(draft.backup ? "confirmContinue" : "confirmContinueNoBackup");
 
   return new Promise((resolve) => {
     const dialog = dom.translationConfirmDialog;
@@ -1831,7 +1844,7 @@ function setRunButtonsDisabled(disabled) {
   const status = state.job?.status || "idle";
   const running = disabled || status === "queued" || status === "running";
   const hasWorldDir = Boolean(dom.worldDir.value.trim());
-  const canResume = !running && hasWorldDir && (state.job ? Boolean(state.job.can_resume) : dom.checkpointEnabled.checked);
+  const canResume = !running && hasWorldDir && canResumeFromState(state.job);
 
   dom.scanButton.disabled = running;
   dom.translateButton.disabled = running;
@@ -1839,8 +1852,16 @@ function setRunButtonsDisabled(disabled) {
   dom.cancelButton.disabled = !state.activeJobId || !running;
 }
 
+function stripSecretsFromPayload(payload) {
+  const copy = JSON.parse(JSON.stringify(payload || {}));
+  if (copy.api && typeof copy.api === "object") {
+    copy.api.api_key = "";
+  }
+  return copy;
+}
+
 function exportSettings() {
-  const payload = buildPayload(false);
+  const payload = stripSecretsFromPayload(buildPayload(false));
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -2013,6 +2034,8 @@ function formatServerEvent(event) {
       });
     case "checkpoint_ignored":
       return t("eventCheckpointIgnored");
+    case "backup_exists":
+      return formatTemplate(t("eventBackupExists"), { file: baseName(event.file || "") });
     case "file_error":
       return formatTemplate(t("eventFileError"), { message: event.message || "" });
     case "file_write_retry":
@@ -2144,10 +2167,45 @@ function activityLabel(activity) {
 }
 
 function canResumeFromState(job) {
-  if (job) {
-    return Boolean(job.can_resume);
+  if (job && Boolean(job.can_resume)) {
+    return true;
   }
-  return Boolean(dom.worldDir.value.trim()) && dom.checkpointEnabled.checked;
+  return Boolean(state.checkpointResumable);
+}
+
+function scheduleCheckpointStatusRefresh() {
+  if (state.checkpointStatusTimer) {
+    window.clearTimeout(state.checkpointStatusTimer);
+  }
+  state.checkpointStatusTimer = window.setTimeout(() => {
+    refreshCheckpointStatus();
+  }, 250);
+}
+
+async function refreshCheckpointStatus() {
+  const hasWorld = Boolean(dom.worldDir?.value?.trim());
+  const enabled = Boolean(dom.checkpointEnabled?.checked);
+  if (!hasWorld || !enabled) {
+    state.checkpointResumable = false;
+    if (typeof setRunButtonsDisabled === "function" && dom.resumeButton) {
+      setRunButtonsDisabled(false);
+    }
+    return;
+  }
+  try {
+    const response = await fetch("/api/checkpoint-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: buildPayload(false) }),
+    });
+    const data = await response.json();
+    state.checkpointResumable = Boolean(response.ok && data.resumable);
+  } catch {
+    state.checkpointResumable = false;
+  }
+  if (dom.resumeButton) {
+    setRunButtonsDisabled(false);
+  }
 }
 
 function runHintLabel(status, resumable) {
@@ -2194,7 +2252,8 @@ function formatTime(iso) {
 }
 
 function baseName(path) {
-  return String(path || "").split("/").pop() || String(path || "");
+  const normalized = String(path || "").replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || String(path || "");
 }
 
 function t(key) {

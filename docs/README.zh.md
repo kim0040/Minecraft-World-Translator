@@ -55,11 +55,15 @@ minecraft-world-translator/
 │   ├── README.ko.md
 │   ├── README.ja.md
 │   └── README.zh.md
+├── .env.example
 ├── config.example.toml
+├── env_utils.py
 ├── llm_backends.py
 ├── mc_world_translator.py
 ├── requirements.txt
 ├── run_web_ui.command
+├── run_web_ui.bat
+├── test_core.py
 ├── webui_server.py
 └── webui/
     ├── app.js
@@ -186,6 +190,8 @@ python3 webui_server.py --open-browser
 python3 webui_server.py --host 0.0.0.0 --port 9000
 ```
 
+默认绑定地址是 `127.0.0.1`。绑定到 `0.0.0.0` 等非回环地址会把没有认证/CSRF 防护的界面暴露到网络。只有在可信网络中才应这样做；服务器会打印警告。
+
 提示：如果使用了快捷启动器，当 `8765` 端口报错的时候它也会帮您寻找下一个备用端口开启服务。
 
 ### Web UI 运行控制台提供哪些主要展示信息
@@ -205,7 +211,7 @@ python3 webui_server.py --host 0.0.0.0 --port 9000
 
 ### 安全且可预测的任务行为
 
-- **仅扫描**始终使用 `dry_run = true`。它会实际读取已配置的 region/entity 目录和资源包语言 JSON，统计去重后的候选文本，但不会修改世界文件或 ZIP。
+- **仅扫描**始终使用 `dry_run = true`。它会实际读取已配置的 region/entity 目录和资源包语言 JSON，统计去重后的候选文本，但不会修改世界文件或 ZIP。扫描报告/检查点的默认位置在项目的 `translation_reports/<世界名>/`，而不是世界目录内部。
 - **执行翻译**始终使用 `dry_run = false`，并在开始前显示目标世界路径和备份状态供最终确认。已保存的表单设置不会混淆这两个操作。
 - `scan.region_dirs` 是实际扫描范围。相对路径在世界目录内解析、保持配置顺序，并拒绝任何越出世界目录的路径。
 - 页面刷新后会自动重新连接仍在运行的任务。服务器会拒绝同一世界上的第二个并发任务，避免写入冲突。
@@ -323,9 +329,11 @@ tpm_limit = 0
 
 #### 判定及取用 API Key 钥匙优先读取顺序规则说明
 
-1. 位于对应 TOML 文本配置文件中的原始串代码（位于第一受信任排位）。
-2. 在本机或系统环境变量中声明的值域。
-3. 从过去保留开启前传的 `translate.py` 里读取继承的值（排在最末保护项）。
+1. TOML/界面中填写的值
+2. **当前所选供应商**的环境变量（或 `.env`）
+3. 前两步为空且启用继承时，才读取 `translate.py`
+
+不会改用其他供应商的密钥。环境变量优先于 `translate.py`。
 
 该支持所适配检索的运行环境内置变量有以下几个项：
 

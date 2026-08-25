@@ -114,20 +114,7 @@ def resolve_api_key(provider: str, current: str) -> str:
         return current
 
     env_name = provider_spec(provider)["env_var"]
-    if os.getenv(env_name):
-        return os.getenv(env_name, "")
-
-    fallback_order = [
-        "OPENAI_API_KEY",
-        "COMET_API_KEY",
-        "GEMINI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "OPENROUTER_API_KEY",
-    ]
-    for env_name in fallback_order:
-        if os.getenv(env_name):
-            return os.getenv(env_name, "")
-    return ""
+    return os.getenv(env_name, "")
 
 
 def default_base_url(provider: str) -> str:
@@ -270,6 +257,7 @@ class LLMProviderClient:
                 user_prompt=user_prompt,
                 temperature=temperature,
                 expect_json=expect_json,
+                max_output_tokens=max_output_tokens,
             )
         if self.family == "gemini":
             return self._complete_gemini(
@@ -289,11 +277,13 @@ class LLMProviderClient:
         raise RuntimeError(f"Unsupported provider family: {self.family}")
 
     def translate_mapping(self, payload: dict[str, str], *, system_prompt: str, temperature: float) -> dict[str, str]:
+        estimated = max(4096, min(16384, len(payload) * 256))
         raw = self.complete_text(
             system_prompt=system_prompt,
             user_prompt=json.dumps(payload, ensure_ascii=False, indent=2),
             temperature=temperature,
             expect_json=True,
+            max_output_tokens=estimated,
         )
         parsed = extract_json_object(raw)
         missing_keys = [key for key in payload if not isinstance(parsed.get(key), str)]
@@ -349,6 +339,7 @@ class LLMProviderClient:
         user_prompt: str,
         temperature: float,
         expect_json: bool,
+        max_output_tokens: int,
     ) -> str:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -357,6 +348,7 @@ class LLMProviderClient:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": temperature,
+            "max_tokens": max_output_tokens,
         }
         if expect_json:
             payload["response_format"] = {"type": "json_object"}
@@ -371,7 +363,12 @@ class LLMProviderClient:
         if not choices:
             raise RuntimeError(f"{provider_spec(self.provider)['label']} returned no choices.")
         message = choices[0].get("message", {})
-        return flatten_text_payload(message.get("content"))
+        text = flatten_text_payload(message.get("content"))
+        if choices[0].get("finish_reason") == "length":
+            raise RuntimeError(
+                f"{provider_spec(self.provider)['label']} truncated the response (finish_reason=length)."
+            )
+        return text
 
     def _list_models_openai_compatible(self) -> list[dict[str, Any]]:
         response = self._request_json("GET", f"{self.base_url}/models", headers=self._openai_headers())
@@ -401,7 +398,6 @@ class LLMProviderClient:
         max_output_tokens: int,
     ) -> str:
         model_name = self.model if self.model.startswith("models/") else f"models/{self.model}"
-        query = parse.urlencode({"key": self.api_key})
         payload: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -414,13 +410,16 @@ class LLMProviderClient:
             payload["generationConfig"]["responseMimeType"] = "application/json"
         response = self._request_json(
             "POST",
-            f"{self.base_url}/{model_name}:generateContent?{query}",
-            headers={"Content-Type": "application/json"},
+            f"{self.base_url}/{model_name}:generateContent",
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
             payload=payload,
         )
         candidates = response.get("candidates") or []
         if not candidates:
             raise RuntimeError("Gemini returned no candidates.")
+        finish_reason = str(candidates[0].get("finishReason") or "")
+        if finish_reason in {"MAX_TOKENS", "LENGTH"}:
+            raise RuntimeError("Gemini truncated the response (finishReason=MAX_TOKENS).")
         content = candidates[0].get("content", {})
         parts = content.get("parts") or []
         return "\n".join(
@@ -430,11 +429,10 @@ class LLMProviderClient:
         ).strip()
 
     def _list_models_gemini(self) -> list[dict[str, Any]]:
-        query = parse.urlencode({"key": self.api_key, "pageSize": 1000})
         response = self._request_json(
             "GET",
-            f"{self.base_url}/models?{query}",
-            headers={"Content-Type": "application/json"},
+            f"{self.base_url}/models?{parse.urlencode({'pageSize': 1000})}",
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
         )
         data = response.get("models") or []
         models: list[dict[str, Any]] = []

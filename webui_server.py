@@ -20,6 +20,7 @@ from mc_world_translator import (
     STYLE_PRESETS,
     TranslationCancelled,
     WorldTranslator,
+    checkpoint_status,
     enhance_style_prompt_for_config,
     list_models_for_config,
     merge_nested,
@@ -211,11 +212,10 @@ def summarize_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def discover_example_paths() -> dict[str, str]:
-    translate_py_path = BASE_DIR.parent / "translate.py"
-    sample_world_dir = BASE_DIR.parent / "Trip to BrennenBurg REMAKE"
+    translate_py_path = BASE_DIR / "translate.py"
     return {
         "translate_py_path": str(translate_py_path.resolve()) if translate_py_path.exists() else "",
-        "world_dir": str(sample_world_dir.resolve()) if sample_world_dir.exists() else "",
+        "world_dir": "",
     }
 
 
@@ -248,6 +248,15 @@ class JobManager:
                 raise ValueError("API key is missing. Set it in the UI, .env, environment, or translate.py defaults.")
             if not config["api"]["model"]:
                 raise ValueError("Model is missing. Set it in the UI or your defaults.")
+        if config["runtime"]["resume_from_checkpoint"]:
+            status = checkpoint_status(config)
+            if not status.get("resumable"):
+                reason = status.get("reason") or "missing"
+                raise ValueError(
+                    "No matching checkpoint found to resume "
+                    f"(reason: {reason}). Scan/Translate starts a new job; Resume requires a "
+                    "checkpoint saved from the same world and translation settings."
+                )
 
         job_id = uuid.uuid4().hex[:10]
         job = {
@@ -364,6 +373,7 @@ class JobManager:
             index = max(0, int(event.get("index", 0)) - 1)
             total = max(1, int(event.get("total", 0)))
             progress["processed_files"] = index
+            progress["file_translated_texts"] = 0
             progress["percent"] = max(progress["percent"], 12 + int(index / total * 80))
         elif name == "file_done":
             progress["phase"] = "scan"
@@ -373,6 +383,7 @@ class JobManager:
             index = int(event.get("index", 0))
             progress["processed_files"] = index
             progress["total_files"] = total
+            progress["file_translated_texts"] = 0
             progress["percent"] = max(progress["percent"], 12 + int(index / total * 80))
             progress["candidate_text_count"] = int(
                 event.get("candidate_text_count", progress["candidate_text_count"] + int(event.get("candidates", 0)))
@@ -380,11 +391,16 @@ class JobManager:
         elif name == "translation_batch_start":
             progress["phase"] = "translate"
             progress["current_activity"] = "translation_batch_start"
+            self._interpolate_batch_progress(progress, event, include_current_batch=False)
         elif name == "translation_batch_done":
             progress["phase"] = "translate"
             progress["current_activity"] = "translation_batch_done"
             progress["processed_batches"] += 1
             progress["processed_texts"] += int(event.get("batch_size", 0))
+            progress["file_translated_texts"] = int(progress.get("file_translated_texts", 0)) + int(
+                event.get("batch_size", 0)
+            )
+            self._interpolate_batch_progress(progress, event, include_current_batch=True)
         elif name == "translation_batch_error":
             progress["phase"] = "translate"
             progress["current_activity"] = "translation_batch_error"
@@ -490,6 +506,18 @@ class JobManager:
             self._append_event(job, event)
             self._update_progress(job, event)
 
+    @staticmethod
+    def _interpolate_batch_progress(progress: dict[str, Any], event: dict[str, Any], *, include_current_batch: bool) -> None:
+        total = max(1, int(event.get("file_total") or progress.get("total_files") or 1))
+        index = max(1, int(event.get("file_index") or (progress.get("processed_files") or 0) + 1))
+        candidates = max(1, int(event.get("file_candidates") or 1))
+        translated = int(progress.get("file_translated_texts", 0))
+        if not include_current_batch:
+            translated = max(0, translated)
+        frac = min(0.95, translated / candidates)
+        percent = 12 + int(((index - 1) + frac) / total * 80)
+        progress["percent"] = max(progress["percent"], min(92, percent))
+
 
 JOB_MANAGER = JobManager()
 
@@ -582,6 +610,16 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json(job, status=HTTPStatus.CREATED)
             return
 
+        if parsed.path == "/api/checkpoint-status":
+            try:
+                config = build_payload_config(payload)
+                status = checkpoint_status(config)
+            except Exception as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self.send_json(status)
+            return
+
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/cancel"):
             job_id = parsed.path.split("/")[-2]
             try:
@@ -667,14 +705,30 @@ class AppHandler(BaseHTTPRequestHandler):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the Minecraft World Translator web UI.")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind host. Default: 127.0.0.1")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host. Default: 127.0.0.1 (loopback). Do not use 0.0.0.0 unless you trust the network; there is no auth.",
+    )
     parser.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
     parser.add_argument("--open-browser", action="store_true", help="Open the browser automatically.")
     return parser
 
 
+def is_non_loopback_bind(host: str) -> bool:
+    lowered = (host or "").strip().lower()
+    return lowered not in {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
+
+
 def main() -> None:
     args = build_parser().parse_args()
+    if is_non_loopback_bind(args.host):
+        print("=" * 72)
+        print("WARNING: This UI has no authentication or CSRF protection.")
+        print(f"Binding to {args.host} exposes scan/translate controls to anyone who can")
+        print("reach this port, including starting real translations with your API key.")
+        print("Prefer the default --host 127.0.0.1 unless you trust the entire network.")
+        print("=" * 72)
     server = ThreadingHTTPServer((args.host, args.port), AppHandler)
     bound_host, bound_port = server.server_address[:2]
     display_host = args.host

@@ -16,11 +16,9 @@ If you have questions, feedback, or encounter errors, please contact:
 
 ## What It Can Translate
 
-- Sign text
-- Book pages
-- Book titles and `filtered_title`
-- Custom entity and item names
-- Item lore
+- Sign text, including 1.20+ `front_text` / `back_text` `messages` (and hanging signs)
+- Book pages, titles, and `filtered_title` (legacy NBT and 1.20.5+ `minecraft:written_book_content`)
+- Custom entity names and item names/lore (legacy `display` and 1.20.5+ `minecraft:custom_name` / `minecraft:lore`)
 - Text inside `tellraw`, `title`, `subtitle`, and `actionbar` commands
 - Optional resource pack `lang/*.json` files
 
@@ -55,11 +53,15 @@ minecraft-world-translator/
 │   ├── README.ko.md
 │   ├── README.ja.md
 │   └── README.zh.md
+├── .env.example
 ├── config.example.toml
+├── env_utils.py
 ├── llm_backends.py
 ├── mc_world_translator.py
 ├── requirements.txt
 ├── run_web_ui.command
+├── run_web_ui.bat
+├── test_core.py
 ├── webui_server.py
 └── webui/
     ├── app.js
@@ -119,6 +121,8 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
+
+Alternatively, double-click [run_web_ui.bat](./run_web_ui.bat) to create the venv, install dependencies, and start the local UI.
 
 If PowerShell blocks script activation, you can temporarily bypass the execution policy:
 
@@ -186,6 +190,8 @@ To change the host address and port number:
 python3 webui_server.py --host 0.0.0.0 --port 9000
 ```
 
+The default bind address is `127.0.0.1`. Binding to `0.0.0.0` (or any non-loopback address) exposes this UI **without authentication or CSRF protection**. Anyone who can reach the port can start translations and read job data. Only do this on a trusted network; the server prints a loud warning when you do.
+
 When using the one-click launcher, if the default port is busy, the script will either reconnect to the existing UI or seamlessly transition to the next available port.
 
 ### What the Web UI Shows
@@ -205,8 +211,9 @@ When using the one-click launcher, if the default port is busy, the script will 
 
 ### Safe and predictable job behavior
 
-- **Scan only** always runs with `dry_run = true`. It inspects configured region/entity directories and resource-pack language JSON files, counts unique candidate texts, and never writes world or ZIP data.
+- **Scan only** always runs with `dry_run = true`. It inspects configured region/entity directories and resource-pack language JSON files, counts unique candidate texts, and never writes world or ZIP data. Default scan reports and checkpoints are stored under `translation_reports/<world-name>/` in the project directory, not inside the world folder.
 - **Run translation** always runs with `dry_run = false` and opens a final confirmation showing the target world and backup state. The two actions cannot be mixed by a saved form setting.
+- Resume is enabled only after the server confirms a matching checkpoint exists for the current world and translation settings. A missing or mismatched checkpoint is rejected instead of starting a new real translation.
 - `scan.region_dirs` is the authoritative scan scope. Relative paths are resolved inside the world folder, configured order is preserved, and paths escaping the world are rejected.
 - A running job is restored in the monitor after a page reload. The server rejects a second simultaneous job for the same world to prevent competing writes.
 - Checkpoints resume only when the world and translation-affecting settings match. A stale checkpoint is ignored instead of mixing models, prompts, scopes, or resource-pack settings.
@@ -311,6 +318,23 @@ tpm_limit = 0
 - `rpm_limit`: Limits the Requests Per Minute. If the rate limit is reached, the translator will automatically delay the next API call to protect your free-tier limits. Set to `0` for unlimited.
 - `tpm_limit`: Limits the Tokens Per Minute. Protects your quota by dynamically delaying requests based on token estimations. Set to `0` for unlimited.
 
+### Runtime Section
+
+```toml
+[runtime]
+checkpoint_enabled = true
+checkpoint_path = ""
+resume_from_checkpoint = false
+continue_on_file_error = true
+max_batch_retries = 3
+max_file_write_retries = 2
+```
+
+- `checkpoint_enabled`: Save progress so a cancelled or failed real run can resume.
+- `checkpoint_path`: Override the checkpoint file. Empty uses the world folder for real runs and `translation_reports/` for scans.
+- `continue_on_file_error`: Skip a broken file and keep going.
+- Chunk parse errors inside a region file are skipped individually; already-patched chunks are still written. External `.mcc` overflow chunks (>255 sectors) are not rewritten.
+
 #### Provider Values
 
 - `comet`
@@ -323,9 +347,11 @@ tpm_limit = 0
 
 #### API Key Resolution Order
 
-1. The value defined in the TOML configuration file.
-2. Provider-specific environment variables.
-3. Inherited values from `translate.py` (if enabled).
+1. The value defined in the TOML configuration file or the UI field.
+2. The **selected provider's** environment variable (or `.env`).
+3. Inherited values from `translate.py` (if enabled), only when the previous steps are empty.
+
+Environment variables from other providers are never used as a fallback. This keeps a Gemini key from being sent to OpenAI, and it prefers `.env` over a leftover `translate.py`.
 
 Supported environment variables:
 
@@ -354,7 +380,7 @@ custom_system_prompt = ""
 - `style_prompt`
   - Additional custom instructions appended after the preset.
 - `custom_system_prompt`
-  - Completely overrides the default system prompt and preset.
+  - Completely overrides the default system prompt, preset, and extra style instructions.
 
 ### Scan Section
 
@@ -410,6 +436,9 @@ If you are unfamiliar with Minecraft's internal file structures, simply follow t
 ## Technical Notes
 
 - The translation process works by scanning NBT data structures inside `.mca` region files.
+- Java Edition worlds are supported. Bedrock is not.
+- Modern 1.20+ signs (`front_text`/`back_text`/`messages`) and 1.20.5+ item/book data components are collected in addition to legacy `Text1`–`Text4`, `display`, and `pages`.
+- Stop/cancel is checked between files and translation batches, not in the middle of a single API call. The UI shows a stop-requested state until the current batch finishes.
 - The tool precisely replaces only recognized user-facing text fields.
 - Command-like strings (such as `/kill @p`) can be identified and intentionally skipped.
 - Resource pack translation targets `lang/*.json` files inside zip archives.

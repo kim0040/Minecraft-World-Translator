@@ -55,11 +55,15 @@ minecraft-world-translator/
 │   ├── README.ko.md
 │   ├── README.ja.md
 │   └── README.zh.md
+├── .env.example
 ├── config.example.toml
+├── env_utils.py
 ├── llm_backends.py
 ├── mc_world_translator.py
 ├── requirements.txt
 ├── run_web_ui.command
+├── run_web_ui.bat
+├── test_core.py
 ├── webui_server.py
 └── webui/
     ├── app.js
@@ -182,6 +186,8 @@ python3 webui_server.py
 
 - `python3 webui_server.py --host 0.0.0.0 --port 9000`
 
+既定のバインド先は `127.0.0.1` です。`0.0.0.0` などループバック以外へバインドすると、認証も CSRF 防御もない UI がネットワークに公開されます。信頼できるネットワーク以外では使わないでください。サーバーは警告を表示します。
+
 ### Web UI の画面に表示されるもの
 
 - LLM プロバイダの選択欄
@@ -199,7 +205,7 @@ python3 webui_server.py
 
 ### 安全で予測可能なジョブ動作
 
-- **スキャンのみ**は常に `dry_run = true` です。設定済みの region/entity ディレクトリとリソースパック言語 JSON を実際に読み、重複を除いた候補テキスト数を数えますが、ワールドや ZIP は変更しません。
+- **スキャンのみ**は常に `dry_run = true` です。設定済みの region/entity ディレクトリとリソースパック言語 JSON を実際に読み、重複を除いた候補テキスト数を数えますが、ワールドや ZIP は変更しません。スキャン用レポート/チェックポイントの既定先はワールド内ではなく、プロジェクトの `translation_reports/<ワールド名>/` です。
 - **翻訳実行**は常に `dry_run = false` で、対象ワールドとバックアップ状態を表示する最終確認を行います。保存されたフォーム設定によって二つの動作が混在することはありません。
 - `scan.region_dirs` が実際のスキャン範囲です。相対パスはワールド内で解決され、設定順を維持し、ワールド外へ出るパスは拒否されます。
 - ページを再読み込みしても実行中のジョブへ再接続します。サーバーは同じワールドへの同時ジョブを拒否し、書き込み競合を防止します。
@@ -307,9 +313,11 @@ tpm_limit = 0
 
 #### API キーの探索優先順位について
 
-1. config 内で `api_key` に設定されている値
-2. プロバイダ対応の環境変数
-3. オプションがオンなら `translate.py` 内の変数
+1. TOML/UI で設定した値
+2. **選択中プロバイダ**の環境変数（または `.env`）
+3. 上が空で継承がオンなら `translate.py`
+
+他プロバイダのキーはフォールバックしません。`translate.py` より環境変数を優先します。
 
 サポートされる主要環境変数：
 
