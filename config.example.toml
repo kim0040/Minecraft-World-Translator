@@ -1,26 +1,29 @@
-# Required
-world_dir = "../Trip to BrennenBurg REMAKE"
+# Point this at a Java Edition world you own. Leave it empty in the example.
+world_dir = ""
 
 # Optional
 report_path = "./translation_report.json"
-dry_run = false
+dry_run = true
 backup = true
 backup_suffix = ".bak_translate"
 batch_size = 40
 temperature = 0.3
 
-# If true, empty API/model/base_url values fall back to ./translate.py
-inherit_translate_py = true
-translate_py_path = "../translate.py"
+# Legacy translate.py is optional. Leave this off unless you still have that file.
+inherit_translate_py = false
+translate_py_path = "./translate.py"
 
 [api]
-# Supported: comet, openai, gemini, anthropic, openrouter
-provider = "comet"
+# openai, gemini, anthropic, openrouter, or custom.
+# custom uses wire_format "openai" or "anthropic" with your own base_url.
+# Older "comet" configs still load.
+provider = "openrouter"
 
-# If left empty, the provider-specific env var is checked first.
+# Leave this empty. The key belongs in the OS keychain, not in this file.
 api_key = ""
-base_url = "https://api.cometapi.com/v1"
+base_url = "https://openrouter.ai/api/v1"
 model = ""
+wire_format = ""
 request_timeout = 120
 
 [prompt]
@@ -59,10 +62,7 @@ skip_command_like_text = true
 
 # If a text component uses {"translate":"prefix.some_key"} and the prefix matches,
 # the tool can turn the key into text and translate that as a fallback.
-component_translate_key_prefixes = ["brennenburg."]
-
-[scan.overrides]
-prison1 = "감옥1"
+component_translate_key_prefixes = []
 
 [resource_pack]
 enabled = false

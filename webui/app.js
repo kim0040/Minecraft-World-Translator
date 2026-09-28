@@ -34,8 +34,8 @@ const TARGET_LANGUAGE_VALUES = {
 const I18N = {
   ko: {
     skipToContent: "본문으로 건너뛰기",
-    brandKicker: "Minecraft World Translator",
-    brandTitle: "마인크래프트 월드 번역기",
+    brandKicker: "World Translator for Minecraft",
+    brandTitle: "PomiTranslate",
     brandCopy:
       "공급자, 모델, 프롬프트, 범위, 리소스팩, 진행 상태를 한 화면에서 정리합니다. 초반에는 안전하게 스캔하고, 확인이 끝나면 그대로 실번역으로 넘기면 됩니다.",
     heroKicker: "Minecraft Localization",
@@ -316,8 +316,8 @@ const I18N = {
   },
   en: {
     skipToContent: "Skip to main content",
-    brandKicker: "Minecraft World Translator",
-    brandTitle: "Minecraft World Translator",
+    brandKicker: "World Translator for Minecraft",
+    brandTitle: "PomiTranslate",
     brandCopy:
       "Manage provider, model, prompt, scan scope, resource-pack options, and live execution state in one place. Start with a scan, review it, then move straight into a full translation run.",
     heroKicker: "Minecraft Localization",
@@ -598,8 +598,8 @@ const I18N = {
   },
   ja: {
     skipToContent: "メインコンテンツへスキップ",
-    brandKicker: "Minecraft World Translator",
-    brandTitle: "マインクラフト ワールド翻訳機",
+    brandKicker: "World Translator for Minecraft",
+    brandTitle: "PomiTranslate",
     brandCopy:
       "供給元、モデル、プロンプト、翻訳範囲、リソースパック設定、進行状況を一画面で管理します。まずはスキャンで確認し、そのまま本翻訳へ進めます。",
     heroKicker: "Minecraft Localization",

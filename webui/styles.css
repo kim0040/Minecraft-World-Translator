@@ -185,7 +185,17 @@ pre,
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   min-width: 0;
+}
+
+.brand-mark {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  flex: 0 0 auto;
 }
 
 .kicker,

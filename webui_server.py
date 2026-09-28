@@ -211,11 +211,10 @@ def summarize_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def discover_example_paths() -> dict[str, str]:
-    translate_py_path = BASE_DIR.parent / "translate.py"
-    sample_world_dir = BASE_DIR.parent / "Trip to BrennenBurg REMAKE"
+    translate_py_path = BASE_DIR / "translate.py"
     return {
         "translate_py_path": str(translate_py_path.resolve()) if translate_py_path.exists() else "",
-        "world_dir": str(sample_world_dir.resolve()) if sample_world_dir.exists() else "",
+        "world_dir": "",
     }
 
 
@@ -673,7 +672,7 @@ class AppHandler(BaseHTTPRequestHandler):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Minecraft World Translator web UI.")
+    parser = argparse.ArgumentParser(description="Run the optional PomiTranslate local web UI.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host. Default: 127.0.0.1")
     parser.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
     parser.add_argument("--open-browser", action="store_true", help="Open the browser automatically.")

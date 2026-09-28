@@ -1,470 +1,151 @@
-# Minecraft World Translator
+# PomiTranslate
 
-[English](../README.md) | 한국어 | [日本語](./README.ja.md) | [简体中文](./README.zh.md)
+World Translator for Minecraft
 
-Minecraft World Translator는 마인크래프트 월드를 데스크톱에서 손쉽게 번역할 수 있는 도구입니다. 월드의 리전(region) 파일(`.mca`) 내부를 스캔하며, zip 아카이브 내에 포함된 리소스팩의 언어 파일 또한 번역할 수 있습니다.
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-이 프로젝트는 초보자를 최우선으로 고려하여 설계되었습니다:
+Back up your world before translating. PomiTranslate writes to the world files you select.
 
-- 브라우저 기반의 로컬 UI를 통해 실행할 수 있습니다.
-- 원한다면 CLI(커맨드 라인 인터페이스) 환경에서도 사용 가능합니다.
-- 기존의 `translate.py` 설정을 그대로 유지하고 적용할 수 있습니다.
-- 앱 코드를 수정하지 않고도 다양한 LLM 공급자를 자유롭게 전환할 수 있습니다.
+Text you choose to translate is sent to the API provider you select and may incur charges.
 
-문의 사항이나 오류가 발생한 경우 아래로 연락해 주세요:
-`mini0227kim@gmail.com`
+PomiTranslate has no purchase, subscription, or in-app payment.
 
-## 번역 지원 항목
+![PomiTranslate 워드마크](../assets/brand/wordmark/logo_wordmark_v1.png)
 
-- 표지판 텍스트
-- 책 내용
-- 책 제목 및 `filtered_title`
-- 커스텀(사용자 지정) 이름
-- 아이템 이름 및 설명(Lore)
-- `tellraw`, `title`, `subtitle`, `actionbar` 내부의 텍스트
-- 리소스팩 내 `lang/*.json` 파일 (선택 사항)
+[English](../README.md) | 한국어 | [日本語](README.ja.md) | [简体中文](README.zh.md)
 
-## 주요 기능
+PomiTranslate는 Java Edition 월드의 플레이어에게 보이는 글을 번역하는 무료 로컬 도구입니다. 마스코트는 Pomi입니다. GitHub 저장소 이름은 `Minecraft-World-Translator`로 둡니다.
 
-- 한국어, 영어, 일본어를 지원하는 로컬 웹 UI
-- 라이트 및 다크 테마 지원
-- '스캔 먼저 실행'을 권장하는 초보자 친화적 워크플로우
-- 번역 전 예상 파일 수, 토큰 및 소요 시간 예측 (Estimation)
-- 다양한 LLM 공급자 지원:
-  - `comet`
-  - `openai`
-  - `gemini`
-  - `anthropic`
-  - `openrouter`
-  - OpenAI 및 Anthropic 형식과 호환되는 커스텀 API 엔드포인트 지원
-- 수동 모델 입력 및 선택한 공급자의 모델 카탈로그 조회 기능
-- 프롬프트 스타일 프리셋 및 AI 기반 스타일 메모 자동 확장
-- 무료 티어 API 사용자를 위한 RPM/TPM 제한 설정 지원
-- API 키, 기본 URL, 모델 및 기존 프롬프트에 대한 `translate.py` 상속 지원
-- 변경 사항을 미리 확인하는 스캔 전용 모드(Dry-run) 지원
-- 변경 사항 적용 전 백업 지원
-- 실행이 끝난 후 JSON 형식의 상세 리포트 출력
+CLI와 패키지된 데스크톱 진입점은 같은 번역기를 씁니다. 번역은 검증된 백업이 생긴 뒤에만 월드를 고칩니다. Scan Only는 공급자에 요청을 보내지 않고 월드 바이트도 바꾸지 않습니다. 선택자, 리소스 위치, 숫자, 좌표, 서식 자리표시자는 그대로 둡니다.
 
-## 프로젝트 파일 구조
+![Pomi](../assets/mascot/base/mascot_base_front_v1_512.png)
 
-```text
-minecraft-world-translator/
-├── LICENSE
-├── README.md
-├── docs/
-│   ├── README.ko.md
-│   ├── README.ja.md
-│   └── README.zh.md
-├── config.example.toml
-├── llm_backends.py
-├── mc_world_translator.py
-├── requirements.txt
-├── run_web_ui.command
-├── webui_server.py
-└── webui/
-    ├── app.js
-    ├── index.html
-    └── styles.css
-```
+## 번역하는 글
 
-## 시스템 요구 사항
+- 옛 표지판과 앞면·뒷면이 있는 표지판
+- 책 페이지, 제목, 필터된 제목
+- 사용자 이름, 아이템 이름, 설명
+- 직접 적은 텍스트 컴포넌트와 1.20.5+ 아이템 컴포넌트
+- `tellraw`, `title`, `subtitle`, `actionbar` 명령의 글
+- 옵션을 켰을 때 zip 안 리소스팩 `lang/*.json`
 
-- Python 3.11 이상
-- LLM API 호출을 위한 인터넷 연결
-- 사용하려는 공급자의 유효한 API 키
-- 백업 파일을 저장할 수 있는 충분한 디스크 여유 공간
+![먼저 스캔](../assets/illustrations/docs/doc_scan_first_v1.png)
 
-## 빠른 시작
+## 형식
 
-초보자에게 가장 추천하는 간단한 방법입니다:
+픽스처가 통과한 범위만 지원합니다.
 
-1. 웹 UI를 엽니다.
-2. 월드 경로와 API 설정을 입력합니다.
-3. 먼저 `스캔만 실행 (Scan Only)`을 작동시킵니다.
-4. 결과가 문제없어 보인다면, 실제 번역을 실행합니다.
+- 리전 압축: gzip, zlib, 무압축, Minecraft 1.20.5+ LZ4 (`LZ4Block`)
+- `c.<x>.<z>.mcc` 외부 청크. 파일에는 압축된 바이트만 있습니다.
+- 표준 리전 폴더, 커스텀 차원, `level.dat`가 있는 Paper 스타일 형제 월드
 
-### 가장 빠른 웹 UI 실행 (macOS)
+발견만 하고 쓰지 않습니다.
 
-macOS에서는 다음 파일을 더블 클릭하여 바로 실행할 수 있습니다:
+- Bedrock
+- Anvil 이전 `.mcr`
+- `.linear`
+- 127을 포함한 알 수 없는 압축
 
-- [run_web_ui.command](./run_web_ui.command)
+생성된 목록은 [support-matrix.md](support-matrix.md)입니다. macOS Intel, Windows x64, Linux x64는 지원 플랫폼으로 적지 않습니다. Linux 패키지 작업은 산출물을 만들 뿐, 그 플랫폼을 지원한다고 확인한 것은 아닙니다.
 
-이 런처는 다음 작업을 자동으로 수행합니다:
+![지원하지 않는 형식은 멈춤](../assets/illustrations/docs/doc_unsupported_v1.png)
 
-- `.venv` 가 없다면 새로 생성
-- 필요한 패키지(dependency)가 없다면 설치
-- 이미 실행 중인 로컬 UI가 있다면 재사용
-- `8765` 포트가 사용 중이면 다음으로 사용 가능한 포트 자동 선택
-- 로컬 웹 서버 시작
-- 시스템 기본 브라우저 자동 실행
+## 공급자
 
-## 설치 방법
+쓰는 공급자는 OpenAI, Gemini, Anthropic, OpenRouter, Custom입니다. Custom은 사용자가 적은 주소로 OpenAI 채팅 형식 또는 Anthropic 메시지 형식을 보냅니다. 예전 Comet 설정은 그대로 읽습니다.
 
-도구를 실행하기 전에, 다음과 같이 로컬 `.env` 파일을 준비해 두시면 편리합니다:
+실제 번역 전에 그 공급자의 텍스트 모델 목록을 가져와 공개된 id와 이름, 컨텍스트 길이를 사용합니다. 고른 모델이 목록에 없으면 월드를 쓰기 전에 멈춥니다.
+
+## 키와 설정
+
+API 키는 운영체제 키체인의 서비스 이름 `PomiTranslate`에 저장합니다. 계정 이름은 `openrouter` 같은 공급자 id입니다. 키는 `settings.json`, SQLite, 로그, git에 넣지 않습니다.
+
+공개 설정은 앱을 업데이트해도 설치 폴더 밖에 남습니다.
+
+- macOS: `~/Library/Application Support/PomiTranslate/settings.json`
+- Windows: `%APPDATA%\PomiTranslate\settings.json`
+- Linux: `$XDG_DATA_HOME/PomiTranslate` 또는 `~/.local/share/PomiTranslate/settings.json`
+
+공급자별 모델 목록도 그 옆에 저장됩니다. 그 파일이나 키체인 항목을 지우면 데이터가 삭제됩니다.
+
+![선택한 공급자로 글이 전송됨](../assets/illustrations/docs/doc_api_notice_v1.png)
+
+## 실행
+
+테스트한 런타임은 Python 3.12입니다. 패키지된 데스크톱 진입점은 사용자에게 Python 설치를 요구하지 않습니다.
 
 ```bash
-cp .env.example .env
-```
-
-그런 다음 문서 내에서 필요한 키값만 채워주세요. `.env` 파일은 Git에 업로드(추적)되지 않으므로 안전합니다.
-
-### Windows
-
-1. [python.org](https://www.python.org/downloads/windows/)에서 Python 3.11 이상의 버전을 설치합니다.
-2. 프로젝트 폴더에서 PowerShell을 엽니다.
-3. 다음 명령어를 실행합니다:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-만약 PowerShell이 스크립트 실행(Activation)을 차단한다면, 일시적으로 로컬 스크립트 실행을 허용할 수 있습니다:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-### macOS
-
-1. `python3` 가 설치되어 있는지 확인합니다.
-2. 프로젝트 폴더에서 터미널을 엽니다.
-3. 다음 명령어를 실행합니다:
+월드를 스캔합니다. 공급자를 호출하지 않고 월드도 바꾸지 않습니다.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
+python mc_world_translator.py --world-dir "/path/to/world" --dry-run --report-path ./scan-report.json
 ```
 
-또는 다음 런처를 사용할 수 있습니다:
-
-- [run_web_ui.command](./run_web_ui.command)
-
-만약 macOS 자체에서 런처 실행을 차단한다면, 해당 파일을 우클릭한 후 `열기(Open)`를 한 번 눌러주시면 됩니다. 기본 포트인 `8765`가 이미 사용 중이라면, 런처가 자동으로 다른 사용 가능한 포트를 찾아 실행합니다.
-
-### Linux
-
-1. Python 3.11 버전 이상이 설치되어 있는지 확인합니다.
-2. 프로젝트 폴더에서 터미널을 엽니다.
-3. 다음 명령어를 실행합니다:
+스캔을 확인한 뒤 번역합니다. 그 사이 월드가 바뀌면 지문이 맞지 않아 거절됩니다.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
-
-일부 배포판의 경우 아래 명령어가 추가로 필요할 수 있습니다:
-
-```bash
-sudo apt install python3-venv
-```
-
-## 웹 UI 실행 방법
-
-로컬 UI 서버 시작:
-
-```bash
-python3 webui_server.py
-```
-
-주소창에 입력:
-
-- `http://127.0.0.1:8765`
-
-브라우저 창을 자동으로 열며 실행하려면:
-
-- `python3 webui_server.py --open-browser`
-
-호스트 이름과 포트 번호를 변경하려면:
-
-- `python3 webui_server.py --host 0.0.0.0 --port 9000`
-
-원클릭 런처 사용 시 기본 포트가 이미 사용 중이라면, 기존에 열려 있는 UI에 재연결하거나 빈 포트로 자동으로 전환하여 실행합니다.
-
-### 웹 UI 화면 구성 항목
-
-- 공급자 선택
-- API Base URL 및 모델 설정
-- 모델 카탈로그 목록 조회 버튼
-- 짧은 스타일 메모 작성 및 AI 자동 확장
-- 범위(Scope) 설정 관련 컨트롤 그룹
-- 리소스팩 관련 설정
-- 실시간 작업 진행 상태 표시
-- 현재 작업 중인 파일 명시
-- 현재 활동 유형 단계 표시
-- 번역된 배치(Batch) 작업 개수 집계 표시
-- 작업 결과물을 담은 Result JSON 뷰어
-- 문의처 이메일 패널
-
-### 안전하고 예측 가능한 작업 방식
-
-- **스캔만 실행**은 항상 `dry_run = true`로 동작합니다. 설정된 리전/엔티티 디렉터리와 리소스팩 언어 JSON을 실제로 읽어 고유 후보 텍스트 수를 계산하지만 월드와 ZIP은 수정하지 않습니다.
-- **번역 실행**은 항상 `dry_run = false`로 동작하며, 대상 월드 경로와 백업 상태를 보여 주는 최종 확인 창을 거칩니다. 저장된 폼 설정 때문에 두 동작이 뒤섞이지 않습니다.
-- `scan.region_dirs`가 실제 스캔 범위입니다. 상대 경로는 월드 내부에서 해석되고 설정 순서를 유지하며, 월드 밖으로 벗어나는 경로는 거부됩니다.
-- 페이지를 새로고침해도 실행 중인 작업이 모니터에 다시 연결됩니다. 서버는 동일 월드에 대한 동시 작업을 차단하여 파일 쓰기 충돌을 막습니다.
-- 체크포인트는 월드와 번역 결과에 영향을 주는 설정이 모두 같은 경우에만 이어서 사용합니다. 모델·프롬프트·범위·리소스팩 설정이 달라지면 이전 체크포인트를 안전하게 무시합니다.
-- 리소스팩에 여러 원본 언어 파일이 있으면 설정된 순서가 우선순위가 되며, 같은 대상 언어 경로에는 먼저 발견된 원본만 사용합니다.
-
-## CLI 실행 방법
-
-### 테스트 모드 (Dry Run)
-
-```bash
-python3 mc_world_translator.py --config config.example.toml --dry-run
-```
-
-### 실제 번역 실행
-
-```bash
-python3 mc_world_translator.py --config config.example.toml
-```
-
-### 공급자 및 모델 강제 지정
-
-```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
+python mc_world_translator.py \
+  --world-dir "/path/to/world" \
   --provider openrouter \
-  --model openai/gpt-4.1
+  --model "your-text-model" \
+  --expect-fingerprint "<스캔 리포트의 지문>"
 ```
 
-### 사용 가능 모델 목록 조회
+`--api-key`를 비우면 그 공급자에 이미 저장된 키를 씁니다. `--list-models`는 공급자가 돌려준 텍스트 모델을 출력합니다.
+
+검증된 최신 백업을 되돌립니다.
 
 ```bash
-python3 mc_world_translator.py --config config.example.toml --list-models
+python mc_world_translator.py --world-dir "/path/to/world" --restore-backup
 ```
 
-공급자를 직접 지정하여 사용할 수 있는 명령어 예시입니다:
+한 번의 실행은 백업 목록을 하나만 유지합니다. 복구는 `entities`를 포함한, 그 실행이 고친 모든 파일을 되돌립니다.
+
+![쓰기 전에 백업](../assets/illustrations/docs/doc_backup_first_v1.png)
+
+## 데스크톱 진입점
+
+`python -m mwt.desktop_entry`는 표준 입력과 출력으로 JSONL을 주고받습니다. 로컬 포트를 열지 않습니다. `--notices`와 `--about`은 안전 안내를 출력합니다. `--scan`과 `--translate`는 CLI와 같은 코어를 씁니다.
+
+GitHub Actions 패키지 작업은 PyInstaller로 단일 파일 `PomiTranslate`를 만듭니다. Apple 또는 Windows 서명 자격이 없으면 릴리스 작업은 서명되지 않은 초안에서 멈추고, 서명 검증은 켜 둡니다.
+
+## 로컬 웹 UI
+
+Python이 이미 있을 때 `webui_server.py`를 쓸 수 있습니다. 기본 주소는 `127.0.0.1:8765`입니다. 패키지된 앱은 이 서버가 없어도 됩니다.
 
 ```bash
-python3 mc_world_translator.py --provider openai --api-key "$OPENAI_API_KEY" --list-models
-python3 mc_world_translator.py --provider gemini --api-key "$GEMINI_API_KEY" --list-models
-python3 mc_world_translator.py --provider anthropic --api-key "$ANTHROPIC_API_KEY" --list-models
-python3 mc_world_translator.py --provider openrouter --api-key "$OPENROUTER_API_KEY" --list-models
+python webui_server.py
 ```
 
-### 스타일 메모 자동 확장 (Enhance)
+macOS에서는 `run_web_ui.command`가 가상환경을 만들고 브라우저를 엽니다.
+
+## 설정 파일
+
+필드는 [config.example.toml](../config.example.toml)에 있습니다. `world_dir`은 비워 두고, 자신의 월드를 지정할 때만 채웁니다. API 키는 이 파일에 넣지 않습니다.
+
+## 테스트
 
 ```bash
-python3 mc_world_translator.py \
-  --config config.example.toml \
-  --enhance-style-brief "고딕 공포 풍 톤 유지, 이름은 음역하기, 퍼즐 힌트는 가급적 직관적으로"
+.venv/bin/python test_core.py
+.venv/bin/python tests/test_release_fixtures.py
+.venv/bin/python tests/test_providers.py
+.venv/bin/python tests/test_brand_secrets.py
+.venv/bin/python tests/test_desktop_entry.py
 ```
 
-## 환경 설정 (Configuration)
+릴리스 픽스처 결과가 지원 표의 출처입니다.
 
-예제 파일 경로:
+## 문의
 
-- [config.example.toml](./config.example.toml)
+질문과 버그: `mini0227kim@gmail.com`
 
-### 최상위 항목 설정 (Top-Level Settings)
-
-- `world_dir`
-  - 번역 대상인 마인크래프트 월드 폴더 경로
-- `report_path`
-  - 리포트가 저장될 JSON 출력 경로
-- `dry_run`
-  - `스캔만 실행` 옵션 (실제 파일 쓰기를 하지 않음)
-- `backup`
-  - 실제 쓰기 전 백업 파일 생성 여부
-- `backup_suffix`
-  - 백업 복사본에 사용될 파일 확장자
-- `batch_size`
-  - 한 번에 전송할 문자열 배치 사이즈
-- `temperature`
-  - 언어 모델의 Temperature 값
-- `inherit_translate_py`
-  - 기존 `translate.py` 파일의 값을 불러와 재사용할지 여부
-- `translate_py_path`
-  - 레거시(기존) 설정 파일의 경로
-
-### API 설정 섹션
-
-```toml
-[api]
-provider = "comet"
-api_key = ""
-base_url = "https://api.cometapi.com/v1"
-model = ""
-request_timeout = 120
-rpm_limit = 0
-tpm_limit = 0
-```
-
-- `rpm_limit`: 분당 최대 API 호출 횟수(Requests Per Minute)를 제한합니다. 무료 API 사용 시 설정한 횟수를 넘지 않도록 자동으로 요청 간격을 조절합니다. `0`은 시스템의 최대 속도로 진행된다는 의미입니다(제한 없음).
-- `tpm_limit`: 분당 토큰 사용량(Tokens Per Minute)을 제한합니다. 배치(Batch)의 예상 토큰량을 계산하여 한도를 넘지 않도록 보호합니다. `0`은 제한 없음을 의미합니다.
-
-#### 적용 가능한 공급자 (Provider Values)
-
-- `comet`
-- `openai`
-- `gemini`
-- `anthropic`
-- `openrouter`
-- `custom_openai` (UI를 통한 오픈 API 호환 포맷 지원)
-- `custom_anthropic` (UI를 통한 Anthropic 호환 포맷 지원)
-
-#### API 키 탐색 순서 (API Key Resolution Order)
-
-1. TOML 설정 파일 내부의 값을 가장 우선시합니다.
-2. 공급자별 고유 환경변수를 탐색합니다.
-3. 상속이 켜져있을 경우 `translate.py` 안의 값을 탐색합니다.
-
-지원하는 운영 환경변수 목록:
-
-- `COMET_API_KEY`
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `OPENROUTER_API_KEY`
-
-시스템 셸 대신 로컬 `.env` 파일에 저장해서 사용하는 것도 가능합니다.
-
-### 프롬프트 설정 섹션
-
-```toml
-[prompt]
-target_language = "한국어"
-style_preset = "neutral"
-style_prompt = ""
-custom_system_prompt = ""
-```
-
-- `target_language`
-  - 사람이 알아볼 수 있는 대상 언어 이름 지정
-- `style_preset`
-  - 기본 번역 분위기 프리셋 설정
-- `style_prompt`
-  - 프리셋 뒤에 덧붙여질 추가 스타일 관련 요구 사항
-- `custom_system_prompt`
-  - 기본 제공 프롬프트와 프리셋을 전부 덮어쓸 전체 시스템 프롬프트 (강제 교체)
-
-### 스캔 범위 섹션
-
-```toml
-[scan]
-translate_signs = true
-translate_books = true
-translate_custom_names = true
-translate_item_names = true
-translate_lore = true
-translate_titles = true
-translate_filtered_titles = true
-translate_command_output = true
-skip_command_like_text = true
-component_translate_key_prefixes = []
-```
-
-이 섹션을 설정하여 정확히 어느 텍스트들을 번역의 대상으로 삼을 것인지 지정할 수 있습니다.
-
-### 리소스팩 섹션
-
-```toml
-[resource_pack]
-enabled = false
-zip_paths = ["./resources.zip"]
-source_lang_files = ["en_us.json", "zh_cn.json"]
-target_lang_file = "ko_kr.json"
-skip_if_target_exists = false
-```
-
-번역하고자 하는 리소스팩 압축파일(zip) 내부의 언어 파일까지 처리하고자 할 때만 이 설정들을 켜주세요.
-
-#### 리소스팩 번역 기능 사용 방법:
-1. 대상 리소스팩이 폴더 형태라면 먼저 `.zip` 파일로 압축하세요.
-2. 웹 UI에서 이 `.zip` 파일의 절대 경로를 입력란에 작성합니다.
-3. 리소스팩이 기준 언어로 채택하고 있는 원본 파일명(주로 `en_us.json`)을 넣습니다.
-4. 번역 결과를 저장할 새로운 목표 언어 파일명(예: `ko_kr.json`)을 지정합니다.
-5. 번역을 실행하면 프로그램이 텍스처 파일들은 건드리지 않고, 내부의 `assets/*/lang/` 경로에 안전하게 번역된 새 JSON 파일들을 주입해 줍니다.
-
-## 초보자를 위한 추천 작업 순서
-
-개발 도구에 익숙하지 않거나 마인크래프트 월드 구조를 모르는 경우 다음을 권장합니다:
-
-1. 웹 UI를 실행합니다.
-2. 사용하려는 공급자, API 키, 사용할 모델을 기입합니다.
-3. 월드의 폴더 경로를 입력합니다.
-4. 더 강한 문체나 개성이 필요하지 않다면 프롬프트 스타일 프리셋은 `neutral (평범하게)`로 유지합니다.
-5. 먼저 `스캔만 실행`을 눌러 작동시킵니다.
-6. 스캔이 끝나면 결과물이나 진행 패널의 기록들을 점검해 봅니다.
-7. 백업 옵션은 끄지 말고 무조건 켜둡니다.
-8. 스캔을 통해 추출된 데이터가 정상적일 때, 그때 실제 번역 본 작업을 실행하시면 됩니다.
-
-## 기술적인 내용
-
-- 월드 번역은 `.mca` 압축 파일을 까서 그 안의 NBT 데이터를 수정하는 방식입니다.
-- 인식할 수 있는 사용자 노출 텍스트 부분만을 찾아 덮어씁니다.
-- `/kill @p` 와 같이 마인크래프트 순수 명령어처럼 보이는 구문은 고의적으로 스킵시킬 수 있습니다.
-- 리소스팩 번역은 zip 파일 안에 들어있는 `lang/*.json` 파일에 동작합니다.
-- 공급자마다 요구하는 API 포맷에 대한 차벽 대응 처리는 [llm_backends.py](./llm_backends.py) 에 정의되어 있습니다.
-- 제공되는 웹 UI는 클라우드 기반 웹앱 형태가 아닌, 컴퓨터 내부에서 돌아가는 구조입니다.
-
-## 주의 사항
-
-- 첫 번째 메인 실행 전에는 항상 백업 옵션이 켜져 있는지 확인하세요.
-- 만약 중요한 맵을 손대고 있다면, 되도록 원본보다 복사본 위에서 테스트하세요.
-- 실제 번역 실행에 앞서 `스캔만 실행` 테스트를 먼저 돌려보시길 권장합니다.
-- 너무 디테일하고 강한 스타일 프롬프트는 아이템의 고유명사를 망치거나 퍼즐의 힌트를 숨겨버릴 우려가 있으니 신중하게 사용하세요.
-- **코드베이스 참고 사항:** 이 프로젝트는 빠른 속도로 버전 1을 향해 개발되었기 때문에, 일부 모듈 내부에 개발 초기 테스트에 사용된 레거시(잔재) 코드나 사용되지 않는 실험적 논리가 남아있을 수 있습니다.
-
-## 문제 발생 및 해결 방안
-
-### `API key is missing` 에러 발생 시
-
-다음 중 한 곳에라도 올바른 키를 세팅해 주세요:
-
-- 웹 UI 페이지 입력란
-- `config.example.toml`
-- 사용자 환경 변수 (env)
-- 또는 `translate.py` 파일 속 내용
-
-### `Model is missing` 에러 발생 시
-
-직접 사용할 모델을 시스템 프롬프트나 입력칸에 기입하거나 `--list-models` 명령어를 사용하여 모델 목록을 확인하세요.
-
-### 웹 UI가 전혀 안 열려요
-
-- 콘솔 뒤쪽에서 서버가 올바르게 실행 중인지 점검하세요.
-- `http://127.0.0.1:8765` 주소가 맞는지 확인하세요.
-- 혹시 시스템 안의 다른 앱이 `8765` 포트를 사용 중인지 체크하세요.
-
-### 번역체가 너무 오만하거나/거칠게 나올 때
-
-다음 방법을 복합적으로 사용해 보세요:
-
-- 프리셋을 `neutral (평범)`이나 `polite (친절한 존댓말)`로 바꿉니다.
-- 짧은 스타일 메모 보강(확장) 사용 시 조금 더 세세하게 작성하세요.
-- `custom_system_prompt`로 완전히 통제가 가능한지 확인하세요.
-
-### Windows 스크립트 실행 오류 발생 (Activation)
-
-아래 명령어를 통해 Windows PowerShell의 보안 설정 스크립트 블락을 통과시킬 수 있습니다:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-## 문의 및 지원
-
-기타 기능 관련 질문, 버그 및 오류 보고사항은 아래로 연락해 주세요:
-
-- `mini0227kim@gmail.com`
-
-보고 시 다음 내용을 포함해 주시면 문제 해결이 수월해집니다:
-
-- 사용 중인 운영체제(OS)
-- 사용하는 API 공급자의 종류 (OpenAI, Gemini 등)
-- 사용 중인 모델 이름
-- CLI 또는 웹 UI 중 어느 것을 구동 중 겪은 문제 인지
-- (있다면) 표출되는 오류 메시지의 내용 등
+운영체제, 공급자, 모델, CLI인지 데스크톱 진입점인지, 오류 글을 적어 주세요. API 키는 보내지 마세요.
 
 ## 라이선스
 
-본 프로젝트의 라이선스는 MIT License를 따릅니다.
-
-자세한 내용은 다음을 참고하세요:
-
-- [LICENSE](./LICENSE)
+MIT. [LICENSE](../LICENSE)를 봅니다.
