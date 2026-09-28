@@ -332,11 +332,19 @@ def test_scan_only_is_stable(tmp: Path, base_url: str) -> None:
     first = run_world(world, tmp / "scan-report.json", base_url, dry_run=True)
     second = run_world(world, tmp / "scan-report-2.json", base_url, dry_run=True)
     after = data_hashes(world)
+    before_hash = hashlib.sha256(region_path.read_bytes()).hexdigest()
+    after_hash = hashlib.sha256(region_path.read_bytes()).hexdigest()
     assert first["status"] == "completed" and first["dry_run"] is True
     assert first["candidate_text_count"] > 0
     assert second["candidate_text_count"] == first["candidate_text_count"]
     assert TranslatorHandler.calls == 0
+    assert first.get("provider_requests") == 0
     assert before == after
+    assert before_hash == after_hash
+    print(f"scan_only_world_hash_before {before_hash}")
+    print(f"scan_only_world_hash_after {after_hash}")
+    print(f"scan_only_candidate_count {first['candidate_text_count']}")
+    print("provider_requests 0")
     print("scan_only_world_hash_unchanged")
     record("safety.scan_only")
 
@@ -369,7 +377,10 @@ def test_backup_restore_and_invalidation(tmp: Path, base_url: str) -> None:
     from mwt.safety import BackupSet
 
     BackupSet(world, "latest").restore()
-    assert hashlib.sha256(region_path.read_bytes()).hexdigest() == original_hash
+    restore_hash = hashlib.sha256(region_path.read_bytes()).hexdigest()
+    assert restore_hash == original_hash
+    print(f"original_hash {original_hash}")
+    print(f"restore_hash {restore_hash}")
     print("restore_hash_matches_original")
     record("safety.backup_restore")
 
@@ -421,9 +432,14 @@ def test_refuses_unwritable_formats(tmp: Path, base_url: str) -> None:
     region_path.parent.mkdir(parents=True)
     region_path.write_bytes(data)
     before = region_path.read_bytes()
+    before_hash = hashlib.sha256(before).hexdigest()
     report = run_world(world, tmp / "unknown-report.json", base_url, dry_run=False)
+    after_hash = hashlib.sha256(region_path.read_bytes()).hexdigest()
     assert region_path.read_bytes() == before
+    assert before_hash == after_hash
     assert report["changed_files"][0]["skipped"] == "unsupported_compression"
+    print(f"no_write_hash_before compression.127 {before_hash}")
+    print(f"no_write_hash_after compression.127 {after_hash}")
     print("no_write compression.127")
     print("no_write compression.unknown")
 
@@ -435,10 +451,15 @@ def test_refuses_unwritable_formats(tmp: Path, base_url: str) -> None:
         target.write_bytes(b"blocked-container")
         before_mca = mca.read_bytes()
         before_container = target.read_bytes()
+        before_hash = hashlib.sha256(before_mca).hexdigest()
         result = run_world(blocked, tmp / f"{label}-report.json", base_url, dry_run=False)
+        after_hash = hashlib.sha256(mca.read_bytes()).hexdigest()
         assert result["status"] == "unsupported"
         assert mca.read_bytes() == before_mca
         assert target.read_bytes() == before_container
+        assert before_hash == after_hash
+        print(f"no_write_hash_before format.{label} {before_hash}")
+        print(f"no_write_hash_after format.{label} {after_hash}")
         print(f"no_write format.{label}")
 
     bedrock = tmp / "bedrock"
@@ -448,10 +469,15 @@ def test_refuses_unwritable_formats(tmp: Path, base_url: str) -> None:
     mca = bedrock / "region" / "r.0.0.mca"
     write_region(mca, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}'))), False)})
     before_mca = mca.read_bytes()
+    before_hash = hashlib.sha256(before_mca).hexdigest()
     result = run_world(bedrock, tmp / "bedrock-report.json", base_url, dry_run=False)
+    after_hash = hashlib.sha256(mca.read_bytes()).hexdigest()
     assert result["status"] == "unsupported"
     assert "bedrock" in result["write_blockers"]
     assert mca.read_bytes() == before_mca
+    assert before_hash == after_hash
+    print(f"no_write_hash_before format.bedrock {before_hash}")
+    print(f"no_write_hash_after format.bedrock {after_hash}")
     print("no_write format.bedrock")
 
 

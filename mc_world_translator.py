@@ -655,6 +655,9 @@ class WorldTranslator:
         self.report["candidate_text_count"] = len(self.candidate_texts)
 
     def run(self) -> dict[str, Any]:
+        from llm_backends import LLMProviderClient
+
+        LLMProviderClient.request_count = 0
         world_dir = Path(self.config["world_dir"]).resolve()
         if not world_dir.exists() or not world_dir.is_dir():
             msg = f"World directory not found or invalid: {world_dir}"

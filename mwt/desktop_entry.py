@@ -79,6 +79,7 @@ def handle(message: dict, report_dir: Path) -> None:
                 "payload": {
                     "status": report.get("status"),
                     "candidateCount": report.get("candidate_text_count", 0),
+                    "providerRequests": report.get("provider_requests", 0),
                     "fingerprint": report.get("world_fingerprint", ""),
                     "dryRun": True,
                     "localhostServer": False,
