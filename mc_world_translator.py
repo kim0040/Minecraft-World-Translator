@@ -157,6 +157,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "continue_on_file_error": True,
         "max_batch_retries": 3,
         "max_file_write_retries": 2,
+        "expected_world_fingerprint": "",
     },
 }
 
@@ -439,7 +440,7 @@ class BatchTranslator:
             base = prompt_config["custom_system_prompt"].strip()
         else:
             preset = STYLE_PRESETS[prompt_config["style_preset"]]
-            base = preset.format(target_language=prompt_config["target_language"])
+            base = preset.replace("{target_language}", prompt_config["target_language"])
 
         extra = prompt_config["style_prompt"].strip()
         if extra:
@@ -663,6 +664,26 @@ class WorldTranslator:
             return self.report
 
         try:
+            from mwt.layout import detect_write_blockers
+            from mwt.safety import world_fingerprint
+
+            blockers = detect_write_blockers(world_dir)
+            self.report["write_blockers"] = blockers
+            fingerprint = world_fingerprint(world_dir)
+            self.report["world_fingerprint"] = fingerprint
+            expected = str(self.runtime_config.get("expected_world_fingerprint") or "")
+            if expected and expected != fingerprint:
+                self.report["status"] = "invalidated"
+                self.report["errors"].append({"scope": "plan", "message": "World changed after scan"})
+                self.refresh_report_counts()
+                self.write_report()
+                return self.report
+            if blockers:
+                self.report["status"] = "unsupported"
+                self.report["errors"].append({"scope": "layout", "message": ",".join(blockers)})
+                self.refresh_report_counts()
+                self.write_report()
+                return self.report
             if self.config["resource_pack"]["enabled"]:
                 self.ensure_not_cancelled()
                 self.emit("resource_pack_start")
@@ -721,6 +742,9 @@ class WorldTranslator:
 
             self.refresh_report_counts()
             self.report["status"] = "completed"
+            from llm_backends import LLMProviderClient
+
+            self.report["provider_requests"] = LLMProviderClient.request_count
             self.write_report()
             self.clear_checkpoint()
             self.emit(
@@ -760,7 +784,14 @@ class WorldTranslator:
         world_dir = Path(self.config["world_dir"]).resolve()
         files: list[Path] = []
         seen: set[Path] = set()
-        for configured_dir in self.scan_config.get("region_dirs", []):
+        configured_dirs = [str(item) for item in self.scan_config.get("region_dirs", [])]
+        if self.scan_config.get("discover_layout", True):
+            from mwt.layout import discover_region_dirs
+
+            for relative in discover_region_dirs(world_dir):
+                if relative not in configured_dirs:
+                    configured_dirs.append(relative)
+        for configured_dir in configured_dirs:
             directory = Path(str(configured_dir)).expanduser()
             directory = directory.resolve() if directory.is_absolute() else (world_dir / directory).resolve()
             if directory != world_dir and world_dir not in directory.parents:
@@ -809,6 +840,9 @@ class WorldTranslator:
             return False
 
         if stripped.startswith(self._SKIP_NAMESPACE_PREFIXES):
+            return False
+
+        if re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", stripped):
             return False
 
         if self.scan_config["skip_command_like_text"] and stripped.startswith("/"):
@@ -979,10 +1013,113 @@ class WorldTranslator:
             return
         self.collect_json_text_refs(component, refs, path)
 
+    def _collect_translatable_string(self, tag: nbt.TAG_String, refs: list[TextRef], path: str) -> None:
+        raw = tag.value
+        try:
+            component = self.parse_text_component(raw)
+        except json.JSONDecodeError:
+            if self.should_translate_text(raw):
+                refs.append(TextRef("plain_tag", tag=tag, path=path))
+        else:
+            if isinstance(component, (dict, list)):
+                self.collect_json_text_refs(component, refs, path)
+                refs.append(TextRef("json_tag", tag=tag, path=path))
+            elif self.should_translate_text(raw):
+                refs.append(TextRef("plain_tag", tag=tag, path=path))
+
+    def _collect_direct_component(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
+        text = tag.get("text")
+        if isinstance(text, nbt.TAG_String) and self.should_translate_text(text.value):
+            refs.append(TextRef("plain_tag", tag=text, path=f"{path}/text"))
+        extra = tag.get("extra")
+        if extra is not None:
+            self.collect_tag_refs(extra, refs, f"{path}/extra")
+
+    def _collect_sign_face(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
+        if not self.scan_config["translate_signs"]:
+            return
+        for list_name in ("messages", "filtered_messages"):
+            messages = tag.get(list_name)
+            if not isinstance(messages, nbt.TAG_List):
+                continue
+            for index, item in enumerate(messages):
+                child = f"{path}/{list_name}/{index}"
+                if isinstance(item, nbt.TAG_String):
+                    self._collect_translatable_string(item, refs, child)
+                elif isinstance(item, nbt.TAG_Compound):
+                    self._collect_direct_component(item, refs, child)
+
+    def _collect_book_field(self, tag: Any, refs: list[TextRef], path: str, *, enabled: bool) -> None:
+        if not enabled:
+            return
+        if isinstance(tag, nbt.TAG_String):
+            if self.should_translate_text(tag.value):
+                refs.append(TextRef("plain_tag", tag=tag, path=path))
+        elif isinstance(tag, nbt.TAG_Compound):
+            raw = tag.get("raw")
+            if isinstance(raw, nbt.TAG_String) and self.should_translate_text(raw.value):
+                refs.append(TextRef("plain_tag", tag=raw, path=f"{path}/raw"))
+            elif "text" in tag:
+                self._collect_direct_component(tag, refs, path)
+
+    def _collect_components(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
+        for key, enabled in (
+            ("minecraft:custom_name", self.scan_config["translate_custom_names"]),
+            ("minecraft:item_name", self.scan_config["translate_item_names"]),
+        ):
+            value = tag.get(key)
+            if not enabled or value is None:
+                continue
+            if isinstance(value, nbt.TAG_String):
+                self._collect_translatable_string(value, refs, f"{path}/{key}")
+            elif isinstance(value, nbt.TAG_Compound):
+                self._collect_direct_component(value, refs, f"{path}/{key}")
+        lore = tag.get("minecraft:lore")
+        if self.scan_config["translate_lore"] and isinstance(lore, nbt.TAG_List):
+            for index, item in enumerate(lore):
+                child = f"{path}/minecraft:lore/{index}"
+                if isinstance(item, nbt.TAG_String):
+                    self._collect_translatable_string(item, refs, child)
+                elif isinstance(item, nbt.TAG_Compound):
+                    self._collect_direct_component(item, refs, child)
+        for key in ("minecraft:written_book_content", "minecraft:writable_book_content"):
+            book = tag.get(key)
+            if not isinstance(book, nbt.TAG_Compound):
+                continue
+            self._collect_book_field(book.get("title"), refs, f"{path}/{key}/title", enabled=self.scan_config["translate_titles"])
+            pages = book.get("pages")
+            if isinstance(pages, nbt.TAG_List):
+                for index, page in enumerate(pages):
+                    self._collect_book_field(
+                        page,
+                        refs,
+                        f"{path}/{key}/pages/{index}",
+                        enabled=self.scan_config["translate_books"],
+                    )
+
+    def _guard_translations(self, texts: list[str], translations: dict[str, str]) -> dict[str, str]:
+        from mwt.tokens import preserve_tokens
+
+        return {text: preserve_tokens(text, translations.get(text, text)) for text in texts}
+
     def collect_tag_refs(self, tag: Any, refs: list[TextRef], path: str) -> None:
         if isinstance(tag, nbt.TAG_Compound):
             for key, value in tag.items():
                 child_path = f"{path}/{key}"
+                if key in {"front_text", "back_text"} and isinstance(value, nbt.TAG_Compound):
+                    self._collect_sign_face(value, refs, child_path)
+                    continue
+                if key == "components" and isinstance(value, nbt.TAG_Compound):
+                    self._collect_components(value, refs, child_path)
+                    continue
+                if isinstance(value, nbt.TAG_Compound) and "text" in value and key in {
+                    "CustomName",
+                    "custom_name",
+                    "item_name",
+                    "Name",
+                }:
+                    self._collect_direct_component(value, refs, child_path)
+                    continue
                 if isinstance(value, nbt.TAG_String):
                     raw = value.value
                     is_sign = key in {"Text1", "Text2", "Text3", "Text4"} and self.scan_config["translate_signs"]
@@ -1200,103 +1337,94 @@ class WorldTranslator:
             for item in node:
                 yield from self._iter_json_nodes(item)
 
+    def _write_world_bytes(self, path: Path, content: bytes) -> None:
+        last_error: Exception | None = None
+        for attempt in range(1, max(1, int(self.runtime_config["max_file_write_retries"])) + 1):
+            try:
+                write_bytes_atomic(path, content)
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                self.emit("file_write_retry", file=str(path), attempt=attempt, message=str(exc))
+                time.sleep(min(0.5 * attempt, 2.0))
+        if last_error is not None:
+            raise last_error
+
     def process_region_file(self, path: Path) -> dict[str, Any]:
+        from mwt.region import RegionFile, external_chunk_path
+        from mwt.safety import BackupSet
+
         self.ensure_not_cancelled()
         if path.stat().st_size < 8192:
             return {"file": str(path), "changed_chunks": 0, "unique_texts": 0, "candidates": 0, "skipped": "small"}
 
-        data = path.read_bytes()
-        locations = data[:4096]
-        timestamps = data[4096:8192]
+        try:
+            region = RegionFile.read(path)
+        except Exception as exc:
+            return {
+                "file": str(path),
+                "changed_chunks": 0,
+                "unique_texts": 0,
+                "candidates": 0,
+                "skipped": "parse_error",
+                "error": str(exc),
+            }
 
+        file_locked = bool(region.unsupported_ids)
         changed_chunks = 0
         unique_texts: set[str] = set()
         candidate_count = 0
-        parse_error = False
-        entries: list[tuple[int, bytes, int]] = []
-
-        for idx in range(1024):
+        for chunk in region.chunks:
             self.ensure_not_cancelled()
-            loc = locations[idx * 4 : idx * 4 + 4]
-            sector_offset = int.from_bytes(loc[:3], "big")
-            sector_count = loc[3]
-            if sector_offset == 0 or sector_count == 0:
-                entries.append((0, b"", 0))
+            if chunk.empty or chunk.malformed or chunk.raw_nbt is None:
                 continue
-
             try:
-                compression, payload, length = self.load_chunk_payload(data, sector_offset)
-                raw_nbt = self.decompress_payload(compression, payload)
-                root = self.parse_nbt_bytes(raw_nbt)
+                root = self.parse_nbt_bytes(chunk.raw_nbt)
             except Exception:
-                parse_error = True
-                break
-
+                chunk.malformed = True
+                chunk.raw_nbt = None
+                continue
             refs: list[TextRef] = []
-            self.collect_tag_refs(root, refs, f"{path.name}#{idx}")
+            self.collect_tag_refs(root, refs, f"{path.name}#{chunk.index}")
             texts = self.extract_unique_texts(refs)
             unique_texts.update(texts)
             candidate_count += len(texts)
-
-            if texts and not self.config["dry_run"]:
-                translations = self.translator.translate_texts(texts)
-                local_changes = self.apply_translations(refs, translations)
-            else:
-                local_changes = 0
-
+            if file_locked or not texts or self.config["dry_run"]:
+                continue
+            translations = self._guard_translations(texts, self.translator.translate_texts(texts))
+            local_changes = self.apply_translations(refs, translations)
             if local_changes > 0:
                 changed_chunks += 1
-                raw_nbt = self.dump_nbt_bytes(root)
-                payload = self.compress_payload(compression, raw_nbt)
-                length = len(payload) + 1
+                region.replace_nbt(chunk.index, self.dump_nbt_bytes(root))
 
-            full_chunk = length.to_bytes(4, "big") + bytes([compression]) + payload
-            timestamp = int.from_bytes(timestamps[idx * 4 : idx * 4 + 4], "big")
-            entries.append((length, full_chunk, timestamp))
-
-        if parse_error:
+        if file_locked:
             self.candidate_texts.update(unique_texts)
             return {
                 "file": str(path),
                 "changed_chunks": 0,
                 "unique_texts": len(unique_texts),
                 "candidates": candidate_count,
-                "skipped": "parse_error",
+                "skipped": "unsupported_compression",
+                "unsupported_compression": region.unsupported_ids,
+                "wrote": False,
             }
 
         if changed_chunks > 0 and not self.config["dry_run"]:
-            self.backup_once(path)
-            header_locations = bytearray(4096)
-            header_timestamps = bytearray(timestamps)
-            body = bytearray()
-            sector_cursor = 2
-
-            for idx, (length, chunk_bytes, timestamp) in enumerate(entries):
-                if length == 0:
+            world_dir = Path(self.config["world_dir"]).resolve()
+            backup = BackupSet(world_dir, "latest")
+            backup.add(path)
+            for chunk in region.chunks:
+                if not chunk.external:
                     continue
-                needed_sectors = math.ceil(len(chunk_bytes) / 4096)
-                header_locations[idx * 4 : idx * 4 + 3] = sector_cursor.to_bytes(3, "big")
-                header_locations[idx * 4 + 3] = needed_sectors
-                header_timestamps[idx * 4 : idx * 4 + 4] = timestamp.to_bytes(4, "big")
-                body.extend(chunk_bytes)
-                padding = needed_sectors * 4096 - len(chunk_bytes)
-                if padding:
-                    body.extend(b"\x00" * padding)
-                sector_cursor += needed_sectors
-
-            final_bytes = bytes(header_locations) + bytes(header_timestamps) + bytes(body)
-            last_error: Exception | None = None
-            for attempt in range(1, max(1, int(self.runtime_config["max_file_write_retries"])) + 1):
-                try:
-                    write_bytes_atomic(path, final_bytes)
-                    last_error = None
-                    break
-                except Exception as exc:
-                    last_error = exc
-                    self.emit("file_write_retry", file=str(path), attempt=attempt, message=str(exc))
-                    time.sleep(min(0.5 * attempt, 2.0))
-            if last_error is not None:
-                raise last_error
+                mcc_path = external_chunk_path(path, chunk.index)
+                if mcc_path.is_file():
+                    backup.add(mcc_path)
+            backup.verify()
+            data, mcc_files = region.build()
+            self._write_world_bytes(path, data)
+            for index, payload in mcc_files.items():
+                self._write_world_bytes(external_chunk_path(path, index), payload)
 
         self.candidate_texts.update(unique_texts)
         return {
@@ -1515,6 +1643,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, help="Translation batch size")
     parser.add_argument("--temperature", type=float, help="Sampling temperature")
     parser.add_argument("--dry-run", action="store_true", help="Scan only, do not call API or write files")
+    parser.add_argument(
+        "--expect-fingerprint",
+        default="",
+        help="Refuse to write if the world data fingerprint differs from this scan fingerprint",
+    )
+    parser.add_argument("--restore-backup", action="store_true", help="Restore the verified latest backup")
+    parser.add_argument("--print-notices", action="store_true", help="Print the first-launch safety notice")
     parser.add_argument("--resume", action="store_true", help="Resume from the last saved checkpoint if it exists")
     parser.add_argument("--no-backup", action="store_true", help="Do not create backup files")
     parser.add_argument(
@@ -1549,6 +1684,12 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.print_notices:
+        from mwt.notices import FIRST_LAUNCH
+
+        print(FIRST_LAUNCH)
+        return
+
     config_path = Path(args.config).expanduser().resolve() if args.config else None
     loaded = load_toml_config(config_path)
     config = merge_nested(DEFAULT_CONFIG, loaded)
@@ -1580,6 +1721,14 @@ def main() -> None:
 
     if not config["world_dir"]:
         raise SystemExit("`world_dir` is required. Set it in config or pass --world-dir.")
+    if args.restore_backup:
+        from mwt.safety import BackupSet
+
+        BackupSet(Path(config["world_dir"]), "latest").restore()
+        print(json.dumps({"status": "restored", "world_dir": config["world_dir"]}, ensure_ascii=False))
+        return
+    if args.expect_fingerprint:
+        config["runtime"]["expected_world_fingerprint"] = args.expect_fingerprint
     if not config["dry_run"]:
         if not config["api"]["api_key"]:
             raise SystemExit("API key is missing. Set it in config, environment, or translate.py defaults.")

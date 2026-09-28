@@ -12,6 +12,9 @@ venv/
 translation_report.json
 translator-config.json
 .translation_checkpoint.json
+dist/
+build/
+*.spec
 
 # Editors & IDEs
 .vscode/

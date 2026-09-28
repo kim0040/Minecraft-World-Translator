@@ -1,3 +1,15 @@
+# PomiTranslate
+
+World Translator for Minecraft
+
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+
+Back up your world before translating. PomiTranslate writes to the world files you select.
+
+Text you choose to translate is sent to the API provider you select and may incur charges.
+
+PomiTranslate has no purchase, subscription, or in-app payment.
+
 # Minecraft World Translator
 
 English | [한국어](./docs/README.ko.md) | [日本語](./docs/README.ja.md) | [简体中文](./docs/README.zh.md)

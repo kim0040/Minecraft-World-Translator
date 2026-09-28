@@ -1,0 +1,28 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unsigned draft when signing credentials are missing
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          set -eu
+          if [ -z "${APPLE_SIGNING_IDENTITY}" ] || [ -z "${WINDOWS_CERTIFICATE}" ]; then
+            echo "unsigned draft: signing credentials are missing"
+            echo "signature verification remains enabled; this job does not disable it"
+            mkdir -p dist
+            printf 'unsigned draft\nsignature verification enabled\n' > dist/UNSIGNED_DRAFT.txt
+            exit 0
+          fi
+          echo "signing credentials are present; refusing to publish without the notarization steps"
+          exit 1

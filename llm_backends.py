@@ -229,6 +229,8 @@ def flatten_text_payload(content: Any) -> str:
 
 
 class LLMProviderClient:
+    request_count = 0
+
     def __init__(self, config: dict[str, Any]) -> None:
         api_config = config["api"]
         self.provider = api_config["provider"]
@@ -315,6 +317,7 @@ class LLMProviderClient:
         body = None
         if payload is not None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        LLMProviderClient.request_count += 1
         req = request.Request(url=url, data=body, headers=headers, method=method)
         try:
             with request.urlopen(req, timeout=self.timeout) as response:
