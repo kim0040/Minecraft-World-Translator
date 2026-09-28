@@ -1,0 +1,380 @@
+"""Provider wire formats, text-model catalogs, and remembered settings."""
+
+from __future__ import annotations
+
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from llm_backends import LLMProviderClient, ModelCatalogError, public_provider_choices
+from mc_world_translator import main
+from mwt.secrets import load_api_key
+from tests.test_release_fixtures import compound, nbt_bytes, string, write_region
+
+
+class Recorder(BaseHTTPRequestHandler):
+    seen: list[tuple] = []
+
+    def _send(self, payload: dict) -> None:
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self) -> None:  # noqa: N802
+        Recorder.seen.append(("GET", self.path.split("?", 1)[0], self.path))
+        self._send(
+            {
+                "data": [
+                    {
+                        "id": "text-model",
+                        "name": "Text Model",
+                        "description": "A text model",
+                        "context_length": 8192,
+                        "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+                        "pricing": {"prompt": "0.0000001", "completion": "0.0000002"},
+                        "supported_parameters": ["temperature"],
+                        "display_name": "Text Model",
+                    },
+                    {
+                        "id": "json-model",
+                        "name": "JSON Model",
+                        "description": "Supports JSON",
+                        "context_length": 4096,
+                        "architecture": {"output_modalities": ["text"]},
+                        "supported_parameters": ["temperature", "response_format"],
+                        "display_name": "JSON Model",
+                    },
+                    {
+                        "id": "image-model",
+                        "name": "Image Model",
+                        "description": "Image only",
+                        "architecture": {"output_modalities": ["image"], "input_modalities": ["text"]},
+                    },
+                    {"id": "embed-model", "owned_by": "vendor"},
+                ],
+                "models": [
+                    {
+                        "name": "models/gemini-test",
+                        "displayName": "Gemini Test",
+                        "description": "text model",
+                        "supportedGenerationMethods": ["generateContent"],
+                    },
+                    {
+                        "name": "models/gemini-embed",
+                        "displayName": "Embed",
+                        "supportedGenerationMethods": ["embedContent"],
+                    },
+                ],
+            }
+        )
+
+    def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0"))
+        body = json.loads(self.rfile.read(length).decode("utf-8"))
+        headers = {key.lower(): value for key, value in self.headers.items()}
+        Recorder.seen.append(("POST", self.path.split("?", 1)[0], self.path, headers, body))
+        if "generateContent" in self.path:
+            self._send({"candidates": [{"content": {"parts": [{"text": json.dumps({"0": "Hola"})}]}}]})
+            return
+        if self.path.split("?", 1)[0].endswith("/messages"):
+            self._send({"content": [{"type": "text", "text": json.dumps({"0": "Hola"})}]})
+            return
+        self._send({"choices": [{"message": {"content": json.dumps({"0": "Hola"})}}]})
+
+    def log_message(self, format: str, *args) -> None:  # noqa: A003
+        return
+
+
+def start() -> tuple[ThreadingHTTPServer, str]:
+    Recorder.seen = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Recorder)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    host, port = server.server_address[:2]
+    return server, f"http://{host}:{port}"
+
+
+def client(base: str, provider: str, model: str, *, wire: str = "", data_dir: Path | None = None) -> LLMProviderClient:
+    return LLMProviderClient(
+        {
+            "api": {
+                "provider": provider,
+                "api_key": f"{provider}-key",
+                "base_url": base,
+                "model": model,
+                "request_timeout": 30,
+                "wire_format": wire,
+            },
+            "runtime": {"data_dir": str(data_dir or "")},
+        }
+    )
+
+
+def last_post() -> tuple:
+    posts = [item for item in Recorder.seen if item[0] == "POST"]
+    if not posts:
+        raise AssertionError("no provider request was recorded")
+    return posts[-1]
+
+
+def test_public_providers() -> None:
+    assert public_provider_choices() == ["openai", "gemini", "anthropic", "openrouter", "custom"]
+    print("PASS providers.public")
+
+
+def test_openai_gemini_anthropic_openrouter_custom(base: str, tmp: Path) -> None:
+    root = base
+    openai = client(f"{root}/v1", "openai", "json-model", data_dir=tmp / "openai")
+    assert openai.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, _full, headers, body = last_post()
+    assert path == "/v1/chat/completions"
+    assert headers["authorization"] == "Bearer openai-key"
+    assert body["model"] == "json-model"
+    assert body["response_format"] == {"type": "json_object"}
+    assert openai.model_info["display_name"] == "JSON Model"
+    assert openai.model_info["context_length"] == 4096
+
+    openrouter = client(f"{root}/v1", "openrouter", "text-model", data_dir=tmp / "openrouter")
+    assert openrouter.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, full, headers, body = last_post()
+    assert path == "/v1/chat/completions"
+    assert any(item[0] == "GET" and "output_modalities=text" in item[2] for item in Recorder.seen)
+    assert headers["authorization"] == "Bearer openrouter-key"
+    assert headers["x-title"] == "PomiTranslate"
+    assert "response_format" not in body
+    assert openrouter.model_info["description"] == "A text model"
+    assert openrouter.model_info["pricing_prompt"] == "0.0000001"
+    ids = [item["id"] for item in openrouter.try_refresh_text_models()]
+    assert ids == ["text-model", "json-model"]
+    assert "image-model" not in ids
+    assert "embed-model" not in ids
+
+    gemini = client(f"{root}/v1beta", "gemini", "gemini-test")
+    assert gemini.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, full, _headers, body = last_post()
+    assert "/models/gemini-test:generateContent" in full
+    assert "key=gemini-key" in full
+    assert body["systemInstruction"]["parts"][0]["text"] == "sys"
+    assert [item["id"] for item in gemini.try_refresh_text_models()] == ["gemini-test"]
+
+    anthropic = client(f"{root}/v1", "anthropic", "text-model")
+    assert anthropic.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, _full, headers, body = last_post()
+    assert path == "/v1/messages"
+    assert headers["x-api-key"] == "anthropic-key"
+    assert headers["anthropic-version"] == "2023-06-01"
+    assert body["system"] == "sys"
+    assert body["model"] == "text-model"
+
+    custom = client(f"{root}/v1", "custom", "json-model", wire="openai")
+    assert custom.family == "openai_compatible"
+    assert custom.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, _full, headers, body = last_post()
+    assert path == "/v1/chat/completions"
+    assert headers["authorization"] == "Bearer custom-key"
+    assert body["model"] == "json-model"
+
+    custom_anthropic = client(f"{root}/v1", "custom", "text-model", wire="anthropic")
+    assert custom_anthropic.family == "anthropic"
+    assert custom_anthropic.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    _, path, _full, headers, _body = last_post()
+    assert path == "/v1/messages"
+    assert headers["x-api-key"] == "custom-key"
+    print("PASS providers.wire")
+
+
+def test_unknown_model_does_not_write(base: str, tmp: Path) -> None:
+    from mc_world_translator import DEFAULT_CONFIG, WorldTranslator, merge_nested
+
+    world = tmp / "catalog-world"
+    region = world / "region" / "r.0.0.mca"
+    write_region(region, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}'))), False)})
+    original = region.read_bytes()
+    config = merge_nested(
+        DEFAULT_CONFIG,
+        {
+            "world_dir": str(world),
+            "dry_run": False,
+            "report_path": str(tmp / "catalog-report.json"),
+            "inherit_translate_py": False,
+            "runtime": {"checkpoint_enabled": False, "data_dir": str(tmp / "catalog-data")},
+            "api": {
+                "provider": "openai",
+                "api_key": "openai-key",
+                "model": "not-published",
+                "base_url": f"{base}/v1",
+            },
+        },
+    )
+    report = WorldTranslator(config).run()
+    assert report["status"] == "failed"
+    assert "not-published" in report["error"]
+    assert region.read_bytes() == original
+    print("PASS providers.catalog_blocks_write")
+
+
+def test_settings_are_remembered(tmp: Path) -> None:
+    import keyring
+    from keyring.backend import KeyringBackend
+
+    class MemoryKeyring(KeyringBackend):
+        priority = 1
+
+        def __init__(self) -> None:
+            self.values: dict[tuple[str, str], str] = {}
+
+        def set_password(self, service: str, username: str, password: str) -> None:
+            self.values[(service, username)] = password
+
+        def get_password(self, service: str, username: str) -> str | None:
+            return self.values.get((service, username))
+
+        def delete_password(self, service: str, username: str) -> None:
+            self.values.pop((service, username), None)
+
+    keyring.set_keyring(MemoryKeyring())
+    data = tmp / "cli-data"
+    world = tmp / "cli-world"
+    world.mkdir()
+    secret = "cli-test-key-remembered"
+    main(
+        [
+            "--data-dir",
+            str(data),
+            "--provider",
+            "openrouter",
+            "--model",
+            "xiaomi/mimo-v2.6-flash",
+            "--base-url",
+            "https://openrouter.ai/api/v1",
+            "--wire-format",
+            "openai",
+            "--target-language",
+            "한국어",
+            "--world-dir",
+            str(world),
+            "--report-path",
+            str(tmp / "cli-report.json"),
+            "--dry-run",
+            "--api-key",
+            secret,
+        ]
+    )
+    stored = json.loads((data / "settings.json").read_text(encoding="utf-8"))
+    assert stored["provider"] == "openrouter"
+    assert stored["model"] == "xiaomi/mimo-v2.6-flash"
+    assert stored["last_world_dir"] == str(world.resolve())
+    assert secret not in json.dumps(stored)
+    assert secret not in (tmp / "cli-report.json").read_text(encoding="utf-8")
+    assert load_api_key("openrouter") == secret
+    stored["ui_scale"] = 1.25
+    stored["custom_note"] = "keep-me"
+    (data / "settings.json").write_text(json.dumps(stored), encoding="utf-8")
+    from mwt.userdata import load_user_settings, remember_user_settings, user_data_dir
+
+    remember_user_settings({"model": "still-openrouter-model", "api_key": secret}, root=data)
+    reloaded = load_user_settings(data)
+    assert reloaded["provider"] == "openrouter"
+    assert reloaded["model"] == "still-openrouter-model"
+    assert reloaded["ui_scale"] == 1.25
+    assert reloaded["custom_note"] == "keep-me"
+    assert reloaded["last_world_dir"] == str(world.resolve())
+    assert "api_key" not in reloaded
+    assert secret not in (data / "settings.json").read_text(encoding="utf-8")
+    install = Path(__file__).resolve().parents[1]
+    assert install not in user_data_dir().parents
+    print("PASS providers.settings_persist")
+
+
+def test_desktop_settings(tmp: Path) -> None:
+    import keyring
+    from keyring.backend import KeyringBackend
+
+    from mwt.desktop_entry import handle
+
+    class MemoryKeyring(KeyringBackend):
+        priority = 1
+
+        def __init__(self) -> None:
+            self.values: dict[tuple[str, str], str] = {}
+
+        def set_password(self, service: str, username: str, password: str) -> None:
+            self.values[(service, username)] = password
+
+        def get_password(self, service: str, username: str) -> str | None:
+            return self.values.get((service, username))
+
+        def delete_password(self, service: str, username: str) -> None:
+            self.values.pop((service, username), None)
+
+    keyring.set_keyring(MemoryKeyring())
+    data = tmp / "desktop-data"
+    secret = "desktop-settings-secret"
+    captured: list[str] = []
+
+    def emit_capture(message: dict) -> None:
+        captured.append(json.dumps(message))
+
+    import mwt.desktop_entry as entry
+
+    original = entry.emit
+    entry.emit = lambda message: captured.append(json.dumps(message))  # type: ignore[assignment]
+    try:
+        handle(
+            {
+                "v": 1,
+                "id": "set",
+                "type": "settings.set",
+                "payload": {
+                    "provider": "custom",
+                    "model": "local-model",
+                    "baseUrl": "http://127.0.0.1:9/v1",
+                    "wireFormat": "openai",
+                    "targetLanguage": "한국어",
+                    "apiKey": secret,
+                },
+            },
+            tmp / "reports",
+            data,
+        )
+        handle({"v": 1, "id": "get", "type": "settings.get", "payload": {}}, tmp / "reports", data)
+    finally:
+        entry.emit = original
+    assert secret not in "\n".join(captured)
+    saved = json.loads((data / "settings.json").read_text(encoding="utf-8"))
+    assert saved["provider"] == "custom"
+    assert saved["model"] == "local-model"
+    assert saved["wire_format"] == "openai"
+    assert secret not in json.dumps(saved)
+    assert load_api_key("custom") == secret
+    second = handle
+    assert second is handle
+    print("PASS providers.desktop_settings")
+
+
+def main_test() -> None:
+    import tempfile
+
+    test_public_providers()
+    server, base = start()
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp = Path(temp_dir)
+            test_openai_gemini_anthropic_openrouter_custom(base, tmp)
+            test_unknown_model_does_not_write(base, tmp)
+            test_settings_are_remembered(tmp)
+            test_desktop_settings(tmp)
+    finally:
+        server.shutdown()
+    print("ALL_PROVIDER_TESTS_PASSED")
+
+
+if __name__ == "__main__":
+    main_test()

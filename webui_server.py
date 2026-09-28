@@ -249,6 +249,13 @@ class JobManager:
             if not config["api"]["model"]:
                 raise ValueError("Model is missing. Set it in the UI or your defaults.")
 
+        from mwt.secrets import remember_api_key
+        from mwt.userdata import public_settings_from_config, remember_user_settings, user_data_dir
+
+        remember_user_settings(public_settings_from_config(config), root=user_data_dir())
+        if config["api"]["api_key"]:
+            remember_api_key(config["api"]["provider"], config["api"]["api_key"])
+
         job_id = uuid.uuid4().hex[:10]
         job = {
             "id": job_id,

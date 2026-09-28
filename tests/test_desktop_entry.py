@@ -21,6 +21,14 @@ PY = sys.executable
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        raw = b'{"data":[]}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -86,7 +94,16 @@ def main() -> None:
             env = os.environ.copy()
             env.update({"POMI_API_KEY": "desktop-test-key", "POMI_API_BASE": base_url, "POMI_MODEL": "fixture"})
             proc = subprocess.Popen(
-                [PY, "-m", "mwt.desktop_entry", "--jsonl", "--report-dir", str(tmp / "reports")],
+                [
+                    PY,
+                    "-m",
+                    "mwt.desktop_entry",
+                    "--jsonl",
+                    "--report-dir",
+                    str(tmp / "reports"),
+                    "--data-dir",
+                    str(tmp / "userdata"),
+                ],
                 cwd=ROOT,
                 env=env,
                 stdin=subprocess.PIPE,

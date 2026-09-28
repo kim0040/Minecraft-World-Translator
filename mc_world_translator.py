@@ -21,6 +21,7 @@ from typing import Any
 from env_utils import load_dotenv_chain
 from llm_backends import (
     LLMProviderClient,
+    ModelCatalogError,
     PROVIDER_SPECS,
     default_base_url,
     enhance_style_prompt,
@@ -111,6 +112,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "api_key": "",
         "base_url": "",
         "model": "",
+        "wire_format": "",
         "request_timeout": 120,
         "rpm_limit": 0,
         "tpm_limit": 0,
@@ -286,6 +288,10 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
         result["api"]["base_url"] = args.base_url
     if args.model:
         result["api"]["model"] = args.model
+    if getattr(args, "wire_format", ""):
+        result["api"]["wire_format"] = args.wire_format
+    if getattr(args, "data_dir", ""):
+        result["runtime"]["data_dir"] = args.data_dir
     if args.target_language:
         result["prompt"]["target_language"] = args.target_language
     if args.style_preset:
@@ -313,6 +319,51 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
         result["runtime"]["resume_from_checkpoint"] = True
 
     return result
+
+
+def apply_remembered_defaults(config: dict[str, Any], data_dir: Path | None) -> dict[str, Any]:
+    """Fill still-default public fields from the user data directory. Explicit values win."""
+    from mwt.userdata import load_user_settings
+
+    saved = load_user_settings(data_dir)
+    if not saved:
+        return config
+    result = deepcopy(config)
+    api = result["api"]
+    if api.get("provider") == DEFAULT_CONFIG["api"]["provider"] and saved.get("provider"):
+        api["provider"] = saved["provider"]
+    if not api.get("model") and saved.get("model"):
+        api["model"] = saved["model"]
+    if not api.get("base_url") and saved.get("base_url"):
+        api["base_url"] = saved["base_url"]
+    if not api.get("wire_format") and saved.get("wire_format"):
+        api["wire_format"] = saved["wire_format"]
+    prompt = result["prompt"]
+    if (
+        prompt.get("target_language") == DEFAULT_CONFIG["prompt"]["target_language"]
+        and saved.get("target_language")
+    ):
+        prompt["target_language"] = saved["target_language"]
+    if prompt.get("style_preset") == DEFAULT_CONFIG["prompt"]["style_preset"] and saved.get("style_preset"):
+        prompt["style_preset"] = saved["style_preset"]
+    if not prompt.get("style_prompt") and saved.get("style_prompt"):
+        prompt["style_prompt"] = saved["style_prompt"]
+    if not prompt.get("custom_system_prompt") and saved.get("custom_system_prompt"):
+        prompt["custom_system_prompt"] = saved["custom_system_prompt"]
+    if result.get("temperature") == DEFAULT_CONFIG["temperature"] and saved.get("temperature") not in ("", None):
+        result["temperature"] = saved["temperature"]
+    if result.get("batch_size") == DEFAULT_CONFIG["batch_size"] and saved.get("batch_size") not in ("", None):
+        result["batch_size"] = saved["batch_size"]
+    return result
+
+
+def remember_run_settings(config: dict[str, Any], data_dir: Path | None, api_key: str | None = None) -> None:
+    from mwt.secrets import remember_api_key
+    from mwt.userdata import public_settings_from_config, remember_user_settings
+
+    remember_user_settings(public_settings_from_config(config), root=data_dir)
+    if api_key:
+        remember_api_key(config["api"]["provider"], api_key)
 
 
 def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[str, Any]:
@@ -537,6 +588,7 @@ class WorldTranslator:
         self.translation_cache: dict[str, str] = {}
         self.candidate_texts: set[str] = set()
         self.file_errors: list[dict[str, Any]] = []
+        self._run_backup = None
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
@@ -658,6 +710,7 @@ class WorldTranslator:
         from llm_backends import LLMProviderClient
 
         LLMProviderClient.request_count = 0
+        self._run_backup = None
         world_dir = Path(self.config["world_dir"]).resolve()
         if not world_dir.exists() or not world_dir.is_dir():
             msg = f"World directory not found or invalid: {world_dir}"
@@ -687,6 +740,24 @@ class WorldTranslator:
                 self.refresh_report_counts()
                 self.write_report()
                 return self.report
+            if not self.config["dry_run"] and self.translator is not None:
+                try:
+                    self.translator.client.try_refresh_text_models()
+                except ModelCatalogError as exc:
+                    self.report["status"] = "failed"
+                    self.report["error"] = str(exc)
+                    self.report["errors"].append({"scope": "models", "message": str(exc)})
+                    self.refresh_report_counts()
+                    self.write_report()
+                    return self.report
+                if self.translator.client.model_info:
+                    info = self.translator.client.model_info
+                    self.report["model_info"] = {
+                        "id": info.get("id", ""),
+                        "display_name": info.get("display_name", ""),
+                        "description": info.get("description", ""),
+                        "context_length": info.get("context_length"),
+                    }
             if self.config["resource_pack"]["enabled"]:
                 self.ensure_not_cancelled()
                 self.emit("resource_pack_start")
@@ -1415,7 +1486,9 @@ class WorldTranslator:
 
         if changed_chunks > 0 and not self.config["dry_run"]:
             world_dir = Path(self.config["world_dir"]).resolve()
-            backup = BackupSet(world_dir, "latest")
+            if self._run_backup is None:
+                self._run_backup = BackupSet(world_dir, "latest")
+            backup = self._run_backup
             backup.add(path)
             for chunk in region.chunks:
                 if not chunk.external:
@@ -1425,9 +1498,13 @@ class WorldTranslator:
                     backup.add(mcc_path)
             backup.verify()
             data, mcc_files = region.build()
+            written = [path]
             self._write_world_bytes(path, data)
             for index, payload in mcc_files.items():
-                self._write_world_bytes(external_chunk_path(path, index), payload)
+                mcc_path = external_chunk_path(path, index)
+                self._write_world_bytes(mcc_path, payload)
+                written.append(mcc_path)
+            backup.mark_written(written)
 
         self.candidate_texts.update(unique_texts)
         return {
@@ -1634,6 +1711,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", type=str, help="API key override")
     parser.add_argument("--base-url", type=str, help="Base URL override")
     parser.add_argument("--model", type=str, help="Model override")
+    parser.add_argument(
+        "--wire-format",
+        choices=("openai", "anthropic"),
+        default="",
+        help="Wire format used by the custom provider",
+    )
+    parser.add_argument(
+        "--data-dir",
+        default="",
+        help="Directory for remembered settings. Defaults to the OS application support folder.",
+    )
     parser.add_argument("--target-language", type=str, help="Target language, e.g. 한국어")
     parser.add_argument(
         "--style-preset",
@@ -1683,9 +1771,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    from mwt.userdata import user_data_dir
+
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.print_notices:
         from mwt.notices import FIRST_LAUNCH
@@ -1693,10 +1783,13 @@ def main() -> None:
         print(FIRST_LAUNCH)
         return
 
+    data_dir = Path(args.data_dir).expanduser() if args.data_dir else user_data_dir()
     config_path = Path(args.config).expanduser().resolve() if args.config else None
     loaded = load_toml_config(config_path)
     config = merge_nested(DEFAULT_CONFIG, loaded)
+    config = apply_remembered_defaults(config, data_dir)
     config = apply_cli_overrides(config, args)
+    config["runtime"]["data_dir"] = str(data_dir)
     try:
         config = normalize_config(config, config_path)
     except ValueError as exc:
@@ -1707,6 +1800,7 @@ def main() -> None:
             models = list_models_for_config(config)
         except Exception as exc:
             raise SystemExit(str(exc)) from exc
+        remember_run_settings(config, data_dir, args.api_key or None)
         print(json.dumps({"provider": config["api"]["provider"], "models": models}, ensure_ascii=False, indent=2))
         return
 
@@ -1740,6 +1834,7 @@ def main() -> None:
 
     translator = WorldTranslator(config)
     report = translator.run()
+    remember_run_settings(config, data_dir, args.api_key or None)
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

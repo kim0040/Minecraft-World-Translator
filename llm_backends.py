@@ -40,6 +40,14 @@ PROVIDER_SPECS: dict[str, dict[str, str]] = {
         "model_env_var": "OPENROUTER_MODEL",
         "family": "openai_compatible",
     },
+    "custom": {
+        "label": "Custom",
+        "base_url": "",
+        "env_var": "CUSTOM_API_KEY",
+        "base_url_env_var": "CUSTOM_BASE_URL",
+        "model_env_var": "CUSTOM_MODEL",
+        "family": "openai_compatible",
+    },
     "comet": {
         "label": "Comet API",
         "base_url": "https://api.cometapi.com/v1",
@@ -80,8 +88,15 @@ PROMPT_ENHANCER_SYSTEM_PROMPT = """
 """.strip()
 
 
+PUBLIC_PROVIDERS = ("openai", "gemini", "anthropic", "openrouter", "custom")
+
+
 def provider_choices() -> list[str]:
     return sorted(PROVIDER_SPECS)
+
+
+def public_provider_choices() -> list[str]:
+    return [provider for provider in PUBLIC_PROVIDERS if provider in PROVIDER_SPECS]
 
 
 def provider_spec(provider: str) -> dict[str, str]:
@@ -116,6 +131,15 @@ def resolve_api_key(provider: str, current: str) -> str:
     env_name = provider_spec(provider)["env_var"]
     if os.getenv(env_name):
         return os.getenv(env_name, "")
+
+    try:
+        from mwt.secrets import load_api_key
+
+        stored = load_api_key(provider)
+        if stored:
+            return stored
+    except Exception:
+        pass
 
     fallback_order = [
         "OPENAI_API_KEY",
@@ -208,6 +232,76 @@ def extract_json_object(text: str) -> dict[str, Any]:
         return {}
 
 
+_NON_TEXT_TOKENS = (
+    "embed",
+    "whisper",
+    "tts",
+    "dall-e",
+    "dalle",
+    "moderation",
+    "transcribe",
+    "-image",
+    "realtime",
+    "audio-only",
+)
+
+
+class ModelCatalogError(RuntimeError):
+    pass
+
+
+def _output_modalities(item: dict[str, Any]) -> list[str]:
+    architecture = item.get("architecture") if isinstance(item.get("architecture"), dict) else {}
+    outputs = architecture.get("output_modalities")
+    if isinstance(outputs, list) and outputs:
+        return [str(part) for part in outputs]
+    modality = str(architecture.get("modality") or "")
+    if "->" in modality:
+        target = modality.split("->", 1)[1]
+        return [part.strip() for part in target.replace("+", ",").split(",") if part.strip()]
+    return []
+
+
+def _is_text_generation_model(model_id: str, item: dict[str, Any]) -> bool:
+    outputs = _output_modalities(item)
+    if outputs:
+        return "text" in outputs
+    lowered = model_id.lower()
+    return not any(token in lowered for token in _NON_TEXT_TOKENS)
+
+
+def _model_record(model_id: str, item: dict[str, Any], *, display_name: str, description: str) -> dict[str, Any]:
+    architecture = item.get("architecture") if isinstance(item.get("architecture"), dict) else {}
+    pricing = item.get("pricing") if isinstance(item.get("pricing"), dict) else {}
+    inputs = architecture.get("input_modalities") if isinstance(architecture.get("input_modalities"), list) else []
+    parameters = item.get("supported_parameters") if isinstance(item.get("supported_parameters"), list) else []
+    text = _is_text_generation_model(model_id, item)
+    outputs = _output_modalities(item) or (["text"] if text else [])
+    return {
+        "id": model_id,
+        "display_name": display_name or model_id,
+        "description": description,
+        "context_length": item.get("context_length") or item.get("context_window") or item.get("max_context_length"),
+        "input_modalities": inputs,
+        "output_modalities": outputs,
+        "pricing_prompt": str(pricing.get("prompt", "")),
+        "pricing_completion": str(pricing.get("completion", "")),
+        "supported_parameters": [str(parameter) for parameter in parameters],
+        "text": text,
+    }
+
+
+def _catalog_allows_json(info: dict[str, Any] | None, provider: str) -> bool:
+    if provider == "openrouter" and not info:
+        return False
+    if not info:
+        return True
+    parameters = info.get("supported_parameters") or []
+    if not parameters:
+        return provider != "openrouter"
+    return "response_format" in parameters or "structured_outputs" in parameters
+
+
 def flatten_text_payload(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -238,7 +332,21 @@ class LLMProviderClient:
         self.api_key = api_config["api_key"]
         self.model = api_config["model"]
         self.timeout = int(api_config.get("request_timeout", 120))
-        self.family = provider_spec(self.provider)["family"]
+        self.wire_format = str(api_config.get("wire_format") or "").strip().lower()
+        self.family = self._family_for()
+        runtime = config.get("runtime") or {}
+        self.data_dir = str(runtime.get("data_dir") or "")
+        self.model_info: dict[str, Any] | None = None
+        self.supports_json_response = self.provider != "openrouter"
+        self._catalog_checked = False
+        self._catalog_error: ModelCatalogError | None = None
+        self._catalog: list[dict[str, Any]] = []
+
+    def _family_for(self) -> str:
+        if self.provider in {"custom", "custom_openai", "custom_anthropic"}:
+            wire = self.wire_format or ("anthropic" if self.provider == "custom_anthropic" else "openai")
+            return "anthropic" if wire == "anthropic" else "openai_compatible"
+        return provider_spec(self.provider)["family"]
 
     def ensure_ready(self, require_model: bool = True) -> None:
         if not self.api_key:
@@ -256,6 +364,48 @@ class LLMProviderClient:
             return self._list_models_anthropic()
         raise RuntimeError(f"Unsupported provider family: {self.family}")
 
+    def try_refresh_text_models(self) -> list[dict[str, Any]]:
+        """Fetch text models once and pin the configured id to a published model."""
+        if self._catalog_error is not None:
+            raise self._catalog_error
+        if self._catalog_checked:
+            return self._catalog
+        fetched: list[dict[str, Any]] | None = None
+        try:
+            fetched = [item for item in self.list_models() if item.get("text")]
+        except Exception:
+            fetched = None
+        if fetched:
+            self._catalog = fetched
+            if self.data_dir:
+                from pathlib import Path
+
+                from mwt.userdata import remember_model_catalog
+
+                remember_model_catalog(self.provider, fetched, root=Path(self.data_dir))
+        elif self.data_dir:
+            from pathlib import Path
+
+            from mwt.userdata import load_model_catalog
+
+            self._catalog = [
+                item
+                for item in load_model_catalog(self.provider, root=Path(self.data_dir))
+                if item.get("text", True)
+            ]
+        self._catalog_checked = True
+        if self.model and self._catalog:
+            match = next((item for item in self._catalog if item.get("id") == self.model), None)
+            if match is None:
+                self._catalog_error = ModelCatalogError(
+                    f"{self.model} is not in the text models published by {self.provider}"
+                )
+                raise self._catalog_error
+            self.model = str(match["id"])
+            self.model_info = match
+            self.supports_json_response = _catalog_allows_json(match, self.provider)
+        return self._catalog
+
     def complete_text(
         self,
         *,
@@ -266,6 +416,7 @@ class LLMProviderClient:
         max_output_tokens: int = 4096,
     ) -> str:
         self.ensure_ready(require_model=True)
+        self.try_refresh_text_models()
         if self.family == "openai_compatible":
             return self._complete_openai_compatible(
                 system_prompt=system_prompt,
@@ -324,16 +475,21 @@ class LLMProviderClient:
                 raw = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"{provider_spec(self.provider)['label']} request failed with HTTP {exc.code}: {detail}"
-            ) from exc
+            message = f"{provider_spec(self.provider)['label']} request failed with HTTP {exc.code}: {detail}"
+            raise RuntimeError(self._redact(message)) from exc
         except error.URLError as exc:
-            raise RuntimeError(f"{provider_spec(self.provider)['label']} request failed: {exc.reason}") from exc
+            message = f"{provider_spec(self.provider)['label']} request failed: {exc.reason}"
+            raise RuntimeError(self._redact(message)) from exc
 
         try:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"{provider_spec(self.provider)['label']} returned invalid JSON.") from exc
+
+    def _redact(self, message: str) -> str:
+        from mwt.secrets import redact_log
+
+        return redact_log(message, self.api_key)
 
     def _openai_headers(self) -> dict[str, str]:
         headers = {
@@ -341,8 +497,9 @@ class LLMProviderClient:
             "Content-Type": "application/json",
         }
         if self.provider == "openrouter":
-            headers["HTTP-Referer"] = "http://localhost"
-            headers["X-Title"] = "Minecraft World Translator"
+            headers["HTTP-Referer"] = "https://github.com/kim0040/Minecraft-World-Translator"
+            headers["X-Title"] = "PomiTranslate"
+            headers["X-OpenRouter-Title"] = "PomiTranslate"
         return headers
 
     def _complete_openai_compatible(
@@ -361,7 +518,7 @@ class LLMProviderClient:
             ],
             "temperature": temperature,
         }
-        if expect_json:
+        if expect_json and self.supports_json_response:
             payload["response_format"] = {"type": "json_object"}
 
         response = self._request_json(
@@ -377,21 +534,27 @@ class LLMProviderClient:
         return flatten_text_payload(message.get("content"))
 
     def _list_models_openai_compatible(self) -> list[dict[str, Any]]:
-        response = self._request_json("GET", f"{self.base_url}/models", headers=self._openai_headers())
+        url = f"{self.base_url}/models"
+        if self.provider == "openrouter":
+            url = f"{url}?output_modalities=text"
+        response = self._request_json("GET", url, headers=self._openai_headers())
         data = response.get("data") or []
         models: list[dict[str, Any]] = []
         for item in data:
+            if not isinstance(item, dict):
+                continue
             model_id = str(item.get("id", "")).strip()
             if not model_id:
                 continue
-            models.append(
-                {
-                    "id": model_id,
-                    "display_name": model_id,
-                    "description": item.get("owned_by", ""),
-                    "raw": item,
-                }
+            description = str(item.get("description") or item.get("owned_by") or "")
+            record = _model_record(
+                model_id,
+                item,
+                display_name=str(item.get("name") or model_id),
+                description=description,
             )
+            if record["text"]:
+                models.append(record)
         return models
 
     def _complete_gemini(
@@ -453,14 +616,14 @@ class LLMProviderClient:
             description_parts = [item.get("displayName", "")]
             if item.get("description"):
                 description_parts.append(str(item["description"]))
-            models.append(
-                {
-                    "id": model_id,
-                    "display_name": item.get("displayName", model_id),
-                    "description": " | ".join(part for part in description_parts if part),
-                    "raw": item,
-                }
+            record = _model_record(
+                model_id,
+                item,
+                display_name=str(item.get("displayName") or model_id),
+                description=" | ".join(part for part in description_parts if part),
             )
+            if record["text"]:
+                models.append(record)
         return models
 
     def _anthropic_headers(self) -> dict[str, str]:
@@ -506,14 +669,14 @@ class LLMProviderClient:
             model_id = str(item.get("id", "")).strip()
             if not model_id:
                 continue
-            models.append(
-                {
-                    "id": model_id,
-                    "display_name": item.get("display_name", model_id),
-                    "description": item.get("created_at", ""),
-                    "raw": item,
-                }
+            record = _model_record(
+                model_id,
+                item,
+                display_name=str(item.get("display_name") or model_id),
+                description=str(item.get("description") or item.get("created_at") or ""),
             )
+            if record["text"]:
+                models.append(record)
         return models
 
 

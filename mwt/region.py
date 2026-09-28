@@ -1,9 +1,12 @@
 """Anvil region codec used by the shipped translator.
 
 Compression ids follow Java Edition: 1 gzip, 2 zlib, 3 none, 4 LZ4.
-Id 4 stores a 4-byte big-endian uncompressed length followed by a raw LZ4 block.
-The external-chunk flag is the high bit of the compression byte. The payload then
-lives in ``c.<x>.<z>.mcc`` beside the region file.
+Id 4 is Minecraft 1.20.5+ ``LZ4BlockOutputStream`` framing: each block starts
+with the ASCII magic ``LZ4Block``, not a bare LZ4 block.
+The external-chunk flag is the high bit of the compression byte inside the
+region file. ``c.<x>.<z>.mcc`` holds only the compressed bytes. Minecraft's
+``RegionFile.writeToExternalFile`` seeks past the 5-byte header before writing
+that file.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import math
+import struct
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +23,18 @@ SECTOR = 4096
 HEADER_SECTORS = 2
 EXTERNAL_FLAG = 0x80
 SUPPORTED_COMPRESSION = {1, 2, 3, 4}
+LZ4_MAGIC = b"LZ4Block"
+LZ4_HEADER_LENGTH = 21
+LZ4_METHOD_RAW = 0x10
+LZ4_METHOD_LZ4 = 0x20
+LZ4_LEVEL_BASE = 10
+LZ4_BLOCK_SIZE = 1 << 16
+LZ4_SEED = 0x9747B28C
+_XXH_P1 = 0x9E3779B1
+_XXH_P2 = 0x85EBCA77
+_XXH_P3 = 0xC2B2AE3D
+_XXH_P4 = 0x27D4EB2F
+_XXH_P5 = 0x165667B1
 
 
 class RegionError(ValueError):
@@ -31,6 +47,141 @@ class UnsupportedCompression(RegionError):
         super().__init__(f"Unsupported region compression id {compression_id}")
 
 
+def _rotl32(value: int, bits: int) -> int:
+    value &= 0xFFFFFFFF
+    return ((value << bits) | (value >> (32 - bits))) & 0xFFFFFFFF
+
+
+def _xxh32_round(acc: int, lane: int) -> int:
+    acc = (acc + (lane * _XXH_P2)) & 0xFFFFFFFF
+    return (_rotl32(acc, 13) * _XXH_P1) & 0xFFFFFFFF
+
+
+def _xxh32(data: bytes, seed: int) -> int:
+    """XXH32. The empty input at seed 0 is 0x02CC5D05."""
+    length = len(data)
+    offset = 0
+    if length >= 16:
+        acc1 = (seed + _XXH_P1 + _XXH_P2) & 0xFFFFFFFF
+        acc2 = (seed + _XXH_P2) & 0xFFFFFFFF
+        acc3 = seed & 0xFFFFFFFF
+        acc4 = (seed - _XXH_P1) & 0xFFFFFFFF
+        while offset + 16 <= length:
+            acc1 = _xxh32_round(acc1, struct.unpack_from("<I", data, offset)[0])
+            acc2 = _xxh32_round(acc2, struct.unpack_from("<I", data, offset + 4)[0])
+            acc3 = _xxh32_round(acc3, struct.unpack_from("<I", data, offset + 8)[0])
+            acc4 = _xxh32_round(acc4, struct.unpack_from("<I", data, offset + 12)[0])
+            offset += 16
+        digest = (
+            _rotl32(acc1, 1) + _rotl32(acc2, 7) + _rotl32(acc3, 12) + _rotl32(acc4, 18)
+        ) & 0xFFFFFFFF
+    else:
+        digest = (seed + _XXH_P5) & 0xFFFFFFFF
+    digest = (digest + length) & 0xFFFFFFFF
+    while offset + 4 <= length:
+        lane = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        digest = (digest + (lane * _XXH_P3)) & 0xFFFFFFFF
+        digest = (_rotl32(digest, 17) * _XXH_P4) & 0xFFFFFFFF
+    while offset < length:
+        digest = (digest + (data[offset] * _XXH_P5)) & 0xFFFFFFFF
+        digest = (_rotl32(digest, 11) * _XXH_P1) & 0xFFFFFFFF
+        offset += 1
+    digest ^= digest >> 15
+    digest = (digest * _XXH_P2) & 0xFFFFFFFF
+    digest ^= digest >> 13
+    digest = (digest * _XXH_P3) & 0xFFFFFFFF
+    digest ^= digest >> 16
+    return digest
+
+
+def _lz4_java_checksum(data: bytes) -> int:
+    # LZ4BlockOutputStream hashes through Checksum.getValue(), which masks
+    # the top 4 bits (StreamingXXHash32.asChecksum).
+    return _xxh32(data, LZ4_SEED) & 0x0FFFFFFF
+
+
+def _lz4_compression_level(block_size: int = LZ4_BLOCK_SIZE) -> int:
+    return max(0, (block_size - 1).bit_length() - LZ4_LEVEL_BASE)
+
+
+def _lz4_header(token: int, compressed_len: int, original_len: int, checksum: int) -> bytes:
+    return (
+        LZ4_MAGIC
+        + bytes([token])
+        + compressed_len.to_bytes(4, "little")
+        + original_len.to_bytes(4, "little")
+        + checksum.to_bytes(4, "little")
+    )
+
+
+def compress_lz4_block_stream(raw: bytes) -> bytes:
+    """Frame ``raw`` the way ``new LZ4BlockOutputStream(out)`` does (64 KiB blocks)."""
+    import lz4.block
+
+    level = _lz4_compression_level()
+    parts: list[bytes] = []
+    for start in range(0, len(raw), LZ4_BLOCK_SIZE):
+        chunk = raw[start : start + LZ4_BLOCK_SIZE]
+        compressed = lz4.block.compress(chunk, store_size=False)
+        if len(compressed) >= len(chunk):
+            method = LZ4_METHOD_RAW
+            body = chunk
+        else:
+            method = LZ4_METHOD_LZ4
+            body = compressed
+        parts.append(
+            _lz4_header(method | level, len(body), len(chunk), _lz4_java_checksum(chunk)) + body
+        )
+    parts.append(_lz4_header(LZ4_METHOD_RAW | level, 0, 0, 0))
+    return b"".join(parts)
+
+
+def decompress_lz4_block_stream(payload: bytes) -> bytes:
+    if not payload.startswith(LZ4_MAGIC):
+        raise RegionError("LZ4 chunk does not start with LZ4Block")
+    import lz4.block
+
+    output = bytearray()
+    offset = 0
+    while offset < len(payload):
+        if offset + LZ4_HEADER_LENGTH > len(payload):
+            raise RegionError("Truncated LZ4Block header")
+        if payload[offset : offset + 8] != LZ4_MAGIC:
+            raise RegionError("LZ4 chunk is missing the LZ4Block magic")
+        token = payload[offset + 8]
+        method = token & 0xF0
+        level = token & 0x0F
+        compressed_len = int.from_bytes(payload[offset + 9 : offset + 13], "little")
+        original_len = int.from_bytes(payload[offset + 13 : offset + 17], "little")
+        checksum = int.from_bytes(payload[offset + 17 : offset + 21], "little")
+        offset += LZ4_HEADER_LENGTH
+        if original_len == 0:
+            if compressed_len != 0 or checksum != 0:
+                raise RegionError("Invalid LZ4Block end marker")
+            break
+        if original_len > (1 << (LZ4_LEVEL_BASE + level)):
+            raise RegionError("LZ4Block length exceeds the declared block size")
+        if offset + compressed_len > len(payload):
+            raise RegionError("Truncated LZ4Block payload")
+        body = payload[offset : offset + compressed_len]
+        offset += compressed_len
+        if method == LZ4_METHOD_RAW:
+            if compressed_len != original_len:
+                raise RegionError("Raw LZ4Block length mismatch")
+            raw = body
+        elif method == LZ4_METHOD_LZ4:
+            raw = lz4.block.decompress(body, uncompressed_size=original_len)
+        else:
+            raise RegionError(f"Unknown LZ4Block method {method:#x}")
+        if len(raw) != original_len:
+            raise RegionError("LZ4Block decompressed length mismatch")
+        if _lz4_java_checksum(raw) != checksum:
+            raise RegionError("LZ4Block checksum mismatch")
+        output.extend(raw)
+    return bytes(output)
+
+
 def compress_payload(compression: int, raw_nbt: bytes) -> bytes:
     if compression == 1:
         return gzip.compress(raw_nbt)
@@ -39,10 +190,7 @@ def compress_payload(compression: int, raw_nbt: bytes) -> bytes:
     if compression == 3:
         return raw_nbt
     if compression == 4:
-        import lz4.block
-
-        block = lz4.block.compress(raw_nbt, store_size=False)
-        return len(raw_nbt).to_bytes(4, "big") + block
+        return compress_lz4_block_stream(raw_nbt)
     raise UnsupportedCompression(compression)
 
 
@@ -54,12 +202,7 @@ def decompress_payload(compression: int, payload: bytes) -> bytes:
     if compression == 3:
         return payload
     if compression == 4:
-        import lz4.block
-
-        if len(payload) < 4:
-            raise RegionError("Truncated LZ4 chunk")
-        size = int.from_bytes(payload[:4], "big")
-        return lz4.block.decompress(payload[4:], uncompressed_size=size)
+        return decompress_lz4_block_stream(payload)
     raise UnsupportedCompression(compression)
 
 
@@ -145,8 +288,7 @@ class RegionFile:
                     if not record.mcc_bytes:
                         record.malformed = True
                     else:
-                        record.compression = record.mcc_bytes[0] & 0x7F
-                        record.payload = record.mcc_bytes[1:]
+                        record.payload = record.mcc_bytes
             base = record.compression
             if base not in SUPPORTED_COMPRESSION:
                 record.unsupported = True
@@ -181,7 +323,7 @@ class RegionFile:
         chunk.timestamp = timestamp
         chunk.record_bytes = _pack_record(compression, payload, external=False)
         if external:
-            chunk.mcc_bytes = bytes([compression]) + payload
+            chunk.mcc_bytes = payload
             chunk.record_bytes = (1).to_bytes(4, "big") + bytes([compression | EXTERNAL_FLAG])
 
     def put_raw_record(self, index: int, record_bytes: bytes, timestamp: int = 0) -> None:
@@ -217,7 +359,7 @@ class RegionFile:
         chunk.modified = True
         chunk.malformed = False
         if external:
-            chunk.mcc_bytes = bytes([compression]) + payload
+            chunk.mcc_bytes = payload
             chunk.record_bytes = (1).to_bytes(4, "big") + bytes([compression | EXTERNAL_FLAG])
         else:
             chunk.mcc_bytes = None

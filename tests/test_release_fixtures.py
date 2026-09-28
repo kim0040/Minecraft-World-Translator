@@ -48,6 +48,14 @@ TRANSLATIONS = {
 class TranslatorHandler(BaseHTTPRequestHandler):
     calls = 0
 
+    def do_GET(self) -> None:  # noqa: N802
+        raw = b'{"data":[]}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -228,16 +236,38 @@ def record(name: str) -> None:
 
 def test_compression_round_trip(tmp: Path, base_url: str) -> None:
     raw = nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}')))
+    known_lz4 = bytes(
+        [
+            0x4C, 0x5A, 0x34, 0x42, 0x6C, 0x6F, 0x63, 0x6B,
+            0x10,
+            0x03, 0x00, 0x00, 0x00,
+            0x03, 0x00, 0x00, 0x00,
+            0x52, 0xE4, 0x77, 0x06,
+            0x2E, 0x2E, 0x2E,
+        ]
+    )
+    assert known_lz4.startswith(b"LZ4Block")
+    assert decompress_payload(4, known_lz4) == b"..."
+    bulky = b"Hello sign\n" * 8000
+    framed = compress_payload(4, bulky)
+    assert framed.startswith(b"LZ4Block")
+    assert framed.count(b"LZ4Block") >= 2
+    assert decompress_payload(4, framed) == bulky
     for name, compression in (("gzip", 1), ("zlib", 2), ("none", 3), ("lz4", 4)):
         assert decompress_payload(compression, compress_payload(compression, raw)) == raw
         world = tmp / name
         region_path = world / "region" / "r.0.0.mca"
         write_region(region_path, {0: (compression, raw, False), 1: (compression, untouched_payload(), False)})
-        before = RegionFile.read(region_path).payload_fingerprint(1)
+        opened = RegionFile.read(region_path)
+        if compression == 4:
+            assert opened.chunks[0].payload.startswith(b"LZ4Block")
+        before = opened.payload_fingerprint(1)
         report = run_world(world, tmp / f"{name}-report.json", base_url, dry_run=False)
         assert report["status"] == "completed"
         after = RegionFile.read(region_path)
         assert after.payload_fingerprint(1) == before
+        if compression == 4:
+            assert after.chunks[0].payload.startswith(b"LZ4Block")
         blob = after.chunks[0].raw_nbt.decode("utf-8", errors="ignore")
         assert "Hola sign" in blob
         assert "Hello sign" not in blob
@@ -246,12 +276,15 @@ def test_compression_round_trip(tmp: Path, base_url: str) -> None:
 
 
 def test_external_mcc(tmp: Path, base_url: str) -> None:
+    import zlib
+
     world = tmp / "mcc"
     region_path = world / "region" / "r.0.0.mca"
     raw = nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}')))
     write_region(region_path, {0: (2, raw, True), 1: (2, untouched_payload(), False)})
     mcc = external_chunk_path(region_path, 0)
     assert mcc.is_file()
+    assert mcc.read_bytes().startswith(b"\x78")
     before_other = RegionFile.read(region_path).payload_fingerprint(1)
     before_mcc = hashlib.sha256(mcc.read_bytes()).hexdigest()
     report = run_world(world, tmp / "mcc-report.json", base_url, dry_run=False)
@@ -259,8 +292,35 @@ def test_external_mcc(tmp: Path, base_url: str) -> None:
     opened = RegionFile.read(region_path)
     assert "Hola sign" in opened.chunks[0].raw_nbt.decode("utf-8", errors="ignore")
     assert opened.payload_fingerprint(1) == before_other
-    assert hashlib.sha256(external_chunk_path(region_path, 0).read_bytes()).hexdigest() != before_mcc
+    rewritten = external_chunk_path(region_path, 0).read_bytes()
+    assert rewritten.startswith(b"\x78")
+    assert hashlib.sha256(rewritten).hexdigest() != before_mcc
     record("compression.external_mcc")
+
+    vanilla = tmp / "vanilla-mcc"
+    vanilla_region = vanilla / "region" / "r.0.0.mca"
+    compressed = zlib.compress(raw)
+    assert compressed.startswith(b"\x78")
+    region = RegionFile.empty()
+    region.put_raw_record(0, (1).to_bytes(4, "big") + bytes([2 | 0x80]))
+    region.put_nbt(1, untouched_payload(), compression=2)
+    data, mcc_files = region.build()
+    assert 0 not in mcc_files
+    vanilla_region.parent.mkdir(parents=True, exist_ok=True)
+    vanilla_region.write_bytes(data)
+    external_chunk_path(vanilla_region, 0).write_bytes(compressed)
+    loaded = RegionFile.read(vanilla_region)
+    assert loaded.chunks[0].compression == 2
+    assert loaded.chunks[0].unsupported is False
+    assert loaded.chunks[0].raw_nbt == raw
+    other_fingerprint = loaded.payload_fingerprint(1)
+    vanilla_report = run_world(vanilla, tmp / "vanilla-mcc-report.json", base_url, dry_run=False)
+    assert vanilla_report["status"] == "completed"
+    after = RegionFile.read(vanilla_region)
+    assert "Hola sign" in after.chunks[0].raw_nbt.decode("utf-8", errors="ignore")
+    assert after.chunks[0].payload.startswith(b"\x78")
+    assert external_chunk_path(vanilla_region, 0).read_bytes().startswith(b"\x78")
+    assert after.payload_fingerprint(1) == other_fingerprint
 
 
 def test_shapes_and_commands(tmp: Path, base_url: str) -> None:
@@ -383,6 +443,27 @@ def test_backup_restore_and_invalidation(tmp: Path, base_url: str) -> None:
     print(f"restore_hash {restore_hash}")
     print("restore_hash_matches_original")
     record("safety.backup_restore")
+
+    two = tmp / "two-region"
+    region_file = two / "region" / "r.0.0.mca"
+    entities_file = two / "entities" / "r.0.0.mca"
+    sign = nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}')))
+    write_region(region_file, {0: (2, sign, False)})
+    write_region(entities_file, {0: (2, sign, False)})
+    original_region = region_file.read_bytes()
+    original_entities = entities_file.read_bytes()
+    two_report = run_world(two, tmp / "two-region-report.json", base_url, dry_run=False)
+    assert two_report["status"] == "completed"
+    assert region_file.read_bytes() != original_region
+    assert entities_file.read_bytes() != original_entities
+    manifest = json.loads((two / ".pomi-backups" / "latest" / "manifest.json").read_text(encoding="utf-8"))
+    listed = {entry["path"] for entry in manifest["files"]}
+    assert "region/r.0.0.mca" in listed
+    assert "entities/r.0.0.mca" in listed
+    BackupSet(two, "latest").restore()
+    assert region_file.read_bytes() == original_region
+    assert entities_file.read_bytes() == original_entities
+    record("safety.multi_file_restore")
 
     write_region(region_path, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}'))), False)})
     scan = run_world(world, tmp / "invalidate-scan.json", base_url, dry_run=True)

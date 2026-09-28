@@ -22,6 +22,7 @@ Detected formats below are not writable.
 - layout.paper_sibling: supported
 - safety.scan_only: supported
 - safety.backup_restore: supported
+- safety.multi_file_restore: supported
 - safety.plan_invalidation: supported
 - safety.malformed_chunk: supported
 

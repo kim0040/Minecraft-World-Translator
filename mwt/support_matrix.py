@@ -20,6 +20,7 @@ VERIFIED_WHEN_PASSING = (
     "layout.paper_sibling",
     "safety.scan_only",
     "safety.backup_restore",
+    "safety.multi_file_restore",
     "safety.plan_invalidation",
     "safety.malformed_chunk",
 )

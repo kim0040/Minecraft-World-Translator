@@ -22,3 +22,5 @@ jobs:
         run: python tests/test_brand_secrets.py
       - name: Desktop entry
         run: python tests/test_desktop_entry.py
+      - name: Providers and remembered settings
+        run: python tests/test_providers.py

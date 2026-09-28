@@ -56,12 +56,15 @@ class BackupSet:
         self.root = self.world_dir / ".pomi-backups" / backup_id
         self.manifest_path = self.root / "manifest.json"
         self.entries: list[dict[str, str]] = []
+        self._written: set[str] = set()
 
     def add(self, path: Path) -> None:
         path = path.resolve()
         if not path.is_file():
             return
         relative = path.relative_to(self.world_dir).as_posix()
+        if any(entry["path"] == relative for entry in self.entries):
+            return
         destination = self.root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, destination)
@@ -79,10 +82,19 @@ class BackupSet:
         if payload.get("verified") is not True:
             raise BackupError("Backup manifest is not verified")
         for entry in payload["files"]:
-            source = self.world_dir / entry["path"]
             copied = self.root / entry["path"]
-            if file_sha256(source) != entry["sha256"] or file_sha256(copied) != entry["sha256"]:
+            if file_sha256(copied) != entry["sha256"]:
                 raise BackupError(f"Backup verification failed for {entry['path']}")
+            if entry["path"] in self._written:
+                continue
+            source = self.world_dir / entry["path"]
+            if file_sha256(source) != entry["sha256"]:
+                raise BackupError(f"Backup verification failed for {entry['path']}")
+
+    def mark_written(self, paths: list[Path]) -> None:
+        """Remember files this run has already replaced so later verifies do not expect the pre-write bytes."""
+        for path in paths:
+            self._written.add(path.resolve().relative_to(self.world_dir).as_posix())
 
     def restore(self) -> None:
         payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
