@@ -29,7 +29,7 @@ The CLI and the packaged desktop entry use the same translator. A translation wr
 - `tellraw`, `title`, `subtitle`, and `actionbar` command text
 - Resource-pack `lang/*.json` files inside a zip, when that option is enabled
 
-![Scan first](assets/illustrations/docs/doc_scan_first_v1.png)
+![Scan first](assets/illustrations/docs/doc_scan_first_en_v1.png)
 
 ## Formats
 
@@ -48,7 +48,7 @@ Detected and not written:
 
 The generated list is [docs/support-matrix.md](docs/support-matrix.md). macOS Intel, Windows x64, and Linux x64 are not listed as supported platforms. The Linux package job builds an artifact; it was not smoked as a supported desktop platform.
 
-![Unsupported formats stop](assets/illustrations/docs/doc_unsupported_v1.png)
+![Unsupported formats stop](assets/illustrations/docs/doc_unsupported_en_v1.png)
 
 ## Providers
 
@@ -68,7 +68,7 @@ Public settings survive app updates. They live outside the install folder:
 
 A model catalog for the provider is stored beside that file. Deleting those files, or the keychain item, is how you clear them.
 
-![Text is sent to the provider you choose](assets/illustrations/docs/doc_api_notice_v1.png)
+![Text is sent to the provider you choose](assets/illustrations/docs/doc_api_notice_en_v1.png)
 
 ## Quick start
 
@@ -106,7 +106,7 @@ python mc_world_translator.py --world-dir "/path/to/world" --restore-backup
 
 One run keeps a single backup manifest. Restoring puts back every file that run changed, including a second region such as `entities/`.
 
-![Back up before writing](assets/illustrations/docs/doc_backup_first_v1.png)
+![Back up before writing](assets/illustrations/docs/doc_backup_first_en_v1.png)
 
 ## Desktop entry
 

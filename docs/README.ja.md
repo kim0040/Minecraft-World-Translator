@@ -29,7 +29,7 @@ CLI とパッケージされたデスクトップ入口は同じ翻訳器を使�
 - `tellraw`、`title`、`subtitle`、`actionbar` の文章
 - 有効にしたときのリソースパック zip 内 `lang/*.json`
 
-![先にスキャン](../assets/illustrations/docs/doc_scan_first_v1.png)
+![先にスキャン](../assets/illustrations/docs/doc_scan_first_ja_v1.png)
 
 ## 形式
 
@@ -37,7 +37,7 @@ CLI とパッケージされたデスクトップ入口は同じ翻訳器を使�
 
 Bedrock、Anvil 以前の `.mcr`、`.linear`、id 127 を含む不明な圧縮は検出して書き込みません。一覧は [support-matrix.md](support-matrix.md) です。macOS Intel、Windows x64、Linux x64 はサポート対象のプラットフォームとして載せていません。
 
-![未対応の形式は停止](../assets/illustrations/docs/doc_unsupported_v1.png)
+![未対応の形式は停止](../assets/illustrations/docs/doc_unsupported_ja_v1.png)
 
 ## プロバイダと保存
 
@@ -53,7 +53,7 @@ API キーは OS キーチェーンのサービス名 `PomiTranslate` に保存�
 - Windows: `%APPDATA%\PomiTranslate\settings.json`
 - Linux: `$XDG_DATA_HOME/PomiTranslate` または `~/.local/share/PomiTranslate/settings.json`
 
-![選んだプロバイダへ文章が送られる](../assets/illustrations/docs/doc_api_notice_v1.png)
+![選んだプロバイダへ文章が送られる](../assets/illustrations/docs/doc_api_notice_ja_v1.png)
 
 ## 実行
 
@@ -68,7 +68,7 @@ python mc_world_translator.py --world-dir "/path/to/world" --dry-run --report-pa
 
 スキャンで得たフィンガープリントを `--expect-fingerprint` に渡すと、その後にワールドが変わった翻訳は拒否されます。`--restore-backup` は、その実行が変更したすべてのファイルを戻します。
 
-![書く前にバックアップ](../assets/illustrations/docs/doc_backup_first_v1.png)
+![書く前にバックアップ](../assets/illustrations/docs/doc_backup_first_ja_v1.png)
 
 `python -m mwt.desktop_entry` は標準入出力の JSONL で動き、ローカルポートを開きません。署名資格がないリリースは未署名ドラフトで止まり、署名検証はオフにしません。
 

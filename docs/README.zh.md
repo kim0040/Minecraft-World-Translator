@@ -29,7 +29,7 @@ PomiTranslate 是一个免费的本地工具，用来翻译 Java 版世界里玩
 - `tellraw`、`title`、`subtitle`、`actionbar` 中的文字
 - 启用后，资源包 zip 里的 `lang/*.json`
 
-![先扫描](../assets/illustrations/docs/doc_scan_first_v1.png)
+![先扫描](../assets/illustrations/docs/doc_scan_first_zh_v1.png)
 
 ## 格式
 
@@ -37,7 +37,7 @@ PomiTranslate 是一个免费的本地工具，用来翻译 Java 版世界里玩
 
 Bedrock、Anvil 之前的 `.mcr`、`.linear`，以及包括 id 127 在内的未知压缩，只会识别并停止写入。清单见 [support-matrix.md](support-matrix.md)。macOS Intel、Windows x64 和 Linux x64 不列为已支持平台。
 
-![不支持的格式会停止](../assets/illustrations/docs/doc_unsupported_v1.png)
+![不支持的格式会停止](../assets/illustrations/docs/doc_unsupported_zh_v1.png)
 
 ## 供应商与保存
 
@@ -53,7 +53,7 @@ API 密钥保存在操作系统钥匙串中，服务名是 `PomiTranslate`，账
 - Windows：`%APPDATA%\PomiTranslate\settings.json`
 - Linux：`$XDG_DATA_HOME/PomiTranslate` 或 `~/.local/share/PomiTranslate/settings.json`
 
-![文字会发到你选择的供应商](../assets/illustrations/docs/doc_api_notice_v1.png)
+![文字会发到你选择的供应商](../assets/illustrations/docs/doc_api_notice_zh_v1.png)
 
 ## 运行
 
@@ -68,7 +68,7 @@ python mc_world_translator.py --world-dir "/path/to/world" --dry-run --report-pa
 
 把扫描得到的指纹传给 `--expect-fingerprint` 后，世界若已改变，翻译会被拒绝。`--restore-backup` 会还原该次运行改过的全部文件。
 
-![写入前先备份](../assets/illustrations/docs/doc_backup_first_v1.png)
+![写入前先备份](../assets/illustrations/docs/doc_backup_first_zh_v1.png)
 
 `python -m mwt.desktop_entry` 通过标准输入输出使用 JSONL，不会打开本地端口。没有签名凭据时，发布任务停在未签名草稿，并且不会关闭签名校验。
 
