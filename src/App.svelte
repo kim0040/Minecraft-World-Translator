@@ -182,7 +182,7 @@
   function requestEstimate(): string {
     if (resumeAvailable) return t('재개 시 남은 요청 확인 불가');
     if (estimatedRequestCount === 0) return t('API 요청 없음');
-    return t('최소 {count}회 · 파일 경계·재시도 제외', { count: estimatedRequestCount });
+    return t('{count}회 · 재시도 제외', { count: estimatedRequestCount });
   }
 
   function numberOr(value: unknown, fallback: number): number {
@@ -218,6 +218,14 @@
       label: t('검사한 구조 쓰기 가능'),
       detail: t('현재 월드에서 발견한 압축·텍스트 구조가 픽스처로 검증된 범위에 있습니다.')
     };
+  }
+
+  function kindLabel(kind: string | undefined): string {
+    const labels: Record<string, string> = {
+      sign: '표지판', book_title: '책 제목', book_page: '책 페이지', item_name: '아이템 이름', item_lore: '아이템 설명',
+      entity_name: '엔티티 이름', block_name: '블록 이름', text_display: '텍스트 디스플레이', command: '명령 블록'
+    };
+    return kind && labels[kind] ? t(labels[kind]) : '';
   }
 
   function statusLabel(status: string): string {
@@ -739,7 +747,7 @@
                     />
                     <div class="candidate-content">
                       <span>{candidate.source}</span>
-                      {#if candidate.location || (candidate.kind && candidate.kind !== 'world.text')}<small>{candidate.kind && candidate.kind !== 'world.text' ? candidate.kind : ''}{candidate.location ? ` · ${candidate.location}` : ''}</small>{/if}
+                      {#if candidate.location || kindLabel(candidate.kind)}<small>{kindLabel(candidate.kind)}{candidate.location ? ` · ${candidate.location}` : ''}{candidate.occurrences && candidate.occurrences > 1 ? ` · ${t('{count}곳', { count: candidate.occurrences })}` : ''}</small>{/if}
                       <input
                         class="manual-translation"
                         type="text"
@@ -846,7 +854,7 @@
 {/if}
 
 {#if showTranslateConfirm}
-  <dialog class="modal" use:modal={{ dismissible: true, onDismiss: () => showTranslateConfirm = false }} aria-labelledby="confirm-title"><p class="eyebrow">{resumeRequested ? t('중단 작업 재개 확인') : t('번역 실행 확인')}</p><h2 id="confirm-title">{resumeRequested ? t('안전한 지점부터 이어서 번역할까요?') : t('이 월드를 번역할까요?')}</h2><dl><dt>{t('월드')}</dt><dd>{worldDir}</dd><dt>{t('대상 언어')}</dt><dd>{targetLanguage}</dd><dt>{t('제공사 · 모델')}</dt><dd>{manualOnly ? t('직접 번역만 적용') : `${provider} · ${model}`}</dd><dt>{t('외부로 전송될 고유 텍스트')}</dt><dd>{resumeRequested ? t('재개 시 남은 수 확인 불가') : externalCandidateCount}</dd><dt>{t('예상 요청·비용')}</dt><dd>{resumeRequested ? `${t('재개 시 남은 요청 확인 불가')} · ${t('비용 확인 불가 · 제공사 정책에 따라 청구')}` : estimatedRequestCount === 0 ? t('API 요청 없음') : `${t('최소 {count}회 · 파일 경계·재시도 제외', { count: estimatedRequestCount })} · ${t('비용 확인 불가 · 제공사 정책에 따라 청구')}`}</dd><dt>{t('백업')}</dt><dd>{resumeRequested ? t('기존 검증 백업 세트를 이어서 사용') : t('쓰기 전 변경 파일을 백업하고 검증')}</dd></dl><p class="small">{t('이미 전송된 API 요청에는 요금이 발생했을 수 있습니다. 원작자의 허락 없이 번역본을 재배포하지 마세요.')}</p><div class="modal-actions"><button class="secondary" onclick={() => showTranslateConfirm = false}>{t('취소')}</button><button class="primary dark" onclick={startTranslation}>{resumeRequested ? t('이어서 번역') : t('번역 시작')}</button></div></dialog>
+  <dialog class="modal" use:modal={{ dismissible: true, onDismiss: () => showTranslateConfirm = false }} aria-labelledby="confirm-title"><p class="eyebrow">{resumeRequested ? t('중단 작업 재개 확인') : t('번역 실행 확인')}</p><h2 id="confirm-title">{resumeRequested ? t('안전한 지점부터 이어서 번역할까요?') : t('이 월드를 번역할까요?')}</h2><dl><dt>{t('월드')}</dt><dd>{worldDir}</dd><dt>{t('대상 언어')}</dt><dd>{targetLanguage}</dd><dt>{t('제공사 · 모델')}</dt><dd>{manualOnly ? t('직접 번역만 적용') : `${provider} · ${model}`}</dd><dt>{t('외부로 전송될 고유 텍스트')}</dt><dd>{resumeRequested ? t('재개 시 남은 수 확인 불가') : externalCandidateCount}</dd><dt>{t('예상 요청·비용')}</dt><dd>{resumeRequested ? `${t('재개 시 남은 요청 확인 불가')} · ${t('비용 확인 불가 · 제공사 정책에 따라 청구')}` : estimatedRequestCount === 0 ? t('API 요청 없음') : `${t('{count}회 · 재시도 제외', { count: estimatedRequestCount })} · ${t('비용 확인 불가 · 제공사 정책에 따라 청구')}`}</dd><dt>{t('백업')}</dt><dd>{resumeRequested ? t('기존 검증 백업 세트를 이어서 사용') : t('쓰기 전 변경 파일을 백업하고 검증')}</dd></dl><p class="small">{t('이미 전송된 API 요청에는 요금이 발생했을 수 있습니다. 원작자의 허락 없이 번역본을 재배포하지 마세요.')}</p><div class="modal-actions"><button class="secondary" onclick={() => showTranslateConfirm = false}>{t('취소')}</button><button class="primary dark" onclick={startTranslation}>{resumeRequested ? t('이어서 번역') : t('번역 시작')}</button></div></dialog>
 {/if}
 
 {#if showRestoreConfirm}

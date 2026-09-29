@@ -39,7 +39,7 @@ export type ScanResult = {
   errors?: { scope?: string; message?: string }[];
   warnings?: BackendWarning[];
   requestEstimate?: number;
-  candidates?: { id: string; source: string; kind?: string; location?: string; occurrences?: number }[];
+  candidates?: { id: string; source: string; kind?: string; kinds?: Record<string, number>; location?: string; locations?: unknown[]; occurrences?: number }[];
 };
 
 export type BackendWarning = { code: string; file?: string; count?: number; message?: string };

@@ -210,16 +210,19 @@ def chunk_coords(index: int, region_x: int = 0, region_z: int = 0) -> tuple[int,
     return region_x * 32 + (index % 32), region_z * 32 + (index // 32)
 
 
-def external_chunk_path(region_path: Path, index: int) -> Path:
-    name = region_path.name
-    region_x, region_z = 0, 0
-    parts = name.split(".")
+def region_coordinates(region_path: Path) -> tuple[int, int]:
+    """Region x and z from a file name such as ``r.-1.3.mca``. Unknown names count as 0, 0."""
+    parts = region_path.name.split(".")
     if len(parts) >= 4 and parts[0] == "r" and parts[-1] == "mca":
         try:
-            region_x = int(parts[1])
-            region_z = int(parts[2])
+            return int(parts[1]), int(parts[2])
         except ValueError:
-            region_x, region_z = 0, 0
+            pass
+    return 0, 0
+
+
+def external_chunk_path(region_path: Path, index: int) -> Path:
+    region_x, region_z = region_coordinates(region_path)
     x, z = chunk_coords(index, region_x, region_z)
     return region_path.parent / f"c.{x}.{z}.mcc"
 

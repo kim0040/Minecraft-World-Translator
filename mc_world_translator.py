@@ -11,9 +11,11 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 import tomllib
 import zlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -33,14 +35,8 @@ from llm_backends import (
     resolve_model,
 )
 
-try:
-    from nbt import nbt
-except ImportError as exc:  # pragma: no cover - runtime dependency guard
-    raise SystemExit(
-        "Missing dependency: `nbt`.\n"
-        "Install it first, for example:\n"
-        "  python3 -m pip install nbtlib anvil-parser nbt"
-    ) from exc
+from mwt import nbtio as nbt
+from mwt.extract import TextExtractionMixin, TextRef
 
 
 STYLE_PRESETS: dict[str, str] = {
@@ -142,7 +138,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "translate_titles": True,
         "translate_filtered_titles": True,
         "translate_command_output": True,
+        "translate_text_displays": True,
         "skip_command_like_text": True,
+        "skip_target_language_text": True,
         "component_translate_key_prefixes": [],
         "overrides": {},
     },
@@ -159,29 +157,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "resume_from_checkpoint": False,
         "continue_on_file_error": True,
         "max_batch_retries": 3,
+        "concurrency": 1,
         "max_file_write_retries": 2,
         "expected_world_fingerprint": "",
+        "backup_store": "",
+        "translation_settings_fingerprint": "",
         "excluded_candidate_ids": [],
         "skip_provider_validation": False,
     },
 }
-
-
-class TextRef:
-    def __init__(
-        self,
-        kind: str,
-        *,
-        tag: Any = None,
-        obj: Any = None,
-        key: str = "",
-        path: str = "",
-    ) -> None:
-        self.kind = kind
-        self.tag = tag
-        self.obj = obj
-        self.key = key
-        self.path = path
 
 
 class TranslationCancelled(RuntimeError):
@@ -478,11 +462,19 @@ class BatchTranslator:
         self.failed: dict[str, str] = {}
         self.consecutive_failures = 0
         self.sleep = time.sleep
+        self.concurrency = max(1, int(config["runtime"].get("concurrency", 1) or 1))
+        self._lock = threading.RLock()
+        self._throttle_lock = threading.Lock()
+        self._abort: BaseException | None = None
 
     def throttle(self, batch_size: int) -> None:
         if self.rpm_limit <= 0 and self.tpm_limit <= 0:
             return
+        # One clock for every worker, so the limits hold however many batches run at once.
+        with self._throttle_lock:
+            self._throttle(batch_size)
 
+    def _throttle(self, batch_size: int) -> None:
         now = time.time()
         delay = 0.0
         if self.rpm_limit > 0:
@@ -512,6 +504,8 @@ class BatchTranslator:
             self.progress_callback({"event": event, **payload})
 
     def ensure_not_cancelled(self) -> None:
+        if self._abort is not None:
+            raise self._abort  # another worker already gave up: stop this one too
         if self.cancel_check is not None and self.cancel_check():
             raise TranslationCancelled("Translation was cancelled by the user.")
 
@@ -551,25 +545,43 @@ class BatchTranslator:
 
         batch_size = max(1, int(self.config["batch_size"]))
         total = len(missing)
-        batches = math.ceil(total / batch_size)
+        groups = [missing[start : start + batch_size] for start in range(0, total, batch_size)]
         done = 0
-        for number, start in enumerate(range(0, total, batch_size), start=1):
-            self.ensure_not_cancelled()
-            batch = missing[start : start + batch_size]
-            translated = self._translate_batch(batch, batch_size)
-            for original, localized in translated.items():
-                self.cache[original] = localized
-            done += len(batch)
+
+        def finished(number: int, batch: list[str], translated: dict[str, str]) -> None:
+            nonlocal done
+            with self._lock:
+                self.cache.update(translated)
+                done += len(batch)
+                failed = len(self.failed)
             self.emit(
                 "translation_progress",
                 completed=done,
                 total=total,
-                failed=len(self.failed),
+                failed=failed,
                 batch=number,
-                batches=batches,
+                batches=len(groups),
                 requests=LLMProviderClient.request_count,
             )
 
+        workers = min(self.concurrency, len(groups))
+        if workers <= 1:
+            for number, batch in enumerate(groups, start=1):
+                self.ensure_not_cancelled()
+                finished(number, batch, self._translate_batch(batch, batch_size))
+            return self.lookup(texts)
+
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="pomi-translate") as pool:
+            futures = {pool.submit(self._translate_batch, batch, batch_size): (number, batch) for number, batch in enumerate(groups, start=1)}
+            try:
+                for future in as_completed(futures):
+                    number, batch = futures[future]
+                    finished(number, batch, future.result())
+            except BaseException as exc:
+                self._abort = exc
+                for pending in futures:
+                    pending.cancel()
+                raise
         return self.lookup(texts)
 
     def _note_failure(self, exc: Exception, *, attempt: int, max_retries: int, batch_size: int) -> float:
@@ -578,8 +590,11 @@ class BatchTranslator:
         code = getattr(exc, "code", "REQUEST_FAILED")
         # Only outages count toward the circuit breaker. A rejected or malformed answer for one
         # batch says nothing about the next one.
-        if isinstance(exc, ProviderError) and (status is None or status == 429 or status >= 500):
-            self.consecutive_failures += 1
+        with self._lock:
+            provider_outage = isinstance(exc, ProviderError) and (status is None or status == 429 or status >= 500)
+            if provider_outage:
+                self.consecutive_failures += 1
+            streak = self.consecutive_failures
         self.emit(
             "translation_batch_error",
             batch_size=batch_size,
@@ -591,9 +606,9 @@ class BatchTranslator:
         )
         if getattr(exc, "fatal", False):
             raise ProviderUnavailable(str(exc), code=code, fatal=True) from exc
-        if self.consecutive_failures >= MAX_CONSECUTIVE_REQUEST_FAILURES:
+        if streak >= MAX_CONSECUTIVE_REQUEST_FAILURES:
             raise ProviderUnavailable(
-                f"{self.consecutive_failures} requests in a row failed. Last error: {exc}",
+                f"{streak} requests in a row failed. Last error: {exc}",
                 code=code,
             ) from exc
         retry_after = getattr(exc, "retry_after", None)
@@ -618,7 +633,8 @@ class BatchTranslator:
                     temperature=float(self.config["temperature"]),
                 )
                 self.emit("translation_batch_done", batch_size=len(texts), attempt=attempt)
-                self.consecutive_failures = 0
+                with self._lock:
+                    self.consecutive_failures = 0
                 return {
                     text: parsed.get(str(i), text)
                     for i, text in enumerate(texts)
@@ -639,11 +655,12 @@ class BatchTranslator:
                 merged.update(self._translate_batch(texts[i : i + next_size], next_size))
             return merged
         # A single string that never translated is recorded, not passed off as translated.
-        self.failed[texts[0]] = last_error or "The provider did not return a translation."
+        with self._lock:
+            self.failed[texts[0]] = last_error or "The provider did not return a translation."
         return {}
 
 
-class WorldTranslator:
+class WorldTranslator(TextExtractionMixin):
     def __init__(
         self,
         config: dict[str, Any],
@@ -666,6 +683,7 @@ class WorldTranslator:
         self.candidate_texts: set[str] = set()
         self.file_errors: list[dict[str, Any]] = []
         self._candidate_order: dict[str, None] = {}
+        self.occurrences: dict[str, dict[str, Any]] = {}
         self.final_translations: dict[str, str] = {}
         self.file_scan: dict[str, dict[str, Any]] = {}
         self._run_backup = None
@@ -750,6 +768,7 @@ class WorldTranslator:
             "world_fingerprint": world_fingerprint(Path(self.config["world_dir"])),
             "resume": {
                 "scan_plan_id": str(self.runtime_config.get("scan_plan_id") or ""),
+                "translation_settings_fingerprint": str(self.runtime_config.get("translation_settings_fingerprint") or ""),
                 "expected_world_fingerprint": str(self.runtime_config.get("expected_world_fingerprint") or ""),
                 "excluded_candidate_ids": list(self.runtime_config.get("excluded_candidate_ids") or []),
                 "manual_overrides": dict(self.scan_config.get("overrides") or {}),
@@ -792,7 +811,9 @@ class WorldTranslator:
         if backup_set_id:
             from mwt.safety import BackupSet
 
-            self._run_backup = BackupSet.open_existing(Path(self.config["world_dir"]), backup_set_id)
+            self._run_backup = BackupSet.open_existing(
+                Path(self.config["world_dir"]), backup_set_id, self._backup_store()
+            )
         self.checkpoint_loaded = True
         self.emit(
             "checkpoint_loaded",
@@ -1055,93 +1076,13 @@ class WorldTranslator:
                     files.append(resolved_path)
         return files
 
-    _SKIP_NAMESPACE_PREFIXES = (
-        "minecraft:", "forge:", "neoforge:", "fabric:",
-        "mod:", "kubejs:", "ftbquests:", "chipped:",
-        "tconstruct:", "mekanism:", "thermal:", "botania:",
-        "create:", "immersiveengineering:",
-    )
-
-    _NOISE_PATTERNS = re.compile(
-        r"^(?:"
-        r"[0-9]+(?:\.[0-9]+)?%?"       # pure numbers like "42", "3.14", "100%"
-        r"|[\u2000-\u2BFF\u2600-\u27BF\uFE30-\uFE4F\uFFF0-\uFFFF]+"  # symbols
-        r"|\.{2,}"                      # ellipsis-like dots "..."
-        r"|-{2,}"                       # dashes "---"
-        r"|={2,}"                       # equals "=="
-        r"|#{1,3}"                      # hash markers
-        r")$",
-    )
-
-    def should_translate_text(self, text: str) -> bool:
-        if not isinstance(text, str):
-            return False
-        stripped = text.strip()
-        if not stripped:
-            return False
-        candidate_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
-        if candidate_id in self.runtime_config.get("excluded_candidate_ids", []):
-            return False
-
-        if stripped in ("@", "#", "!", "?", ".", ",", "-", "~", "/"):
-            return False
-
-        if stripped.startswith(self._SKIP_NAMESPACE_PREFIXES):
-            return False
-
-        if re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", stripped):
-            return False
-
-        if self.scan_config["skip_command_like_text"] and stripped.startswith("/"):
-            return False
-
-        if stripped.startswith("@") and " " not in stripped:
-            return False
-
-        if all(not ch.isalpha() for ch in stripped):
-            return False
-
-        if self._NOISE_PATTERNS.match(stripped):
-            return False
-
-        has_alpha = any(ch.isalpha() for ch in stripped)
-        has_cjk = any(
-            "\uac00" <= ch <= "\ud7a3"   # Hangul
-            or "\u4e00" <= ch <= "\u9fff" # CJK Unified
-            or "\u3040" <= ch <= "\u309f" # Hiragana
-            or "\u30a0" <= ch <= "\u30ff" # Katakana
-            for ch in stripped
-        )
-
-        if not has_alpha and not has_cjk:
-            return False
-
-        if len(stripped) == 1:
-            return has_cjk
-
-        if len(stripped) <= 3 and not has_cjk:
-            if stripped.isupper():
-                return False
-
-        if len(stripped) <= 4 and not has_cjk:
-            all_upper_alpha = all(ch.isupper() or ch in " .-" for ch in stripped)
-            if all_upper_alpha and " " in stripped:
-                return False
-            is_roman = all(ch in "IVXLCDM " for ch in stripped)
-            if is_roman and stripped.strip():
-                return False
-
-        return True
+    @staticmethod
+    def parse_nbt_bytes(raw_nbt: bytes) -> nbt.TAG_Compound:
+        return nbt.parse(raw_nbt)
 
     @staticmethod
-    def parse_nbt_bytes(raw_nbt: bytes) -> nbt.NBTFile:
-        return nbt.NBTFile(buffer=io.BytesIO(raw_nbt))
-
-    @staticmethod
-    def dump_nbt_bytes(root: nbt.NBTFile) -> bytes:
-        buf = io.BytesIO()
-        root.write_file(buffer=buf)
-        return buf.getvalue()
+    def dump_nbt_bytes(root: nbt.TAG_Compound) -> bytes:
+        return root.dump()
 
     @staticmethod
     def load_chunk_payload(data: bytes, sector_offset: int) -> tuple[int, bytes, int]:
@@ -1179,14 +1120,6 @@ class WorldTranslator:
             return raw_nbt
         raise ValueError(f"Unsupported compression type: {compression}")
 
-    @staticmethod
-    def parse_text_component(raw: str) -> Any:
-        return json.loads(raw)
-
-    @staticmethod
-    def serialize_text_component(component: Any) -> str:
-        return json.dumps(component, ensure_ascii=False, separators=(",", ":"))
-
     def backup_once(self, path: Path) -> None:
         if not self.config["backup"]:
             return
@@ -1197,401 +1130,23 @@ class WorldTranslator:
         if not resolved.is_relative_to(world_dir):
             raise ValueError("Backup source is outside the selected world")
         if self._run_backup is None:
-            self._run_backup = BackupSet.new(world_dir)
+            self._run_backup = BackupSet.new(world_dir, store=self._backup_store())
         self._run_backup.add(resolved)
         self._run_backup.verify()
         self._run_backup.publish_latest()
         self.report["backup_set_id"] = self._run_backup.backup_id
 
-    def extract_command_json(self, command: str) -> tuple[str, str] | None:
-        if not isinstance(command, str):
-            return None
-
-        match = re.match(r"^(tellraw\s+\S+\s+)([\[{].*)$", command)
-        if match:
-            return match.group(1), match.group(2)
-        match = re.match(r"^(title\s+\S+\s+(?:title|subtitle|actionbar)\s+)([\[{].*)$", command)
-        if match:
-            return match.group(1), match.group(2)
-        return None
-
-    def text_from_translate_key(self, key: str) -> str:
-        for prefix in self.component_prefixes:
-            if key.startswith(prefix):
-                tail = key[len(prefix) :]
-                return tail.replace("_", " ").replace(".", " ")
-        return key
-
-    def collect_json_text_refs(self, node: Any, refs: list[TextRef], path: str) -> None:
-        if isinstance(node, dict):
-            text_value = node.get("text")
-            if isinstance(text_value, str) and self.should_translate_text(text_value):
-                refs.append(TextRef("json_text", obj=node, key="text", path=path))
-            elif (
-                isinstance(text_value, dict)
-                and set(text_value.keys()) == {"translate"}
-                and isinstance(text_value.get("translate"), str)
-                and any(text_value["translate"].startswith(prefix) for prefix in self.component_prefixes)
-            ):
-                refs.append(TextRef("translate_key", obj=node, key="text", path=path))
-
-            if self.scan_config["translate_command_output"]:
-                click_event = node.get("clickEvent")
-                if isinstance(click_event, dict) and isinstance(click_event.get("value"), str):
-                    self.collect_command_refs(click_event["value"], refs, f"{path}.clickEvent.value")
-
-            hover_event = node.get("hoverEvent")
-            if isinstance(hover_event, dict):
-                hover_value = hover_event.get("value")
-                if self.scan_config["translate_command_output"] and isinstance(hover_value, str):
-                    self.collect_command_refs(hover_value, refs, f"{path}.hoverEvent.value")
-                for hover_key, hover_item in hover_event.items():
-                    if hover_key == "value":
-                        continue
-                    self.collect_json_text_refs(hover_item, refs, f"{path}.hoverEvent.{hover_key}")
-
-            for key, value in node.items():
-                if key in {"text", "clickEvent", "hoverEvent"}:
-                    continue
-                self.collect_json_text_refs(value, refs, f"{path}.{key}")
-        elif isinstance(node, list):
-            for idx, item in enumerate(node):
-                self.collect_json_text_refs(item, refs, f"{path}[{idx}]")
-
-    def collect_command_refs(self, command: str, refs: list[TextRef], path: str) -> None:
-        extracted = self.extract_command_json(command)
-        if not extracted:
-            return
-        _, json_part = extracted
-        try:
-            component = json.loads(json_part)
-        except json.JSONDecodeError:
-            return
-        self.collect_json_text_refs(component, refs, path)
-
-    def _collect_translatable_string(self, tag: nbt.TAG_String, refs: list[TextRef], path: str) -> None:
-        raw = tag.value
-        try:
-            component = self.parse_text_component(raw)
-        except json.JSONDecodeError:
-            if self.should_translate_text(raw):
-                refs.append(TextRef("plain_tag", tag=tag, path=path))
-        else:
-            if isinstance(component, (dict, list)):
-                self.collect_json_text_refs(component, refs, path)
-                refs.append(TextRef("json_tag", tag=tag, path=path))
-            elif self.should_translate_text(raw):
-                refs.append(TextRef("plain_tag", tag=tag, path=path))
-
-    def _collect_direct_component(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
-        text = tag.get("text")
-        if isinstance(text, nbt.TAG_String) and self.should_translate_text(text.value):
-            refs.append(TextRef("plain_tag", tag=text, path=f"{path}/text"))
-        extra = tag.get("extra")
-        if extra is not None:
-            self.collect_tag_refs(extra, refs, f"{path}/extra")
-
-    def _collect_sign_face(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
-        if not self.scan_config["translate_signs"]:
-            return
-        for list_name in ("messages", "filtered_messages"):
-            messages = tag.get(list_name)
-            if not isinstance(messages, nbt.TAG_List):
-                continue
-            for index, item in enumerate(messages):
-                child = f"{path}/{list_name}/{index}"
-                if isinstance(item, nbt.TAG_String):
-                    self._collect_translatable_string(item, refs, child)
-                elif isinstance(item, nbt.TAG_Compound):
-                    self._collect_direct_component(item, refs, child)
-
-    def _collect_book_field(self, tag: Any, refs: list[TextRef], path: str, *, enabled: bool) -> None:
-        if not enabled:
-            return
-        if isinstance(tag, nbt.TAG_String):
-            if self.should_translate_text(tag.value):
-                refs.append(TextRef("plain_tag", tag=tag, path=path))
-        elif isinstance(tag, nbt.TAG_Compound):
-            raw = tag.get("raw")
-            if isinstance(raw, nbt.TAG_String) and self.should_translate_text(raw.value):
-                refs.append(TextRef("plain_tag", tag=raw, path=f"{path}/raw"))
-            elif "text" in tag:
-                self._collect_direct_component(tag, refs, path)
-
-    def _collect_components(self, tag: nbt.TAG_Compound, refs: list[TextRef], path: str) -> None:
-        for key, enabled in (
-            ("minecraft:custom_name", self.scan_config["translate_custom_names"]),
-            ("minecraft:item_name", self.scan_config["translate_item_names"]),
-        ):
-            value = tag.get(key)
-            if not enabled or value is None:
-                continue
-            if isinstance(value, nbt.TAG_String):
-                self._collect_translatable_string(value, refs, f"{path}/{key}")
-            elif isinstance(value, nbt.TAG_Compound):
-                self._collect_direct_component(value, refs, f"{path}/{key}")
-        lore = tag.get("minecraft:lore")
-        if self.scan_config["translate_lore"] and isinstance(lore, nbt.TAG_List):
-            for index, item in enumerate(lore):
-                child = f"{path}/minecraft:lore/{index}"
-                if isinstance(item, nbt.TAG_String):
-                    self._collect_translatable_string(item, refs, child)
-                elif isinstance(item, nbt.TAG_Compound):
-                    self._collect_direct_component(item, refs, child)
-        for key in ("minecraft:written_book_content", "minecraft:writable_book_content"):
-            book = tag.get(key)
-            if not isinstance(book, nbt.TAG_Compound):
-                continue
-            self._collect_book_field(book.get("title"), refs, f"{path}/{key}/title", enabled=self.scan_config["translate_titles"])
-            pages = book.get("pages")
-            if isinstance(pages, nbt.TAG_List):
-                for index, page in enumerate(pages):
-                    self._collect_book_field(
-                        page,
-                        refs,
-                        f"{path}/{key}/pages/{index}",
-                        enabled=self.scan_config["translate_books"],
-                    )
-
     def _guard_translations(self, texts: list[str], translations: dict[str, str]) -> dict[str, str]:
         from mwt.tokens import preserve_tokens
 
-        return {text: preserve_tokens(text, translations.get(text, text)) for text in texts}
-
-    def collect_tag_refs(self, tag: Any, refs: list[TextRef], path: str) -> None:
-        if isinstance(tag, nbt.TAG_Compound):
-            for key, value in tag.items():
-                child_path = f"{path}/{key}"
-                if key in {"front_text", "back_text"} and isinstance(value, nbt.TAG_Compound):
-                    self._collect_sign_face(value, refs, child_path)
-                    continue
-                if key == "components" and isinstance(value, nbt.TAG_Compound):
-                    self._collect_components(value, refs, child_path)
-                    continue
-                if isinstance(value, nbt.TAG_Compound) and "text" in value and key in {
-                    "CustomName",
-                    "custom_name",
-                    "item_name",
-                    "Name",
-                }:
-                    self._collect_direct_component(value, refs, child_path)
-                    continue
-                if isinstance(value, nbt.TAG_String):
-                    raw = value.value
-                    is_sign = key in {"Text1", "Text2", "Text3", "Text4"} and self.scan_config["translate_signs"]
-                    is_custom_name = key == "CustomName" and self.scan_config["translate_custom_names"]
-                    is_item_name = "/display/Name" in child_path and self.scan_config["translate_item_names"]
-                    if is_sign or is_custom_name or is_item_name:
-                        try:
-                            component = self.parse_text_component(raw)
-                        except json.JSONDecodeError:
-                            if self.should_translate_text(raw):
-                                refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                        else:
-                            self.collect_json_text_refs(component, refs, child_path)
-                            refs.append(TextRef("json_tag", tag=value, path=child_path))
-                    elif key == "Command" and self.scan_config["translate_command_output"]:
-                        self.collect_command_refs(raw, refs, child_path)
-                        refs.append(TextRef("command_tag", tag=value, path=child_path))
-                    elif key == "title" and self.scan_config["translate_titles"]:
-                        if self.should_translate_text(raw):
-                            refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                    elif key == "filtered_title" and self.scan_config["translate_filtered_titles"]:
-                        if self.should_translate_text(raw):
-                            refs.append(TextRef("plain_tag", tag=value, path=child_path))
-                    else:
-                        self.collect_tag_refs(value, refs, child_path)
-                else:
-                    self.collect_tag_refs(value, refs, child_path)
-        elif isinstance(tag, nbt.TAG_List):
-            for idx, item in enumerate(tag):
-                child_path = f"{path}/{idx}"
-                if isinstance(item, nbt.TAG_String):
-                    raw = item.value
-                    is_page = "/pages/" in child_path and self.scan_config["translate_books"]
-                    is_lore = "/display/Lore/" in child_path and self.scan_config["translate_lore"]
-                    if is_page or is_lore:
-                        try:
-                            component = self.parse_text_component(raw)
-                        except json.JSONDecodeError:
-                            if self.should_translate_text(raw):
-                                refs.append(TextRef("plain_tag", tag=item, path=child_path))
-                        else:
-                            self.collect_json_text_refs(component, refs, child_path)
-                            refs.append(TextRef("json_tag", tag=item, path=child_path))
-                else:
-                    self.collect_tag_refs(item, refs, child_path)
-
-    def extract_unique_texts(self, refs: list[TextRef]) -> list[str]:
-        ordered: list[str] = []
-        seen: set[str] = set()
-
-        def add_text(value: str) -> None:
-            if self.should_translate_text(value) and value not in seen:
-                seen.add(value)
-                ordered.append(value)
-
-        for ref in refs:
-            if ref.kind == "plain_tag":
-                add_text(ref.tag.value)
-            elif ref.kind == "json_text":
-                add_text(ref.obj[ref.key])
-            elif ref.kind == "translate_key":
-                add_text(self.text_from_translate_key(ref.obj[ref.key]["translate"]))
-            elif ref.kind in {"json_tag", "command_tag"}:
-                raw = ref.tag.value if ref.kind != "command_tag" else self.extract_command_json(ref.tag.value)
-                if ref.kind == "command_tag":
-                    if raw is None:
-                        continue
-                    raw_json = raw[1]
-                else:
-                    raw_json = raw
-                try:
-                    component = json.loads(raw_json)
-                except json.JSONDecodeError:
-                    continue
-                stack = [component]
-                while stack:
-                    current = stack.pop()
-                    if isinstance(current, dict):
-                        text_value = current.get("text")
-                        if isinstance(text_value, str):
-                            add_text(text_value)
-                        elif (
-                            isinstance(text_value, dict)
-                            and set(text_value.keys()) == {"translate"}
-                            and isinstance(text_value.get("translate"), str)
-                            and any(text_value["translate"].startswith(prefix) for prefix in self.component_prefixes)
-                        ):
-                            add_text(self.text_from_translate_key(text_value["translate"]))
-                        for value in current.values():
-                            if isinstance(value, (dict, list)):
-                                stack.append(value)
-                    elif isinstance(current, list):
-                        stack.extend(current)
-
-        return ordered
-
-    def patch_json_component(self, node: Any, translations: dict[str, str]) -> None:
-        if isinstance(node, dict):
-            text_value = node.get("text")
-            if isinstance(text_value, str):
-                translated = translations.get(text_value)
-                if translated:
-                    node["text"] = translated
-            elif (
-                isinstance(text_value, dict)
-                and set(text_value.keys()) == {"translate"}
-                and isinstance(text_value.get("translate"), str)
-                and any(text_value["translate"].startswith(prefix) for prefix in self.component_prefixes)
-            ):
-                source = self.text_from_translate_key(text_value["translate"])
-                translated = translations.get(source)
-                if translated:
-                    node["text"] = translated
-
-            if self.scan_config["translate_command_output"]:
-                click_event = node.get("clickEvent")
-                if isinstance(click_event, dict) and isinstance(click_event.get("value"), str):
-                    click_event["value"] = self.patch_command_component(click_event["value"], translations)
-
-                hover_event = node.get("hoverEvent")
-                if isinstance(hover_event, dict) and isinstance(hover_event.get("value"), str):
-                    hover_event["value"] = self.patch_command_component(hover_event["value"], translations)
-
-            for key, value in list(node.items()):
-                if isinstance(value, (dict, list)):
-                    self.patch_json_component(value, translations)
-        elif isinstance(node, list):
-            for item in node:
-                self.patch_json_component(item, translations)
-
-    def patch_command_component(self, command: str, translations: dict[str, str]) -> str:
-        extracted = self.extract_command_json(command)
-        if not extracted:
-            return command
-        prefix, raw_json = extracted
-        try:
-            component = json.loads(raw_json)
-        except json.JSONDecodeError:
-            return command
-        self.patch_json_component(component, translations)
-        return prefix + self.serialize_text_component(component)
-
-    def apply_translations(self, refs: list[TextRef], translations: dict[str, str]) -> int:
-        changed = 0
-        handled_json_text_ids: set[int] = set()
-        handled_translate_key_ids: set[int] = set()
-
-        for ref in refs:
-            if ref.kind == "plain_tag":
-                original = ref.tag.value
-                translated = translations.get(original)
-                if translated and translated != original:
-                    ref.tag.value = translated
-                    changed += 1
-            elif ref.kind == "json_tag":
-                component = self.parse_text_component(ref.tag.value)
-                before = self.serialize_text_component(component)
-                self.patch_json_component(component, translations)
-                after = self.serialize_text_component(component)
-                if after != before:
-                    ref.tag.value = after
-                    changed += 1
-                for child_ref in refs:
-                    if child_ref.kind == "json_text" and id(child_ref.obj) in {
-                        id(n) for n in self._iter_json_nodes(component)
-                    }:
-                        handled_json_text_ids.add(id(child_ref))
-                    elif child_ref.kind == "translate_key" and id(child_ref.obj) in {
-                        id(n) for n in self._iter_json_nodes(component)
-                    }:
-                        handled_translate_key_ids.add(id(child_ref))
-            elif ref.kind == "command_tag":
-                updated = self.patch_command_component(ref.tag.value, translations)
-                if updated != ref.tag.value:
-                    ref.tag.value = updated
-                    changed += 1
-                for child_ref in refs:
-                    if child_ref.kind in {"json_text", "translate_key"}:
-                        try:
-                            extracted = self.extract_command_json(ref.tag.value)
-                            if extracted:
-                                cmd_component = json.loads(extracted[1])
-                                for node in self._iter_json_nodes(cmd_component):
-                                    if id(child_ref.obj) == id(node):
-                                        if child_ref.kind == "json_text":
-                                            handled_json_text_ids.add(id(child_ref))
-                                        else:
-                                            handled_translate_key_ids.add(id(child_ref))
-                        except (json.JSONDecodeError, Exception):
-                            pass
-            elif ref.kind == "json_text" and id(ref.obj) not in handled_json_text_ids:
-                original = ref.obj.get(ref.key, "")
-                if isinstance(original, str):
-                    translated = translations.get(original)
-                    if translated and translated != original:
-                        ref.obj[ref.key] = translated
-                        changed += 1
-            elif ref.kind == "translate_key" and id(ref.obj) not in handled_translate_key_ids:
-                translate_val = ref.obj.get(ref.key, {})
-                if isinstance(translate_val, dict) and "translate" in translate_val:
-                    source = self.text_from_translate_key(translate_val["translate"])
-                    translated = translations.get(source)
-                    if translated:
-                        ref.obj[ref.key] = translated
-                        changed += 1
-
-        return changed
-
-    def _iter_json_nodes(self, node: Any):
-        if isinstance(node, dict):
-            yield node
-            for value in node.values():
-                yield from self._iter_json_nodes(value)
-        elif isinstance(node, list):
-            for item in node:
-                yield from self._iter_json_nodes(item)
+        guarded = {}
+        for text in texts:
+            translated = preserve_tokens(text, translations.get(text, text))
+            # NBT stores a string with a 16-bit length. Keep the original rather than fail the file.
+            if len(translated.encode("utf-8")) > 30000:
+                translated = text
+            guarded[text] = translated
+        return guarded
 
     def _write_world_bytes(self, path: Path, content: bytes) -> None:
         last_error: Exception | None = None
@@ -1606,6 +1161,11 @@ class WorldTranslator:
                 time.sleep(min(0.5 * attempt, 2.0))
         if last_error is not None:
             raise last_error
+
+    def _backup_store(self) -> Path | None:
+        """The configured backup folder, or ``None`` for the legacy folder inside the world."""
+        configured = str(self.runtime_config.get("backup_store") or "")
+        return Path(configured) if configured else None
 
     def _relative(self, path: Path) -> str:
         try:
@@ -1662,7 +1222,7 @@ class WorldTranslator:
             }
 
     def _chunk_refs(self, region: Any, path: Path, stats: dict[str, Any]):
-        """Yield (chunk, root, refs, texts) for every chunk that can be read. Count the rest."""
+        """Yield (chunk, root, refs, occurrences) for every chunk that can be read. Count the rest."""
         for chunk in region.chunks:
             self.ensure_not_cancelled()
             if chunk.empty or chunk.unsupported:
@@ -1681,19 +1241,43 @@ class WorldTranslator:
                 continue
             refs: list[TextRef] = []
             self.collect_tag_refs(root, refs, f"{path.name}#{chunk.index}")
-            yield chunk, root, refs, self.extract_unique_texts(refs)
+            yield chunk, root, refs, self.extract_occurrences(refs)
+
+    def _note_occurrence(self, text: str, ref: TextRef, path: Path, chunk_index: int) -> None:
+        from mwt.region import chunk_coords, region_coordinates
+
+        entry = self.occurrences.setdefault(text, {"count": 0, "kinds": {}, "locations": []})
+        entry["count"] += 1
+        entry["kinds"][ref.category] = entry["kinds"].get(ref.category, 0) + 1
+        if len(entry["locations"]) < 5:
+            region_x, region_z = region_coordinates(path)
+            chunk_x, chunk_z = chunk_coords(chunk_index, region_x, region_z)
+            entry["locations"].append(
+                {
+                    "kind": ref.category,
+                    "holder": ref.scope.holder,
+                    "pos": list(ref.scope.pos) if ref.scope.pos else None,
+                    "detail": ref.detail,
+                    "chunk": [chunk_x, chunk_z],
+                    "file": self._relative(path),
+                }
+            )
 
     def collect_region_file(self, path: Path) -> dict[str, Any]:
         """Find translatable text in one region file. Never calls the provider or writes."""
         region, early = self._open_region(path)
         if early is not None:
             return early
+        locked = bool(region.unsupported_ids)
         stats: dict[str, Any] = {"unreadable_chunks": 0}
         unique_texts: dict[str, None] = {}
         candidate_count = 0
-        for _chunk, _root, _refs, texts in self._chunk_refs(region, path, stats):
-            unique_texts.update(dict.fromkeys(texts))
-            candidate_count += len(texts)
+        for chunk, _root, _refs, occurrences in self._chunk_refs(region, path, stats):
+            for text, ref in occurrences:
+                unique_texts[text] = None
+                candidate_count += 1
+                if not locked:
+                    self._note_occurrence(text, ref, path, chunk.index)
         result: dict[str, Any] = {
             "file": str(path),
             "changed_chunks": 0,
@@ -1708,7 +1292,7 @@ class WorldTranslator:
                 count=stats["unreadable_chunks"],
                 message=stats.get("unreadable_sample", ""),
             )
-        if region.unsupported_ids:
+        if locked:
             # The file cannot be written, so its text is not a translation candidate.
             result.update(
                 skipped="unsupported_compression",
@@ -1733,9 +1317,10 @@ class WorldTranslator:
         changed_chunks = 0
         unique_texts: dict[str, None] = {}
         candidate_count = 0
-        for chunk, root, refs, texts in self._chunk_refs(region, path, {"unreadable_chunks": 0}):
+        for chunk, root, refs, occurrences in self._chunk_refs(region, path, {"unreadable_chunks": 0}):
+            texts = list(dict.fromkeys(text for text, _ in occurrences))
             unique_texts.update(dict.fromkeys(texts))
-            candidate_count += len(texts)
+            candidate_count += len(occurrences)
             if not texts:
                 continue
             translations = {text: self.final_translations.get(text, text) for text in texts}
@@ -1746,7 +1331,7 @@ class WorldTranslator:
         if changed_chunks > 0:
             world_dir = Path(self.config["world_dir"]).resolve()
             if self._run_backup is None:
-                self._run_backup = BackupSet.new(world_dir)
+                self._run_backup = BackupSet.new(world_dir, store=self._backup_store())
             backup = self._run_backup
             backup.add(path)
             for chunk in region.chunks:
@@ -1792,6 +1377,11 @@ class WorldTranslator:
             else:
                 unchanged += 1
         self.report["kept_original_samples"] = kept_samples
+        self.report["translation_samples"] = [
+            {"source": text, "translated": self.final_translations[text]}
+            for text in ordered
+            if text not in failed and self.final_translations.get(text, text) != text
+        ][:12]
         self.report["translation_failures"] = [
             {"source": text, "reason": reason[:300]} for text, reason in list(self.translator.failed.items())[:20]
         ]
@@ -2166,6 +1756,10 @@ def main(argv: list[str] | None = None) -> None:
     config = apply_remembered_defaults(config, data_dir)
     config = apply_cli_overrides(config, args)
     config["runtime"]["data_dir"] = str(data_dir)
+    if config["world_dir"] and not config["runtime"].get("backup_store"):
+        from mwt.safety import backup_store
+
+        config["runtime"]["backup_store"] = str(backup_store(Path(config["world_dir"]), data_dir))
     try:
         config = normalize_config(config, config_path)
     except ValueError as exc:
@@ -2195,9 +1789,12 @@ def main(argv: list[str] | None = None) -> None:
     if not config["world_dir"]:
         raise SystemExit("`world_dir` is required. Set it in config or pass --world-dir.")
     if args.restore_backup:
-        from mwt.safety import BackupSet
+        from mwt.safety import BackupSet, backup_store
 
-        BackupSet(Path(config["world_dir"]), "latest").restore()
+        world = Path(config["world_dir"])
+        store = backup_store(world, data_dir)
+        source = BackupSet(world, "latest", store) if (store / "latest.json").is_file() else BackupSet(world, "latest")
+        source.restore(recovery_store=store)
         print(json.dumps({"status": "restored", "world_dir": config["world_dir"]}, ensure_ascii=False))
         return
     if args.expect_fingerprint:

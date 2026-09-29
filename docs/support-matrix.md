@@ -25,6 +25,8 @@ Not scanned: data packs, `data/*.dat` (command storage, scoreboard), `level.dat`
 - text.item_components: supported
 - text.direct_component: supported
 - text.commands: supported
+- text.component_shapes: supported
+- text.modified_utf8: supported
 - text.resource_pack_lang: supported
 - layout.custom_dimension: supported
 - layout.paper_sibling: supported
@@ -35,6 +37,10 @@ Not scanned: data packs, `data/*.dat` (command storage, scoreboard), `level.dat`
 - safety.malformed_chunk: supported
 - safety.world_write_lock: supported
 - safety.cancel_resume_backup: supported
+- safety.app_data_backups: supported
+- safety.provider_outage_writes_nothing: supported
+- safety.retry_reuses_translated_strings: supported
+- safety.unreadable_chunk_reported: supported
 
 ## Unsupported
 

@@ -3,6 +3,17 @@ export type UiLocale = 'ko' | 'en' | 'ja';
 type Variables = Record<string, string | number>;
 
 const en: Record<string, string> = {
+  '표지판': 'Sign',
+  '책 제목': 'Book title',
+  '책 페이지': 'Book page',
+  '아이템 이름': 'Item name',
+  '아이템 설명': 'Item lore',
+  '엔티티 이름': 'Entity name',
+  '블록 이름': 'Block name',
+  '텍스트 디스플레이': 'Text display',
+  '명령 블록': 'Command block',
+  '{count}곳': '{count} places',
+  '{count}회 · 재시도 제외': '{count} requests · retries excluded',
   '번역이 중단됐지만 월드는 바뀌지 않았습니다. 이미 번역한 {count}개는 저장돼 있어 이어서 실행하면 남은 부분만 요청합니다.': 'The translation stopped, but the world was not changed. {count} strings are already translated and saved, so resuming only requests the rest.',
   '제공사가 요청 한도로 응답을 거절했습니다.': 'The provider refused requests because of a rate limit.',
   'API 키가 거부됐습니다. 설정에서 키를 확인해 주세요.': 'The API key was rejected. Check the key in settings.',
@@ -213,6 +224,17 @@ const en: Record<string, string> = {
 };
 
 const ja: Record<string, string> = {
+  '표지판': '看板',
+  '책 제목': '本のタイトル',
+  '책 페이지': '本のページ',
+  '아이템 이름': 'アイテム名',
+  '아이템 설명': 'アイテムの説明',
+  '엔티티 이름': 'エンティティ名',
+  '블록 이름': 'ブロック名',
+  '텍스트 디스플레이': 'テキストディスプレイ',
+  '명령 블록': 'コマンドブロック',
+  '{count}곳': '{count}か所',
+  '{count}회 · 재시도 제외': '{count}回 · 再試行を除く',
   '번역이 중단됐지만 월드는 바뀌지 않았습니다. 이미 번역한 {count}개는 저장돼 있어 이어서 실행하면 남은 부분만 요청합니다.': '翻訳は中断しましたが、ワールドは変更されていません。翻訳済みの{count}件は保存されているため、再開すると残りだけを要求します。',
   '제공사가 요청 한도로 응답을 거절했습니다.': 'プロバイダーがリクエスト制限のため応答を拒否しました。',
   'API 키가 거부됐습니다. 설정에서 키를 확인해 주세요.': 'APIキーが拒否されました。設定でキーを確認してください。',

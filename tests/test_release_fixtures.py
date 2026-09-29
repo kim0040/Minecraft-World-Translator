@@ -748,6 +748,11 @@ def main() -> None:
             test_checkpoint_rejection(tmp)
             test_world_write_lock(tmp)
             test_cancelled_job_resumes_same_backup_set(tmp)
+            # The extraction and reliability suites are fixtures too: their passing rows feed the matrix.
+            from tests import test_extraction, test_reliability
+
+            for name in test_extraction.run_all(tmp / "extraction") + test_reliability.run_all(tmp / "reliability"):
+                record(name)
             matrix = render_support_matrix(RESULTS)
             destination = ROOT / "docs" / "support-matrix.md"
             destination.parent.mkdir(parents=True, exist_ok=True)

@@ -13,6 +13,7 @@ import json
 import sys
 import tempfile
 import threading
+import time
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ class Provider:
         self.mode = "ok"
         self.fail_after = 10**9
         self.poison = ""
+        self.latency = 0.0
         self.drop_section_sign = False
         self.lock = threading.Lock()
         provider = self
@@ -51,6 +53,8 @@ class Provider:
                     provider.requests += 1
                     number = provider.requests
                 payload = json.loads(body["messages"][1]["content"])
+                if provider.latency:
+                    time.sleep(provider.latency)
                 if provider.mode == "unauthorized":
                     return self._send(401, {"error": "bad key"})
                 if provider.mode == "always429" or number > provider.fail_after:
@@ -122,6 +126,7 @@ def hashes(world: Path) -> dict[str, str]:
     return {
         path.relative_to(world).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(world.rglob("*.mca"))
+        if ".pomi-" not in path.as_posix()  # backups carry a random id
     }
 
 
@@ -149,6 +154,10 @@ def make_translator(world: Path, provider: Provider, report: Path, **runtime) ->
     return translator
 
 
+def make_translator_with(world: Path, provider: Provider, report: Path, **runtime) -> WorldTranslator:
+    return make_translator(world, provider, report, **runtime)
+
+
 def record(name: str) -> None:
     RESULTS.append(name)
     print(f"PASS {name}")
@@ -165,7 +174,7 @@ def test_outage_is_not_reported_as_completed(tmp: Path) -> None:
     assert report["errors"][0]["code"] == "RATE_LIMITED"
     assert provider.requests <= MAX_CONSECUTIVE_REQUEST_FAILURES, provider.requests
     assert not (world / ".pomi-backups").exists(), "nothing was written, so nothing needs a backup"
-    record("reliability.outage_needs_retry")
+    record("safety.provider_outage_writes_nothing")
 
 
 def test_bad_key_stops_at_once(tmp: Path) -> None:
@@ -220,7 +229,7 @@ def test_retry_only_pays_for_what_is_missing(tmp: Path) -> None:
     assert requests_after_outage > 1
     assert second["translation"]["translated"] == 6
     assert not (tmp / "resume.checkpoint.json").exists()
-    record("reliability.retry_reuses_paid_work")
+    record("safety.retry_reuses_translated_strings")
 
 
 def test_dropped_formatting_code_is_kept_original(tmp: Path) -> None:
@@ -261,7 +270,37 @@ def test_unreadable_chunk_is_reported(tmp: Path) -> None:
     assert report["status"] == "completed"
     assert any(item["code"] == "chunk_unreadable" for item in report["warnings"])
     assert RegionFile.read(world / "region" / "r.0.0.mca").chunks[1].payload == garbage, "the bad chunk must be kept as it was"
-    record("reliability.unreadable_chunk_reported")
+    record("safety.unreadable_chunk_reported")
+
+
+def test_concurrent_batches_are_faster_and_identical(tmp: Path) -> None:
+    files = {f"r.{i}.0.mca": [f"Concurrent line {i} {n}" for n in range(3)] for i in range(8)}
+    timings: dict[int, float] = {}
+    outputs: dict[int, dict[str, str]] = {}
+    for workers in (1, 4):
+        provider = Provider()
+        provider.latency = 0.25
+        world = make_world(tmp, f"parallel-{workers}", files)
+        started = time.perf_counter()
+        report = make_translator(world, provider, tmp / f"parallel-{workers}.json", batch_size=3, concurrency=workers).run()
+        timings[workers] = time.perf_counter() - started
+        assert report["status"] == "completed" and report["translation"]["translated"] == 24
+        assert provider.requests == 8, "one request per batch, however many run at once"
+        outputs[workers] = hashes(world)
+    assert outputs[1] == outputs[4], "the world must not depend on how many batches ran together"
+    assert timings[4] < timings[1] * 0.6, timings
+    record("safety.concurrent_batches_identical")
+
+
+def test_outage_with_concurrency_still_stops(tmp: Path) -> None:
+    provider = Provider()
+    provider.mode = "always429"
+    world = make_world(tmp, "parallel-outage", {f"r.{i}.0.mca": [f"Outage line {i} {n}" for n in range(3)] for i in range(10)})
+    before = hashes(world)
+    report = make_translator(world, provider, tmp / "parallel-outage.json", batch_size=3, concurrency=4).run()
+    assert report["status"] == "needs_retry" and hashes(world) == before
+    assert provider.requests <= MAX_CONSECUTIVE_REQUEST_FAILURES + 4, provider.requests
+    record("safety.concurrent_outage_stops")
 
 
 def test_usage_is_counted(tmp: Path) -> None:
@@ -272,19 +311,26 @@ def test_usage_is_counted(tmp: Path) -> None:
     record("reliability.usage_counted")
 
 
+def run_all(tmp: Path) -> list[str]:
+    RESULTS.clear()
+    for test in (
+        test_outage_is_not_reported_as_completed,
+        test_bad_key_stops_at_once,
+        test_single_bad_string_is_reported,
+        test_retry_only_pays_for_what_is_missing,
+        test_dropped_formatting_code_is_kept_original,
+        test_unreadable_chunk_is_reported,
+        test_concurrent_batches_are_faster_and_identical,
+        test_outage_with_concurrency_still_stops,
+        test_usage_is_counted,
+    ):
+        test(tmp)
+    return list(RESULTS)
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as raw:
-        tmp = Path(raw)
-        for test in (
-            test_outage_is_not_reported_as_completed,
-            test_bad_key_stops_at_once,
-            test_single_bad_string_is_reported,
-            test_retry_only_pays_for_what_is_missing,
-            test_dropped_formatting_code_is_kept_original,
-            test_unreadable_chunk_is_reported,
-            test_usage_is_counted,
-        ):
-            test(tmp)
+        run_all(Path(raw))
     print("RELIABILITY_PASSED")
 
 

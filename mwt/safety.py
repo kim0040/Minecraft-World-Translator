@@ -51,32 +51,59 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def legacy_backup_store(world_dir: Path) -> Path:
+    """Where releases before the app-data store kept backups: inside the world folder."""
+    return world_dir.resolve() / ".pomi-backups"
+
+
+def backup_store(world_dir: Path, data_dir: Path) -> Path:
+    """One folder per world under the app data directory.
+
+    Backups next to the world travel with it when the folder is zipped or shared, and vanish
+    when it is deleted. The key is the resolved path, so two worlds with the same name stay apart.
+    """
+    resolved = world_dir.resolve()
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", resolved.name).strip("-.")[:40] or "world"
+    key = hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:10]
+    return data_dir / "backups" / f"{slug}-{key}"
+
+
 class BackupSet:
     """Copy world files, verify the copies, and only then allow a write."""
 
-    def __init__(self, world_dir: Path, backup_id: str = "latest") -> None:
+    def __init__(self, world_dir: Path, backup_id: str = "latest", store: Path | None = None) -> None:
         self.world_dir = world_dir.resolve()
+        self.store = Path(store) if store is not None else legacy_backup_store(self.world_dir)
         if backup_id == "latest":
-            pointer = self.world_dir / ".pomi-backups" / "latest.json"
+            pointer = self.store / "latest.json"
             if pointer.is_file():
                 backup_id = str(json.loads(pointer.read_text(encoding="utf-8"))["backupSetId"])
         if not re.fullmatch(r"[A-Za-z0-9_-]+", backup_id):
             raise BackupError("Invalid backup set ID")
         self.backup_id = backup_id
-        self.root = self.world_dir / ".pomi-backups" / backup_id
+        self.root = self.store / backup_id
         self.manifest_path = self.root / "manifest.json"
         self.entries: list[dict[str, str]] = []
         self._written: set[str] = set()
 
     @classmethod
-    def new(cls, world_dir: Path, *, kind: str = "translation") -> "BackupSet":
+    def new(cls, world_dir: Path, *, kind: str = "translation", store: Path | None = None) -> "BackupSet":
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         backup_id = f"{stamp}-{uuid.uuid4().hex[:12]}-{kind}"
-        return cls(world_dir, backup_id)
+        return cls(world_dir, backup_id, store)
 
     @classmethod
-    def open_existing(cls, world_dir: Path, backup_id: str) -> "BackupSet":
-        backup = cls(world_dir, backup_id)
+    def find(cls, world_dir: Path, backup_id: str, stores: list[Path]) -> "BackupSet":
+        """Open a backup by id from the first store that has it."""
+        for store in stores:
+            candidate = cls(world_dir, backup_id, store)
+            if candidate.manifest_path.is_file():
+                return candidate
+        raise BackupError("Backup set was not found")
+
+    @classmethod
+    def open_existing(cls, world_dir: Path, backup_id: str, store: Path | None = None) -> "BackupSet":
+        backup = cls(world_dir, backup_id, store)
         if not backup.manifest_path.is_file():
             raise BackupError("Backup set for resume was not found")
         payload = json.loads(backup.manifest_path.read_text(encoding="utf-8"))
@@ -89,7 +116,8 @@ class BackupSet:
 
     def publish_latest(self) -> None:
         self.verify()
-        pointer = self.world_dir / ".pomi-backups" / "latest.json"
+        pointer = self.store / "latest.json"
+        pointer.parent.mkdir(parents=True, exist_ok=True)
         temporary = pointer.with_suffix(".json.tmp")
         temporary.write_text(json.dumps({"backupSetId": self.backup_id}), encoding="utf-8")
         os.replace(temporary, pointer)
@@ -132,7 +160,8 @@ class BackupSet:
         for path in paths:
             self._written.add(path.resolve().relative_to(self.world_dir).as_posix())
 
-    def restore(self) -> str:
+    def restore(self, recovery_store: Path | None = None) -> str:
+        """Put the backed-up files back. The files they replace are kept as a recovery set first."""
         payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         entries = self._validated_manifest_entries(payload)
         if not payload.get("verified") or not entries:
@@ -143,7 +172,7 @@ class BackupSet:
             if not source.is_file() or file_sha256(source) != entry["sha256"]:
                 raise BackupError(f"Refusing to restore an unverified backup of {entry['path']}")
 
-        recovery = BackupSet.new(self.world_dir, kind="recovery")
+        recovery = BackupSet.new(self.world_dir, kind="recovery", store=recovery_store or self.store)
         for entry in entries:
             current = self.world_dir / entry["path"]
             if current.is_file():
@@ -212,23 +241,31 @@ class BackupSet:
         os.replace(temporary, self.manifest_path)
 
 
-def list_backup_sets(world_dir: Path) -> list[dict]:
-    root = world_dir.resolve() / ".pomi-backups"
-    if not root.is_dir():
-        return []
+def list_backup_sets(world_dir: Path, stores: list[Path] | None = None) -> list[dict]:
+    """Backups of a world from the app store and, for older runs, from inside the world folder."""
+    locations = stores if stores is not None else [legacy_backup_store(world_dir)]
     result = []
-    for manifest in root.glob("*/manifest.json"):
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            backup_id = manifest.parent.name
-            if not re.fullmatch(r"[A-Za-z0-9_-]+", backup_id):
-                continue
-            result.append({
-                "backupSetId": backup_id,
-                "createdAt": data.get("createdAt") or datetime.fromtimestamp(manifest.stat().st_mtime, timezone.utc).isoformat(),
-                "fileCount": len(data.get("files", [])),
-                "verified": data.get("verified") is True,
-            })
-        except (OSError, ValueError, TypeError):
+    seen: set[str] = set()
+    for store in locations:
+        if not store.is_dir():
             continue
+        for manifest in store.glob("*/manifest.json"):
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8"))
+                backup_id = manifest.parent.name
+                if not re.fullmatch(r"[A-Za-z0-9_-]+", backup_id) or backup_id in seen:
+                    continue
+                seen.add(backup_id)
+                files = data.get("files", [])
+                result.append({
+                    "backupSetId": backup_id,
+                    "createdAt": data.get("createdAt") or datetime.fromtimestamp(manifest.stat().st_mtime, timezone.utc).isoformat(),
+                    "fileCount": len(files),
+                    "verified": data.get("verified") is True,
+                    "kind": "recovery" if backup_id.endswith("-recovery") else "translation",
+                    "sizeBytes": sum(int(item.get("size", 0)) for item in files if str(item.get("size", "")).isdigit()),
+                    "inWorldFolder": store == legacy_backup_store(world_dir),
+                })
+            except (OSError, ValueError, TypeError):
+                continue
     return sorted(result, key=lambda item: item["createdAt"], reverse=True)

@@ -156,6 +156,7 @@ def public_settings_from_config(config: dict) -> dict:
         "rpm_limit": api.get("rpm_limit", ""),
         "tpm_limit": api.get("tpm_limit", ""),
         "max_batch_retries": (config.get("runtime") or {}).get("max_batch_retries", ""),
+        "concurrency": (config.get("runtime") or {}).get("concurrency", ""),
         "resource_pack_enabled": (config.get("resource_pack") or {}).get("enabled", False),
         "last_world_dir": config.get("world_dir", ""),
     }

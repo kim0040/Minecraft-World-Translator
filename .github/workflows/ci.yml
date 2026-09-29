@@ -26,3 +26,5 @@ jobs:
         run: python tests/test_providers.py
       - name: Failure reporting and retry
         run: python tests/test_reliability.py
+      - name: Text extraction and NBT round trip
+        run: python tests/test_extraction.py

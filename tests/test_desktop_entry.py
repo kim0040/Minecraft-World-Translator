@@ -341,9 +341,25 @@ def main() -> None:
                     proc,
                     {
                         "v": 1,
+                        "id": "model-change",
+                        "type": "settings.set",
+                        "payload": {"provider": "openai", "model": "changed-after-scan", "batchSize": 7},
+                    },
+                )
+                # A model or batch-size change does not change which texts a scan finds, so the
+                # reviewed scan stays valid and its review work is not thrown away.
+                rescan = exchange(
+                    proc,
+                    {"v": 1, "id": "rescan-same-scope", "type": "scan.start", "payload": {"worldDir": str(world)}},
+                )
+                assert rescan["payload"]["scanPlanId"] == scan["payload"]["scanPlanId"]
+                exchange(
+                    proc,
+                    {
+                        "v": 1,
                         "id": "settings-change",
                         "type": "settings.set",
-                        "payload": {"provider": "openai", "model": "changed-after-scan"},
+                        "payload": {"provider": "openai", "model": "fixture", "targetLanguage": "日本語"},
                     },
                 )
                 invalidated = exchange(
@@ -368,7 +384,7 @@ def main() -> None:
                         "v": 1,
                         "id": "settings-restore",
                         "type": "settings.set",
-                        "payload": {"provider": "openai", "model": "fixture"},
+                        "payload": {"provider": "openai", "model": "fixture", "targetLanguage": "한국어", "batchSize": 40},
                     },
                 )
                 translation_events: list[dict] = []

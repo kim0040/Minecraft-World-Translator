@@ -39,6 +39,9 @@ def test_should_translate_text_filters():
     """Test the should_translate_text filtering logic."""
     config = create_test_config()
     translator = WorldTranslator(config)
+    # These cases describe the shape filter. Skipping text already in the target language is
+    # covered by test_text_already_in_target_language_is_skipped.
+    translator.scan_config["skip_target_language_text"] = False
 
     # === SHOULD TRANSLATE (returns True) ===
     # Normal English sentences
@@ -145,6 +148,26 @@ def test_should_translate_text_filters():
     assert translator.should_translate_text("中") is True
 
     print("  [PASS] should_translate_text")
+
+
+def test_text_already_in_target_language_is_skipped():
+    """A second run must not pay to translate what the first run already translated."""
+    korean = WorldTranslator(create_test_config())
+    assert korean.should_translate_text("Hello World") is True
+    assert korean.should_translate_text("좌회전하세요") is False
+    assert korean.should_translate_text("Cost: 148 코인") is True, "mixed text still needs translating"
+    assert korean.should_translate_text("这是测试") is True, "a Chinese source is not Korean"
+
+    japanese = WorldTranslator(merge_nested(create_test_config(), {"prompt": {"target_language": "日本語"}}))
+    assert japanese.should_translate_text("これはテストです") is False
+    assert japanese.should_translate_text("좌회전하세요") is True
+
+    other = WorldTranslator(merge_nested(create_test_config(), {"prompt": {"target_language": "Spanish"}}))
+    assert other.should_translate_text("좌회전하세요") is True
+
+    keep = WorldTranslator(merge_nested(create_test_config(), {"scan": {"skip_target_language_text": False}}))
+    assert keep.should_translate_text("좌회전하세요") is True
+    print("  [PASS] target_language_text_is_skipped")
 
 
 def test_merge_nested():
@@ -719,6 +742,7 @@ def test_malformed_legacy_config_is_ignored():
 if __name__ == "__main__":
     print("=== Core Functionality Tests ===\n")
     test_should_translate_text_filters()
+    test_text_already_in_target_language_is_skipped()
     test_merge_nested()
     test_load_json_file()
     test_extract_command_json()

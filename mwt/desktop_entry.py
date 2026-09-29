@@ -10,8 +10,9 @@ import re
 import sys
 from pathlib import Path
 
+from mwt.extract import CATEGORIES, EXTRACTOR_VERSION
 from mwt.notices import ABOUT, FIRST_LAUNCH, PRE_TRANSLATE, payload
-from mwt.safety import BackupSet, list_backup_sets
+from mwt.safety import BackupSet, backup_store, legacy_backup_store, list_backup_sets
 
 
 # A job stopped by the user, by an outage, or by a provider error keeps its translated strings
@@ -45,8 +46,26 @@ def _settings_fingerprint(data_dir: Path) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _scan_plan_id(world_fingerprint: str, settings_fingerprint: str) -> str:
-    return hashlib.sha256(f"scan-v1:{world_fingerprint}:{settings_fingerprint}".encode("utf-8")).hexdigest()
+def _scan_scope_fingerprint(data_dir: Path) -> str:
+    """What decides which texts a scan finds. Provider, model and prompt settings do not, so
+    changing them does not throw a reviewed scan away."""
+    saved = _saved(data_dir)
+    relevant = {
+        "target_language": str(saved.get("target_language") or ""),
+        "resource_pack_enabled": bool(saved.get("resource_pack_enabled")),
+        "extractor": EXTRACTOR_VERSION,
+    }
+    encoded = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _scan_plan_id(world_fingerprint: str, scope_fingerprint: str) -> str:
+    return hashlib.sha256(f"scan-v2:{world_fingerprint}:{scope_fingerprint}".encode("utf-8")).hexdigest()
+
+
+def _backup_stores(world: Path, data_dir: Path) -> list[Path]:
+    """The app store first, then the folder inside the world where earlier releases put backups."""
+    return [backup_store(world, data_dir), legacy_backup_store(world)]
 
 
 def _scan_plan_path(data_dir: Path, scan_plan_id: str) -> Path:
@@ -66,26 +85,46 @@ def _request_estimate(candidate_count: int, batch_size: int) -> int:
     return -(-int(candidate_count) // max(1, int(batch_size))) if candidate_count else 0
 
 
-def _candidate_record(source: str) -> dict:
+def _format_location(location: dict) -> str:
+    holder = str(location.get("holder") or "").removeprefix("minecraft:")
+    pos = location.get("pos")
+    if holder and pos:
+        return f"{holder} ({pos[0]}, {pos[1]}, {pos[2]})"
+    chunk = location.get("chunk")
+    if holder:
+        return holder
+    return f"chunk ({chunk[0]}, {chunk[1]})" if chunk else ""
+
+
+def _candidate_record(source: str, stats: dict | None = None) -> dict:
+    stats = stats or {}
+    kinds = dict(stats.get("kinds") or {})
+    order = {name: index for index, name in enumerate(CATEGORIES)}
+    kind = max(kinds, key=lambda name: (kinds[name], -order.get(name, len(order)))) if kinds else "other"
+    locations = list(stats.get("locations") or [])
     return {
         "id": hashlib.sha256(source.encode("utf-8")).hexdigest()[:20],
         "source": source,
-        "kind": "world.text",
-        "location": "",
+        "kind": kind,
+        "kinds": kinds,
+        "occurrences": int(stats.get("count") or 1),
+        "locations": locations,
+        "location": _format_location(locations[0]) if locations else "",
     }
 
 
 def _level_data_version(level_path: Path) -> int | None:
     try:
-        from nbt import nbt
+        import gzip
 
-        document = nbt.NBTFile(filename=str(level_path))
-        try:
-            value = document["Data"]["DataVersion"].value
-        except (KeyError, TypeError):
-            value = document["DataVersion"].value
-        return int(value)
-    except (OSError, ValueError, KeyError, TypeError):
+        from mwt import nbtio
+
+        document = nbtio.parse(gzip.decompress(level_path.read_bytes()), keep_scalars="all")
+        data = document.get("Data")
+        node = data if isinstance(data, dict) else document
+        value = node.get("DataVersion")
+        return int(value.value) if value is not None else None
+    except (OSError, ValueError, TypeError, EOFError):
         return None
 
 
@@ -144,17 +183,17 @@ def _save_scan_plan(
     scan_plan_id: str,
     *,
     world_fingerprint: str,
-    settings_fingerprint: str,
-    candidates: list[str],
+    scope_fingerprint: str,
+    candidates: list[dict],
 ) -> None:
     path = _scan_plan_path(data_dir, scan_plan_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     document = {
-        "version": 1,
+        "version": 2,
         "scanPlanId": scan_plan_id,
         "worldFingerprint": world_fingerprint,
-        "settingsFingerprint": settings_fingerprint,
-        "candidates": [_candidate_record(source) for source in candidates],
+        "scopeFingerprint": scope_fingerprint,
+        "candidates": candidates,
     }
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
@@ -169,6 +208,76 @@ def _load_scan_plan(data_dir: Path, scan_plan_id: str) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _coverage(world: Path, resource_pack_enabled: bool) -> list[dict]:
+    """What a scan reads and what it does not, so the result never reads as "the whole world"."""
+    root = world.expanduser().resolve()
+    roots = [root] if (root / "level.dat").is_file() else [
+        child for child in sorted(root.iterdir()) if child.is_dir() and (child / "level.dat").is_file()
+    ] if root.is_dir() else []
+
+    def count(pattern: str) -> int:
+        return sum(len(list(base.glob(pattern))) for base in roots)
+
+    datapacks = count("datapacks/*")
+    storage = count("data/command_storage_*.dat")
+    playerdata = count("playerdata/*.dat")
+    resource_packs = count("resources.zip")
+    return [
+        {"id": "regions", "scanned": True, "present": True},
+        {"id": "entities", "scanned": True, "present": True},
+        {"id": "resource_pack", "scanned": bool(resource_pack_enabled), "present": resource_packs > 0, "count": resource_packs},
+        {"id": "datapacks", "scanned": False, "present": datapacks > 0, "count": datapacks},
+        {"id": "command_storage", "scanned": False, "present": storage > 0, "count": storage},
+        {"id": "playerdata", "scanned": False, "present": playerdata > 0, "count": playerdata},
+    ]
+
+
+def _candidate_page(plan: dict, body: dict) -> dict:
+    """Filter, sort and slice a scan plan on this side, so the count and the rows always agree."""
+    candidates = [item for item in plan.get("candidates", []) if isinstance(item, dict)]
+    query = str(body.get("query") or "").strip().casefold()
+    if query:
+        candidates = [
+            item
+            for item in candidates
+            if query in str(item.get("source") or "").casefold()
+            or query in str(item.get("location") or "").casefold()
+        ]
+    excluded = {str(item) for item in body.get("excludedCandidateIds") or []}
+    manual = {str(item) for item in body.get("overrideCandidateIds") or []}
+    state = str(body.get("state") or "all")
+    if state == "included":
+        candidates = [item for item in candidates if item.get("id") not in excluded]
+    elif state == "excluded":
+        candidates = [item for item in candidates if item.get("id") in excluded]
+    elif state == "manual":
+        candidates = [item for item in candidates if item.get("id") in manual]
+    facets: dict[str, int] = {}
+    for item in candidates:
+        name = str(item.get("kind") or "other")
+        facets[name] = facets.get(name, 0) + 1
+    wanted = str(body.get("kind") or "")
+    if wanted:
+        candidates = [item for item in candidates if str(item.get("kind") or "other") == wanted]
+    sort = str(body.get("sort") or "order")
+    if sort == "source":
+        candidates.sort(key=lambda item: str(item.get("source") or "").casefold())
+    elif sort == "count":
+        candidates.sort(key=lambda item: (-int(item.get("occurrences") or 1), str(item.get("source") or "").casefold()))
+    elif sort == "kind":
+        order = {name: index for index, name in enumerate(CATEGORIES)}
+        candidates.sort(key=lambda item: order.get(str(item.get("kind") or "other"), len(order)))
+    offset = max(0, int(body.get("offset") or 0))
+    limit = min(500, max(1, int(body.get("limit") or 100)))
+    return {
+        "candidates": candidates[offset : offset + limit],
+        "offset": offset,
+        "total": len(candidates),
+        "hasMore": offset + limit < len(candidates),
+        "kinds": facets,
+    }
+
+
 def _resume_candidate(data_dir: Path, world: Path) -> dict:
     from mwt.safety import world_fingerprint
 
@@ -178,7 +287,8 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
     jobs_dir = data_dir / "jobs"
     if not jobs_dir.is_dir():
         return {}
-    current_settings = _settings_fingerprint(data_dir)
+    current_scope = _scan_scope_fingerprint(data_dir)
+    current_translation = _settings_fingerprint(data_dir)
     preliminary: list[tuple[dict, dict, dict, dict]] = []
     for path in jobs_dir.glob("*.checkpoint.json"):
         try:
@@ -191,7 +301,8 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
                 checkpoint.get("version") != 2
                 or report.get("status") not in RESUMABLE_STATUSES
                 or Path(str(checkpoint.get("world_dir") or "")).expanduser().resolve() != resolved_world
-                or plan.get("settingsFingerprint") != current_settings
+                or plan.get("scopeFingerprint") != current_scope
+                or resume.get("translation_settings_fingerprint") != current_translation
                 or plan.get("worldFingerprint") != resume.get("expected_world_fingerprint")
             ):
                 continue
@@ -306,6 +417,9 @@ def _run_translator(
                 "data_dir": str(data_dir),
                 "excluded_candidate_ids": excluded_candidate_ids or [],
                 "skip_provider_validation": skip_provider_validation,
+                "backup_store": str(backup_store(world, data_dir)),
+                "concurrency": int(saved.get("concurrency") or 4),
+                "translation_settings_fingerprint": _settings_fingerprint(data_dir),
                 "on_translation_failure": "skip" if on_translation_failure == "skip" else "stop",
                 "max_batch_retries": int(
                     saved.get("max_batch_retries") or DEFAULT_CONFIG["runtime"]["max_batch_retries"]
@@ -339,10 +453,14 @@ def _run_translator(
     translator = WorldTranslator(config, progress_callback=progress_callback, cancel_check=cancel_check)
     report = translator.run()
     if dry_run and candidate_limit:
-        candidates = sorted(translator.candidate_texts)
-        report["candidate_preview"] = [_candidate_record(source) for source in candidates[:candidate_limit]]
-        report["_candidate_sources"] = candidates
+        records = [_candidate_record(source, translator.occurrences.get(source)) for source in translator._candidate_order]
+        report["candidate_preview"] = records[:candidate_limit]
+        report["_candidate_records"] = records
     remember_run_settings(config, data_dir, None)
+    # The run only knows whether this world has a pack. The user's choice must survive a world without one.
+    from mwt.userdata import remember_user_settings
+
+    remember_user_settings({"resource_pack_enabled": bool(saved.get("resource_pack_enabled"))}, data_dir)
     return report
 
 
@@ -402,7 +520,7 @@ def _bootstrap_payload(data_dir: Path, requested_world: str = "", *, check_keyri
         **settings,
         "worlds": list_recent_worlds(data_dir),
         "worldInspection": inspection,
-        "backups": list_backup_sets(world) if valid_world else [],
+        "backups": list_backup_sets(world, _backup_stores(world, data_dir)) if valid_world else [],
         "resume": (_resume_candidate(data_dir, world) or {"available": False}) if valid_world else {"available": False},
     }
 
@@ -480,6 +598,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 10,
             )
         )
+        concurrency = int(bounded_number("concurrency", "concurrency", 4, 1, 8))
         config = {
             "world_dir": str(body.get("worldDir") or saved.get("last_world_dir") or ""),
             "temperature": temperature,
@@ -499,7 +618,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "style_prompt": text_setting("stylePrompt", "style_prompt"),
                 "custom_system_prompt": text_setting("customSystemPrompt", "custom_system_prompt"),
             },
-            "runtime": {"max_batch_retries": max_batch_retries},
+            "runtime": {"max_batch_retries": max_batch_retries, "concurrency": concurrency},
             "resource_pack": {
                 "enabled": bool(body.get("resourcePackEnabled", saved.get("resource_pack_enabled", False)))
             },
@@ -648,17 +767,21 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             f"{item.get('skipped')}: {item.get('file', 'unknown file')}" for item in skipped
         )
         fingerprint = str(report.get("world_fingerprint", ""))
-        settings_fingerprint = _settings_fingerprint(data_dir)
-        scan_plan_id = _scan_plan_id(fingerprint, settings_fingerprint)
-        candidate_sources = list(report.pop("_candidate_sources", []))
+        scope_fingerprint = _scan_scope_fingerprint(data_dir)
+        scan_plan_id = _scan_plan_id(fingerprint, scope_fingerprint)
+        records = list(report.pop("_candidate_records", []))
         if report.get("status") == "completed":
             _save_scan_plan(
                 data_dir,
                 scan_plan_id,
                 world_fingerprint=fingerprint,
-                settings_fingerprint=settings_fingerprint,
-                candidates=candidate_sources,
+                scope_fingerprint=scope_fingerprint,
+                candidates=records,
             )
+        batch_size = int(_saved(data_dir).get("batch_size") or 40)
+        kind_counts: dict[str, int] = {}
+        for record in records:
+            kind_counts[record["kind"]] = kind_counts.get(record["kind"], 0) + 1
         emit(
             {
                 "v": 1,
@@ -667,6 +790,8 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "payload": {
                     "status": report.get("status"),
                     "candidateCount": report.get("candidate_text_count", 0),
+                    "occurrenceCount": sum(record["occurrences"] for record in records),
+                    "kinds": kind_counts,
                     "providerRequests": report.get("provider_requests", 0),
                     "fingerprint": fingerprint,
                     "scanPlanId": scan_plan_id,
@@ -676,9 +801,8 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "writeBlockers": blockers,
                     "errors": report.get("errors", []),
                     "warnings": report.get("warnings", []),
-                    "requestEstimate": _request_estimate(
-                        report.get("candidate_text_count", 0), int(_saved(data_dir).get("batch_size") or 40)
-                    ),
+                    "requestEstimate": _request_estimate(len(records), batch_size),
+                    "coverage": _coverage(world, bool(_saved(data_dir).get("resource_pack_enabled"))),
                     "candidates": report.get("candidate_preview", []),
                 },
             }
@@ -689,29 +813,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         plan = _load_scan_plan(data_dir, scan_plan_id)
         if not plan:
             raise ValueError("Scan plan was not found")
-        offset = max(0, int(body.get("offset") or 0))
-        limit = min(200, max(1, int(body.get("limit") or 100)))
-        candidates = list(plan.get("candidates") or [])
-        query = str(body.get("query") or "").strip().casefold()
-        if query:
-            candidates = [
-                candidate
-                for candidate in candidates
-                if query in str(candidate.get("source") or "").casefold()
-            ]
-        emit(
-            {
-                "v": 1,
-                "id": request_id,
-                "type": "response.ok",
-                "payload": {
-                    "candidates": candidates[offset : offset + limit],
-                    "offset": offset,
-                    "total": len(candidates),
-                    "hasMore": offset + limit < len(candidates),
-                },
-            }
-        )
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _candidate_page(plan, body)})
         return
     if kind in {"translate.start", "translate.resume"}:
         if kind == "translate.resume":
@@ -739,8 +841,8 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             }
         fingerprint = str(body.get("fingerprint") or "")
         scan_plan_id = str(body.get("scanPlanId") or "")
-        settings_fingerprint = _settings_fingerprint(data_dir)
-        expected_plan_id = _scan_plan_id(fingerprint, settings_fingerprint) if fingerprint else ""
+        scope_fingerprint = _scan_scope_fingerprint(data_dir)
+        expected_plan_id = _scan_plan_id(fingerprint, scope_fingerprint) if fingerprint else ""
         if not fingerprint or not scan_plan_id:
             emit(
                 {
@@ -759,7 +861,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         if (
             scan_plan_id != expected_plan_id
             or stored_plan.get("worldFingerprint") != fingerprint
-            or stored_plan.get("settingsFingerprint") != settings_fingerprint
+            or stored_plan.get("scopeFingerprint") != scope_fingerprint
         ):
             emit(
                 {
@@ -768,7 +870,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "type": "response.error",
                     "error": {
                         "code": "PLAN_INVALIDATED",
-                        "message": "Translation settings changed after Scan Only. Run the scan again.",
+                        "message": "The world, target language or resource pack setting changed after Scan Only. Run the scan again.",
                         "recoverable": True,
                     },
                 }
@@ -842,6 +944,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "translation": report.get("translation") or {},
                     "translationFailures": report.get("translation_failures", []),
                     "keptOriginalSamples": report.get("kept_original_samples", []),
+                    "translationSamples": report.get("translation_samples", []),
                     "usage": report.get("usage") or {},
                 },
             }
@@ -853,14 +956,20 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "v": 1,
                 "id": request_id,
                 "type": "response.ok",
-                "payload": {"backups": list_backup_sets(world), "localhostServer": False},
+                "payload": {"backups": list_backup_sets(world, _backup_stores(world, data_dir)), "localhostServer": False},
             }
         )
         return
     if kind == "restore.start":
         backup_id = str(body.get("backupSetId") or "latest")
-        selected = BackupSet(world, backup_id)
-        recovery_id = selected.restore()
+        stores = _backup_stores(world, data_dir)
+        if backup_id == "latest":
+            listed = list_backup_sets(world, stores)
+            if not listed:
+                raise ValueError("There is no backup to restore")
+            backup_id = listed[0]["backupSetId"]
+        selected = BackupSet.find(world, backup_id, stores)
+        recovery_id = selected.restore(recovery_store=stores[0])
         emit(
             {
                 "v": 1,
@@ -970,7 +1079,12 @@ def main(argv: list[str] | None = None) -> None:
         print(json.dumps({"localhostServer": False, "preTranslate": PRE_TRANSLATE, **report}, ensure_ascii=False))
         return
     if args.restore:
-        BackupSet(Path(args.restore), "latest").restore()
+        world = Path(args.restore)
+        stores = _backup_stores(world, data_dir)
+        listed = list_backup_sets(world, stores)
+        if not listed:
+            raise SystemExit("There is no backup to restore")
+        BackupSet.find(world, listed[0]["backupSetId"], stores).restore(recovery_store=stores[0])
         print(json.dumps({"status": "restored", "localhostServer": False}))
         return
     hello()

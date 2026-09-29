@@ -15,6 +15,8 @@ VERIFIED_WHEN_PASSING = (
     "text.item_components",
     "text.direct_component",
     "text.commands",
+    "text.component_shapes",
+    "text.modified_utf8",
     "text.resource_pack_lang",
     "layout.custom_dimension",
     "layout.paper_sibling",
@@ -25,6 +27,10 @@ VERIFIED_WHEN_PASSING = (
     "safety.malformed_chunk",
     "safety.world_write_lock",
     "safety.cancel_resume_backup",
+    "safety.app_data_backups",
+    "safety.provider_outage_writes_nothing",
+    "safety.retry_reuses_translated_strings",
+    "safety.unreadable_chunk_reported",
 )
 
 ALWAYS_UNSUPPORTED = (

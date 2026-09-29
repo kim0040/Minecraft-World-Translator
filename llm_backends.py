@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from typing import Any
 from urllib import error, parse, request
 
@@ -515,7 +516,8 @@ class LLMProviderClient:
         if payload is not None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if method == "POST":  # count translation calls; a model-list lookup is not one
-            LLMProviderClient.request_count += 1
+            with LLMProviderClient._counter_lock:
+                LLMProviderClient.request_count += 1
         req = request.Request(url=url, data=body, headers=headers, method=method)
         try:
             with request.urlopen(req, timeout=self.timeout) as response:
@@ -543,12 +545,14 @@ class LLMProviderClient:
             LLMProviderClient.record_usage(parsed)
         return parsed
 
+    _counter_lock = threading.Lock()
     usage: dict[str, Any] = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "cost_reported": False}
 
     @classmethod
     def reset_counters(cls) -> None:
-        cls.request_count = 0
-        cls.usage = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "cost_reported": False}
+        with cls._counter_lock:
+            cls.request_count = 0
+            cls.usage = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "cost_reported": False}
 
     @classmethod
     def record_usage(cls, response: Any) -> None:
@@ -556,20 +560,24 @@ class LLMProviderClient:
         if not isinstance(response, dict):
             return
         usage = response.get("usage")
+        cost = None
         if isinstance(usage, dict):
             prompt = usage.get("prompt_tokens", usage.get("input_tokens"))
             completion = usage.get("completion_tokens", usage.get("output_tokens"))
             if isinstance(usage.get("cost"), (int, float)):
-                cls.usage["cost"] += float(usage["cost"])
-                cls.usage["cost_reported"] = True
+                cost = float(usage["cost"])
         else:
             meta = response.get("usageMetadata")
             prompt = meta.get("promptTokenCount") if isinstance(meta, dict) else None
             completion = meta.get("candidatesTokenCount") if isinstance(meta, dict) else None
-        if isinstance(prompt, int):
-            cls.usage["prompt_tokens"] += prompt
-        if isinstance(completion, int):
-            cls.usage["completion_tokens"] += completion
+        with cls._counter_lock:
+            if cost is not None:
+                cls.usage["cost"] += cost
+                cls.usage["cost_reported"] = True
+            if isinstance(prompt, int):
+                cls.usage["prompt_tokens"] += prompt
+            if isinstance(completion, int):
+                cls.usage["completion_tokens"] += completion
 
     def _redact(self, message: str) -> str:
         from mwt.secrets import redact_log

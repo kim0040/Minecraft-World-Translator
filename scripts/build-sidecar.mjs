@@ -24,10 +24,10 @@ mkdirSync(cacheDir, { recursive: true });
 const built = spawnSync(python, [
   '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile',
   '--name', 'pomi-sidecar', '--paths', root,
-  '--hidden-import', 'nbt', '--hidden-import', 'lz4.block',
+  '--hidden-import', 'lz4.block',
   '--hidden-import', 'keyring', '--hidden-import', 'mwt.desktop_entry',
   '--hidden-import', 'mc_world_translator', '--hidden-import', 'llm_backends',
-  '--hidden-import', 'env_utils',
+  '--hidden-import', 'env_utils', '--hidden-import', 'mwt.nbtio', '--hidden-import', 'mwt.extract',
   '--distpath', distDir, '--workpath', workDir, '--specpath', specDir,
   join(root, 'packaging', 'pomi_desktop.py')
 ], { cwd: root, stdio: 'inherit', env: { ...process.env, PYINSTALLER_CONFIG_DIR: cacheDir } });
