@@ -1,169 +1,232 @@
 # PomiTranslate
 
-World Translator for Minecraft
+World Translator for Minecraft（我的世界存档翻译工具）
 
 NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+（非 Minecraft 官方产品。未经 Mojang 或 Microsoft 批准，亦与其无任何关联。）
 
-Back up your world before translating. PomiTranslate writes to the world files you select.
+在翻译存档之前，请务必进行备份。PomiTranslate 将直接向您所选定的存档文件写入翻译内容。
 
-Text you choose to translate is sent to the API provider you select and may incur charges.
+您选择翻译的文本将发送至所配置的 AI 提供商 API，可能会产生相应的使用费用。
 
-PomiTranslate has no purchase, subscription, or in-app payment.
+PomiTranslate 不包含任何购买项、订阅或应用内付费。
 
-![PomiTranslate 字标](../assets/brand/wordmark/logo_wordmark_v1.png)
+![PomiTranslate 标识](../assets/brand/wordmark/logo_wordmark_v1.png)
 
 [English](../README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | 简体中文
 
-PomiTranslate 是一款免费且开源的本地工具，专为安全提取并翻译 Minecraft Java 版世界内玩家可见文本而设计。项目吉祥物是 Pomi（波米），技术代码仓库名称保持为 `Minecraft-World-Translator`。
+PomiTranslate 是一款专为 Minecraft Java 版设计的免费开源本地工具，用于安全提取和翻译世界存档中对玩家可见的文本内容。项目吉祥物为 Pomi，代码仓库标识符保留为 `Minecraft-World-Translator`。
 
-CLI 命令行工具与基于 Tauri 的桌面客户端共用同一套高性能 Python 核心引擎，两者通过轻量级的打包 JSONL 进程间通信协作。为确保最高级别的数据安全，只有在完成前置自动备份且校验无误后，翻译才会安全写入世界文件。仅扫描模式（Scan Only）绝不会调用外部 API，也不会更改任何世界字节。命令选择器、资源命名空间、坐标、数值、颜色格式代码及占位符均会原样完好保留。
+无论是游玩海外高质量冒险地图、自定义 RPG 剧情、解密密室，还是大型多维度服务器世界，PomiTranslate 都能帮助玩家和地图作者消除语言障碍，获得原生般的沉浸体验。命令行工具与原生桌面应用（基于 Tauri）均通过轻量级封装的 JSONL 子进程共享同一套高性能 Python 翻译核心，且绝不开启任何外部监听端口。
 
 ![Pomi](../assets/mascot/base/mascot_base_front_v1_512.png)
 
-## 支持翻译的文本类型
+---
 
-- 告示牌文本（包含旧版单面告示牌及新版双面正反面文本）
-- 书本内容（页面正文、书名以及过滤书名）
-- 实体与方块的自定义名称
-- 物品显示名称及说明（Lore）
-- 原始 JSON 文本组件与 1.20.5+ 物品组件
-- 命令反馈输出文本（`tellraw`、`title`、`subtitle`、`actionbar` 等）
-- 世界内置材质包（`resources.zip`）中的 `lang/*.json` 语言文件（启用选项时）
+## 核心设计理念与安全保障
 
-![先扫描](../assets/illustrations/docs/doc_scan_first_zh_v1.png)
+Minecraft 世界存档以高度复杂的 NBT（Named Binary Tag）树状结构保存在成千上万个区块和区域文件中。粗糙的正规表达式替换或不完善的 NBT 编码器极易导致坐标头损坏、自定义命令逻辑失效以及不可逆的数据破坏。PomiTranslate 严格遵循以下数据完整性准则：
 
-## 格式兼容性与支持矩阵
+- **字节级 NBT 完整性保留**：未经修改的区块在 SHA-256 哈希值上与原文件保持完全一致。当翻译文本时，系统绝不重新序列化周边标签，仅针对修改后的 Java Modified UTF-8 字符串载荷进行原地精准替换（In-place update）。
+- **游戏格式代码与语法严密保护**：内置验证引擎实时监控 Minecraft 颜色/样式代码（`§a`, `§l`, `§r`）、换行转义（`\n`）、格式化占位符（`%s`, `{0}`）、JSON 组件结构以及命令目标选择器（`@a`, `@p`）。若 AI 返回内容破坏了语法，系统将自动保留原文并记录提示，杜绝游戏内渲染崩溃。
+- **Scan-First（预扫描优先）架构**：Scan Only 模式将在完全不调用外部 API、不修改任何存档文件的前提下，提取跨维度的所有文本，进行全局去重并生成结构化扫描方案。
+- **Java session.lock 活跃锁定检测**：在执行任何写入操作前，系统会自动检查世界文件夹内的 `session.lock`。若游戏客户端或服务器正在运行该存档，写入将被立即安全拦截。
+- **带版本控制的原子备份与安全恢复**：在写入发生前，系统会在系统应用数据目录中创建经过验证的多文件备份集。即使发生网络异常，也不会残留任何半写入状态，且恢复前状态亦会被完整保存为应急快照。
 
-PomiTranslate 仅正式支持已通过自动化测试套件（Test Fixtures）严格验证的数据格式：
+![预先扫描](../assets/illustrations/docs/doc_scan_first_zh_v1.png)
 
-- **区域压缩格式**：Gzip、Zlib、未压缩格式，以及 Minecraft 1.20.5+ LZ4（`LZ4Block`）
-- **外部区块文件**：`c.<x>.<z>.mcc` 区块溢出文件（压缩字节数据）
-- **目录结构**：标准维度目录、自定义维度，以及包含 `level.dat` 的 Paper/Spigot 风格服务器平行世界目录
+---
 
-### 自动识别并限制写入的不受支持格式（安全保护）
+## 支持提取的游戏内文本组件
 
-为防止存档损坏，当检测到以下格式时将自动禁止写入：
+系统全面扫描主世界、下界（`DIM-1`）、末地（`DIM1`）以及自定义数据包维度，精准提取以下要素：
 
-- Bedrock（基岩版）世界存档
-- Anvil 格式之前的旧版 `.mcr` 区域文件
-- 第三方非标准压缩格式 `.linear`
-- 包含压缩代码 127 在内的未知或不受支持的压缩格式
+| 组件分类 | 游戏内目标元素 | 提取与处理特性 |
+| :--- | :--- | :--- |
+| **告示牌 (Signs)** | 站立、悬挂及墙面告示牌 | 完美支持 1.8 至 1.19 版本的传统单面告示牌文本，以及 1.20+ 版本的最新双面告示牌（正面与背面 `messages`） |
+| **书本 (Books)** | 书与笔、成书 | 完整翻译书名、过滤后书名、作者信息，以及包含纯文本或复杂 JSON 组件的各页面内容 |
+| **物品元数据** | 武器、工具、防具、自定义物品 | 提取自定义显示名（`display.Name`）、说明文字（Lore）、1.20.5+ 新版物品组件（`minecraft:custom_name`, `minecraft:lore`）以及悬浮/点击事件内容 |
+| **容器方块** | 箱子、潜影盒、木桶、熔炉等 | 读取容器自定义名称，并递归扫描所有内部储物槽位中的嵌套物品 |
+| **实体与方块** | 生物、NPC、盔甲架、自定义方块 | 提取生物实体的自定义名称（`CustomName`）、盔甲架文本以及带名称的方块实体数据 |
+| **展示实体** | 文本展示实体 (`text_display`) | 全面支持 1.19.4+ 引入的文本展示实体及其广告牌文本组件 |
+| **命令方块** | 脉冲、循环、连锁命令方块 | 精准提取 `/tellraw`、`/title`、`/subtitle`、`/actionbar` 命令，以及通过 `execute ... run` 深度嵌套的子命令文本，坐标与目标选择器保持原样 |
+| **存档内资源包** | 世界文件夹内的 `resources.zip` | 启用后可同时扫描并翻译内嵌客户端语言文件（`assets/<namespace>/lang/*.json` 或 `.lang`），并与区域文件统一归入同一套备份管理 |
 
-完整格式支持清单请参见 [support-matrix.md](support-matrix.md)。
+---
 
-![不支持的格式会停止](../assets/illustrations/docs/doc_unsupported_zh_v1.png)
+## 区域文件与格式兼容性
 
-## 支持的 AI 供应商
+仅当格式通过了严格的自动化测试夹具验证后，系统才允许写入：
 
-官方支持的 AI 供应商包括 OpenAI、Google Gemini、Anthropic、OpenRouter 以及 Custom（自定义兼容端点）。自定义端点支持根据填写的 Base URL 自动匹配 OpenAI Chat 格式或 Anthropic Messages 协议格式。旧版配置参数亦保持良好向下兼容。
+### 官方支持格式
+- **区域文件标准**：Minecraft Java 版 Anvil 格式（`.mca`）及实体存储文件夹（`entities/*.mca`）
+- **区块压缩算法**：Gzip、Zlib、未压缩（Uncompressed）及 Minecraft 1.20.5+ LZ4（`LZ4Block`）
+- **外部溢出分块**：用于存储大体积超额数据的外部 `.mcc` 文件（`c.<x>.<z>.mcc`）
+- **目录布局支持**：原生单人世界、自定义数据包维度文件夹，以及共享 `level.dat` 的 Paper/Spigot 多世界分立文件夹
 
-在正式启动翻译前，PomiTranslate 会自动拉取目标供应商的模型列表，核对模型 ID、名称和上下文长度。若所选模型未在列表中查得，系统将在写入世界前自动安全终止。
+### 不受支持的格式（检测到时自动禁止写入）
+为确保数据万无一失，一旦检测到以下格式，系统将立刻永久锁定为只读状态：
+- **基岩版世界 (Bedrock)**：基岩版存档结构或 Mojang LevelDB（`.ldb`）文件
+- **Anvil 之前的旧版格式**：1.2 版本以前的遗留 `.mcr` 区域文件
+- **第三方压缩格式**：部分第三方服务器使用的 Zstandard 压缩 `.linear` 格式
+- **未知或损坏的压缩算法**：无法识别的压缩标识头（包括压缩类型 127）
 
-## 密钥安全与配置文件
+详情请参阅通过自动化测试生成的 [support-matrix.md](support-matrix.md)。
 
-用户输入的 API 密钥直接加密保存在操作系统专属安全密钥链（macOS Keychain、Windows 凭据管理器、Linux Secret Service）中，服务名为 `PomiTranslate`，账户名为供应商 ID（例如 `openrouter`）。API 密钥绝不会明文保存在 `settings.json`、SQLite 数据库、运行日志或 Git 提交记录中。
+![不支持格式中止](../assets/illustrations/docs/doc_unsupported_zh_v1.png)
 
-通用偏好设置在软件更新后仍完整保存在安装目录之外：
+---
 
-- macOS：`~/Library/Application Support/PomiTranslate/settings.json`
-- Windows：`%APPDATA%\PomiTranslate\settings.json`
-- Linux：`$XDG_DATA_HOME/PomiTranslate/settings.json` 或 `~/.local/share/PomiTranslate/settings.json`
+## 支持的 AI 提供商与系统密钥链安全
 
-用户可在桌面客户端的设置面板中随时单独清除保存在系统密钥链中的 API 密钥。
+PomiTranslate 原生支持以下主流语言模型平台：
+- **OpenAI**：GPT-4o、GPT-4o-mini 及兼容聊天模型
+- **Anthropic**：Claude 3.5 Sonnet、Claude 3.5 Haiku、Claude 3 Opus
+- **Google Gemini**：Gemini 1.5 Pro、Gemini 1.5 Flash、Gemini 2.0 Flash
+- **OpenRouter**：一站式接入数百种优质开源及商用语言模型
+- **Custom (本地/私有兼容端点)**：支持 Ollama、vLLM、LM Studio 等符合标准 OpenAI Chat 或 Anthropic Messages 协议的本地推理框架
 
-![文字会发到你选择的供应商](../assets/illustrations/docs/doc_api_notice_zh_v1.png)
+在执行翻译前，系统会预先查询服务商的在线模型目录，核验模型存在性及上下文额度。目录中不存在的模型将在修改存档前被安全中止。
+
+### 操作系统级密钥链安全
+API 密钥绝不以明文形式保存于 `settings.json`、SQLite 文件、运行日志或 Git 提交记录中：
+- **macOS**：Apple Keychain Services (`PomiTranslate`)
+- **Windows**：Windows 凭据管理器 (`PomiTranslate`)
+- **Linux**：Freedesktop Secret Service (DBus)
+
+存储的密钥仅在分批翻译执行时通过子进程标准输入（stdin）传入内存，用户可在设置面板中随时单独删除。
+
+用户设置配置文件路径：
+- macOS: `~/Library/Application Support/PomiTranslate/settings.json`
+- Windows: `%APPDATA%\PomiTranslate\settings.json`
+- Linux: `$XDG_DATA_HOME/PomiTranslate/settings.json`（或 `~/.local/share/PomiTranslate/settings.json`）
+
+![API通知](../assets/illustrations/docs/doc_api_notice_zh_v1.png)
+
+---
+
+## 三阶段翻译工作流
+
+```
+[第一阶段: Scan Only (预检扫描)]
+世界文件 (.mca) ──> 提取文本 ──> 全局去重 ──> 扫描计划与世界指纹
+(API 请求 0 次，只读安全分析，支持候选搜索、过滤排除及手动校对)
+
+[第二阶段: 批量并发翻译]
+唯一候选文本 ──> 速率限制与熔断器 ──> AI 提供商 ──> 校验保存检查点
+(严格保护格式代码，遇到连续错误自动保护性中止，断点自动续传)
+
+[第三阶段: 原子级写入]
+校验备份 ──> session.lock 锁定检查 ──> 补丁写入区域文件 ──> 完成
+(字节级精准 NBT 替换，恢复前保留防护快照，支持一键安全还原)
+```
+
+---
 
 ## 快速上手 (CLI)
 
-命令行模式推荐运行环境为 Python 3.12。使用打包发布的桌面端独立安装包时，最终用户无需在电脑上预先安装 Python 或任何开发工具链。
+命令行运行推荐使用 Python 3.12 环境。（使用发行版桌面应用的用户无需安装 Python 或任何开发工具。）
 
 ```bash
-# 创建虚拟环境并安装依赖
+# 配置虚拟环境
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-### 1. 扫描世界 (Scan Only)
-在不调用 API 且不改写世界的前提下，提取候选文本并统计出现频次：
-
-```bash
-python mc_world_translator.py --world-dir "/path/to/world" --dry-run --report-path ./scan-report.json
-```
-
-### 2. 执行翻译
-检查扫描报告后启动正式翻译。通过 `--expect-fingerprint` 传入指纹校验；若世界数据在此期间发生任何意外变动，将自动拒绝写入以确保数据安全：
-
+### 1. Scan Only (无 API 消耗安全提取)
 ```bash
 python mc_world_translator.py \
-  --world-dir "/path/to/world" \
-  --provider openrouter \
-  --model "your-text-model" \
-  --expect-fingerprint "<扫描报告中提供的指纹>"
+  --world-dir "/path/to/minecraft/saves/MyWorld" \
+  --dry-run \
+  --report-path ./scan-report.json
 ```
 
-省略 `--api-key` 参数时，程序将自动读取系统密钥链中已存储的该供应商密钥。
-
-### 3. 安全还原 (Restore)
-如遇意外状况，可随时将世界安全还原至校验过的最新备份点：
-
+### 2. 执行世界翻译 (基于扫描指纹安全运行)
 ```bash
-python mc_world_translator.py --world-dir "/path/to/world" --restore-backup
+python mc_world_translator.py \
+  --world-dir "/path/to/minecraft/saves/MyWorld" \
+  --target-language "zh" \
+  --provider openrouter \
+  --model "anthropic/claude-3.5-sonnet" \
+  --style story \
+  --expect-fingerprint "<扫描报告中的指纹>"
+```
+*提示：若省略 `--api-key`，系统将自动使用已安全存入 OS 密钥链中的 API 密钥。*
+
+### 3. 从备份还原世界
+```bash
+python mc_world_translator.py \
+  --world-dir "/path/to/minecraft/saves/MyWorld" \
+  --restore-backup
 ```
 
-每次写入均会自动生成带版本标记的备份集合。还原操作将完整回滚所有已变更文件（包括 `entities` 和已启用的材质包 `resources.zip`），并将当前状态作为安全快照额外归档。当 Minecraft 或服务器正占用 Java 版 `session.lock` 锁定时，写入操作将自动拒绝启动。
+![写入前备份](../assets/illustrations/docs/doc_backup_first_zh_v1.png)
 
-![写入前先备份](../assets/illustrations/docs/doc_backup_first_zh_v1.png)
+---
 
-## 桌面客户端
+## 原生桌面应用
 
-基于 Tauri 2 与 Svelte 5 构建的现代化原生桌面客户端具备多重安全防护与便捷功能：
+基于 Tauri 2 与 Svelte 5 构建的桌面客户端提供直观且现代化的用户体验：
 
-- **多语言界面**：完整支持简体中文、英语、韩语和日语界面语言切换（与翻译目标语言完全解耦）
-- **最近世界管理**：便捷记录与快速打开最近处理的世界，显示游戏 DataVersion 元数据
-- **前置安全诊断**：自动基于数据结构诊断格式兼容性并检测只读与会话锁定状态
-- **候选文本审查**：按频次或类型过滤搜索待翻文本，支持排除指定词条或手动输入自定义翻译（覆盖 AI 翻译）
-- **费用与请求预估**：根据分批大小实时估算最小 API 请求次数与 Token/费用范围
-- **安全取消与智能断点续传**：随时安全暂停任务，已翻译文本将持久化缓存，续传时仅请求未完成内容
-- **历史备份管理**：查看历史版本备份详情，支持带还原前快照的可靠一键恢复
+- **多语言界面即时切换**：独立于翻译目标语言，随时切换简体中文、英文、韩文、日文显示界面。
+- **候选文本校对表格**：直观查看提取文本的频次、坐标与方块/实体 ID，支持自定义排除翻译或录入人工翻译。
+- **请求次数与成本预估**：在发送请求前清晰展示批处理估算请求次数与 Token 开销范围。
+- **协作式取消与无损恢复**：取消时不会破坏存档数据，断点记录可自动接着翻译未完成条目。
+- **历史备份管理器**：查看每次翻译生成的版本快照与文件改动清单，一键安全回滚。
 
-从源代码构建：
-
+### 从源码编译桌面应用
 ```bash
 pnpm install --frozen-lockfile
 pnpm sidecar:build
 pnpm exec tauri build
 ```
 
-打包生成的可执行文件内嵌所有原生二进制支持库，最终用户无需安装 Node.js、Python 或 Rust 即可直接使用。
+---
 
-## 本地 Web UI (辅助工具)
+## 翻译风格预设
 
-如果您的电脑中已配置好 Python 环境，可使用内置轻量级服务 `webui_server.py` 在浏览器中访问（`http://127.0.0.1:8765`）：
+根据地图主题自由选择 6 种本地化风格：
+- **标准 (`neutral`)**：客观、精准、平衡，适合普通生存世界与通用功能地图
+- **自然对话 (`casual`)**：口语化自然表达，适合剧情对话丰富的角色互动与小游戏
+- **庄重典雅 (`formal`)**：用词严谨、文雅端庄，适合历史古迹、碑文、日志记录
+- **礼貌客气 (`polite`)**：亲切得体的敬语表达，适合教学向导、系统提示、任务引导
+- **小说故事 (`story`)**：富于文学渲染力的史诗叙事风貌，极大增强奇幻冒险地图代入感
+- **自定义 (`custom`)**：自由填写特定世界观规则、专有名词对照或特殊翻译要求
+
+---
+
+## 自动化测试运行
 
 ```bash
-python webui_server.py
-```
-
-## 配置文件规范
-
-配置参数详情请参见 [config.example.toml](../config.example.toml)。`world_dir` 仅在指向实际目标世界时填入，切勿将 API 密钥以明文形式写入配置文件。
-
-## 自动化测试
-
-```bash
+# 核心功能回归测试
 .venv/bin/python test_core.py
+
+# 格式夹具验证（压缩、NBT、会话锁、还原）
 .venv/bin/python tests/test_release_fixtures.py
+
+# 提供商 API 与密钥链设置测试
 .venv/bin/python tests/test_providers.py
+
+# 品牌规范与隐私防泄漏测试
 .venv/bin/python tests/test_brand_secrets.py
+
+# 桌面端侧车进程协议测试
 .venv/bin/python tests/test_desktop_entry.py
+
+# 前端单元测试
+./node_modules/.bin/vitest run
 ```
 
-## 问题反馈与支持
+---
 
-- Bug 报告及功能建议：`mini0227kim@gmail.com`
-- 咨询时请附上您的操作系统、使用的 AI 供应商与模型、以及错误日志。（出于安全考虑，切勿随信发送 API 密钥。）
+## 咨询与反馈
 
-## 开源许可证
+- 问题反馈与功能建议：`mini0227kim@gmail.com`
+- 提交反馈时请提供操作系统、所用提供商、模型名称以及相关日志记录。（请切勿提供您的私密 API 密钥。）
 
-本项目基于 [MIT License](../LICENSE) 开源许可证发布。
+---
+
+## 开源许可
+
+PomiTranslate 基于 [MIT 许可协议](../LICENSE) 开源。
