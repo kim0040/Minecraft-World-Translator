@@ -16,6 +16,9 @@
     excludedCandidateIds?: string[];
     candidateOverrides?: Record<string, string>;
     savedAt?: number;
+    status?: string;
+    translatedCount?: number;
+    reason?: string;
   };
   type BootstrapPayload = {
     notices: Notice;
@@ -72,6 +75,8 @@
   let resumeAvailable = $state(false);
   let resumeSavedAt = $state(0);
   let resumeRequested = $state(false);
+  let resumeStatus = $state('cancelled');
+  let resumeTranslated = $state(0);
 
   const providerChoices = [
     { id: 'openai', label: 'OpenAI' },
@@ -105,14 +110,20 @@
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
-    void listen<{ payload?: { event?: string; index?: number; total?: number; candidate_text_count?: number } }>('pomi-progress', ({ payload: message }) => {
+    void listen<{ payload?: { event?: string; phase?: string; index?: number; total?: number; completed?: number; candidate_text_count?: number } }>('pomi-progress', ({ payload: message }) => {
       const progress = message.payload || {};
       if (progress.index && progress.total) {
-        progressText = uiLanguage === 'ko' ? `파일 ${progress.index} / ${progress.total} 처리 중` : uiLanguage === 'ja' ? `ファイル ${progress.index} / ${progress.total} を処理中` : `Processing file ${progress.index} / ${progress.total}`;
+        progressText = progress.phase === 'write'
+          ? t('월드에 쓰는 중 · 파일 {index} / {total}', { index: progress.index, total: progress.total })
+          : t('텍스트 찾는 중 · 파일 {index} / {total}', { index: progress.index, total: progress.total });
       } else if (progress.event === 'done') {
         progressText = '';
-      } else if (progress.event) {
-        progressText = uiLanguage === 'ko' ? `현재 단계: ${progress.event}` : uiLanguage === 'ja' ? `現在の段階: ${progress.event}` : `Current stage: ${progress.event}`;
+      } else if (progress.event === 'translation_progress') {
+        progressText = t('번역 중 · {done} / {total}', { done: progress.completed ?? 0, total: progress.total ?? 0 });
+      } else if (progress.event === 'phase_start' && progress.phase === 'translate') {
+        progressText = t('번역 요청 준비 중');
+      } else if (progress.event === 'translation_batch_error') {
+        progressText = t('제공사 응답 오류 · 다시 시도합니다');
       }
     }).then((stop) => { unlisten = stop; });
     void (async () => {
@@ -209,6 +220,20 @@
     };
   }
 
+  function statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      completed: '완료',
+      partial: '일부만 번역',
+      needs_retry: '중단됨 · 월드 그대로',
+      failed: '실패',
+      cancelled: '취소됨',
+      locked: '월드 사용 중',
+      invalidated: '월드가 바뀜',
+      unsupported: '지원하지 않는 형식'
+    };
+    return t(labels[status] || status);
+  }
+
   function blockerLabel(blocker: string): string {
     const labels: Record<string, string> = {
       bedrock: 'Bedrock 월드는 현재 쓰기를 지원하지 않습니다.',
@@ -253,7 +278,27 @@
     candidateOverrides = resumable.candidateOverrides || {};
     resumeAvailable = true;
     resumeSavedAt = resumable.savedAt || 0;
-    info = t('안전하게 취소된 이전 작업이 있습니다. 월드와 설정이 일치해 이어서 실행할 수 있습니다.');
+    resumeStatus = resumable.status || 'cancelled';
+    resumeTranslated = resumable.translatedCount || 0;
+    info = resumeStatus === 'cancelled'
+      ? t('안전하게 취소된 이전 작업이 있습니다. 월드와 설정이 일치해 이어서 실행할 수 있습니다.')
+      : t('번역이 중단됐지만 월드는 바뀌지 않았습니다. 이미 번역한 {count}개는 저장돼 있어 이어서 실행하면 남은 부분만 요청합니다.', { count: resumeTranslated });
+  }
+
+  function failureMessage(outcome: TranslationResult): string {
+    const first = outcome.errors?.[0];
+    const codes: Record<string, string> = {
+      RATE_LIMITED: '제공사가 요청 한도로 응답을 거절했습니다.',
+      AUTH_FAILED: 'API 키가 거부됐습니다. 설정에서 키를 확인해 주세요.',
+      NO_CREDIT: '제공사 계정의 잔액이 부족합니다.',
+      MODEL_NOT_FOUND: '제공사가 이 모델을 찾지 못했습니다. 모델 ID를 확인해 주세요.',
+      PROVIDER_ERROR: '제공사 서버에 오류가 있습니다.',
+      NETWORK_ERROR: '제공사에 연결하지 못했습니다.',
+      TRANSLATION_INCOMPLETE: '일부 문자열을 번역하지 못했습니다.'
+    };
+    const reason = t(codes[first?.code || ''] || '번역을 끝내지 못했습니다.');
+    const kept = outcome.status === 'failed' ? '' : ` ${t('월드는 바뀌지 않았습니다. 잠시 후 이어서 실행하세요.')}`;
+    return `${reason}${kept}`;
   }
 
   async function loadResume(): Promise<void> {
@@ -501,21 +546,24 @@
         candidateOverrides,
         provider
       });
-      if (result.status === 'completed') {
+      if (result.status === 'completed' || result.status === 'partial') {
         resumeAvailable = false;
         resumeSavedAt = 0;
         await loadBackups();
         if (result.backupSetId) selectedBackupId = result.backupSetId;
+        if (result.status === 'partial') error = t('일부만 번역했습니다. 번역하지 못한 문자열은 원문 그대로입니다.');
         info = uiLanguage === 'ko' ? `번역 완료 · 변경 파일 ${result.changedFileCount}개. 복원에 사용할 검증된 백업이 생성됐는지 결과를 확인하세요.` : uiLanguage === 'ja' ? `翻訳完了 · ${result.changedFileCount}件のファイルを変更しました。復元用の検証済みバックアップを確認してください。` : `Translation complete · ${result.changedFileCount} files changed. Confirm the verified backup in the result.`;
+      } else if (result.status === 'cancelled') {
+        info = t('취소했습니다. 이미 번역한 부분은 저장돼 있어 이어서 실행할 수 있습니다.');
       } else {
-        error = `${t('번역 상태')}: ${result.status}. ${result.errors?.map((item) => item.message).filter(Boolean).join(' · ') || t('결과를 확인해 주세요.')}`;
+        error = failureMessage(result);
       }
     } catch (cause) {
       error = describe(cause);
     } finally {
       busy = '';
       progressText = '';
-      if (result?.status === 'cancelled') {
+      if (result && ['cancelled', 'needs_retry', 'failed'].includes(result.status)) {
         try {
           await loadResume();
         } catch (cause) {
@@ -691,7 +739,7 @@
                     />
                     <div class="candidate-content">
                       <span>{candidate.source}</span>
-                      <small>{candidate.kind || t('월드 텍스트')}{candidate.location ? ` · ${candidate.location}` : ''}</small>
+                      {#if candidate.location || (candidate.kind && candidate.kind !== 'world.text')}<small>{candidate.kind && candidate.kind !== 'world.text' ? candidate.kind : ''}{candidate.location ? ` · ${candidate.location}` : ''}</small>{/if}
                       <input
                         class="manual-translation"
                         type="text"
@@ -734,9 +782,9 @@
           <div><span>{t('최소 번역 요청')}</span><strong>{requestEstimate()}</strong></div>
           <div><span>{t('백업')}</span><strong>{t('변경 전 파일 검증')}</strong></div>
         </div>
-        {#if resumeAvailable}<div class="resume-notice"><strong>{t('이어 할 작업 있음')}</strong><span>{resumeSavedAt ? new Date(resumeSavedAt * 1000).toLocaleString(uiLanguage) : t('안전하게 취소된 작업')}</span><small>{t('월드 파일이나 번역 설정이 바뀌면 재개되지 않습니다.')}</small></div>{/if}
+        {#if resumeAvailable}<div class="resume-notice"><strong>{t('이어 할 작업 있음')}</strong><span>{resumeSavedAt ? new Date(resumeSavedAt * 1000).toLocaleString(uiLanguage) : t('안전하게 취소된 작업')}{resumeTranslated ? ` · ${t('번역 완료 {count}개 저장됨', { count: resumeTranslated })}` : ''}</span><small>{t('월드 파일이나 번역 설정이 바뀌면 재개되지 않습니다.')}</small></div>{/if}
         {#if result}
-          <div class="result-box"><strong>{t('최근 작업')}: {result.status}</strong><span>{t('변경 파일')} {result.changedFileCount} · {t('후보')} {result.candidateCount}</span></div>
+          <div class="result-box"><strong>{t('최근 작업')}: {statusLabel(result.status)}</strong><span>{t('변경 파일')} {result.changedFileCount} · {t('후보')} {result.candidateCount}</span>{#if result.translation?.failed}<span>{t('번역하지 못한 문자열')} {result.translation.failed}</span>{/if}{#if result.translation?.kept_original}<span>{t('서식 기호 보호로 원문 유지')} {result.translation.kept_original}</span>{/if}{#if result.warnings?.length}<span>{t('경고')} {result.warnings.length}</span>{/if}</div>
         {/if}
         {#if backups.length}
           <div class="backup-history">

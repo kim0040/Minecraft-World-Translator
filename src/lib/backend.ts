@@ -37,8 +37,14 @@ export type ScanResult = {
   dryRun: boolean;
   writeBlockers?: string[];
   errors?: { scope?: string; message?: string }[];
+  warnings?: BackendWarning[];
+  requestEstimate?: number;
   candidates?: { id: string; source: string; kind?: string; location?: string; occurrences?: number }[];
 };
+
+export type BackendWarning = { code: string; file?: string; count?: number; message?: string };
+
+export type TranslationStats = { unique: number; translated: number; failed: number; kept_original: number; unchanged: number };
 
 export type TranslationResult = {
   status: string;
@@ -46,7 +52,12 @@ export type TranslationResult = {
   changedFileCount: number;
   providerRequests?: number;
   backupSetId?: string;
-  errors?: { scope?: string; message?: string }[];
+  errors?: { scope?: string; code?: string; message?: string }[];
+  warnings?: BackendWarning[];
+  translation?: Partial<TranslationStats>;
+  translationFailures?: { source: string; reason: string }[];
+  keptOriginalSamples?: string[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number; cost_reported?: boolean };
 };
 
 export type BackupSummary = {

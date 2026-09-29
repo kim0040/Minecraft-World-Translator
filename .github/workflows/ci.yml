@@ -24,3 +24,5 @@ jobs:
         run: python tests/test_desktop_entry.py
       - name: Providers and remembered settings
         run: python tests/test_providers.py
+      - name: Failure reporting and retry
+        run: python tests/test_reliability.py

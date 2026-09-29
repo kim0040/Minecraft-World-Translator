@@ -14,6 +14,11 @@ from mwt.notices import ABOUT, FIRST_LAUNCH, PRE_TRANSLATE, payload
 from mwt.safety import BackupSet, list_backup_sets
 
 
+# A job stopped by the user, by an outage, or by a provider error keeps its translated strings
+# in the checkpoint. Only these states may be continued.
+RESUMABLE_STATUSES = {"cancelled", "needs_retry", "failed"}
+
+
 def _settings_fingerprint(data_dir: Path) -> str:
     saved = _saved(data_dir)
     relevant = {
@@ -54,6 +59,11 @@ def _checkpoint_path(data_dir: Path, scan_plan_id: str) -> Path:
     if not re.fullmatch(r"[0-9a-f]{64}", scan_plan_id):
         raise ValueError("Invalid scan plan ID")
     return data_dir / "jobs" / f"{scan_plan_id}.checkpoint.json"
+
+
+def _request_estimate(candidate_count: int, batch_size: int) -> int:
+    """Translation batches across the whole world, so this is exact unless a provider call fails."""
+    return -(-int(candidate_count) // max(1, int(batch_size))) if candidate_count else 0
 
 
 def _candidate_record(source: str) -> dict:
@@ -179,7 +189,7 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
             plan = _load_scan_plan(data_dir, scan_plan_id)
             if (
                 checkpoint.get("version") != 2
-                or report.get("status") != "cancelled"
+                or report.get("status") not in RESUMABLE_STATUSES
                 or Path(str(checkpoint.get("world_dir") or "")).expanduser().resolve() != resolved_world
                 or plan.get("settingsFingerprint") != current_settings
                 or plan.get("worldFingerprint") != resume.get("expected_world_fingerprint")
@@ -216,6 +226,12 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
                     "candidateOverrides": candidate_overrides,
                     "savedAt": float(checkpoint.get("saved_at") or 0),
                     "backupSetId": str(report.get("backup_set_id") or ""),
+                    "status": str(report.get("status") or ""),
+                    "translatedCount": len(checkpoint.get("translation_cache") or {}),
+                    "reason": next(
+                        (str(item.get("message") or "") for item in report.get("errors", []) if isinstance(item, dict)),
+                        "",
+                    ),
                 }
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
@@ -246,6 +262,7 @@ def _run_translator(
     skip_provider_validation: bool = False,
     scan_plan_id: str = "",
     resume_from_checkpoint: bool = False,
+    on_translation_failure: str = "stop",
 ) -> dict:
     import os
 
@@ -289,6 +306,7 @@ def _run_translator(
                 "data_dir": str(data_dir),
                 "excluded_candidate_ids": excluded_candidate_ids or [],
                 "skip_provider_validation": skip_provider_validation,
+                "on_translation_failure": "skip" if on_translation_failure == "skip" else "stop",
                 "max_batch_retries": int(
                     saved.get("max_batch_retries") or DEFAULT_CONFIG["runtime"]["max_batch_retries"]
                 ),
@@ -657,6 +675,10 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "preTranslate": PRE_TRANSLATE,
                     "writeBlockers": blockers,
                     "errors": report.get("errors", []),
+                    "warnings": report.get("warnings", []),
+                    "requestEstimate": _request_estimate(
+                        report.get("candidate_text_count", 0), int(_saved(data_dir).get("batch_size") or 40)
+                    ),
                     "candidates": report.get("candidate_preview", []),
                 },
             }
@@ -800,6 +822,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             skip_provider_validation=manual_only,
             scan_plan_id=scan_plan_id,
             resume_from_checkpoint=kind == "translate.resume",
+            on_translation_failure=str(body.get("failurePolicy") or "stop"),
         )
         emit(
             {
@@ -815,6 +838,11 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "preTranslate": PRE_TRANSLATE,
                     "localhostServer": False,
                     "errors": report.get("errors", []),
+                    "warnings": report.get("warnings", []),
+                    "translation": report.get("translation") or {},
+                    "translationFailures": report.get("translation_failures", []),
+                    "keptOriginalSamples": report.get("kept_original_samples", []),
+                    "usage": report.get("usage") or {},
                 },
             }
         )

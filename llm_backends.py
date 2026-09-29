@@ -250,6 +250,52 @@ class ModelCatalogError(RuntimeError):
     pass
 
 
+class ProviderError(RuntimeError):
+    """A provider call failed. ``fatal`` errors cannot be fixed by retrying."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        retry_after: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+    @property
+    def fatal(self) -> bool:
+        # 401/403: bad or unauthorized key. 402: no credit. 404: unknown model or endpoint.
+        return self.status in {401, 402, 403, 404}
+
+    @property
+    def code(self) -> str:
+        if self.status in {401, 403}:
+            return "AUTH_FAILED"
+        if self.status == 402:
+            return "NO_CREDIT"
+        if self.status == 404:
+            return "MODEL_NOT_FOUND"
+        if self.status == 429:
+            return "RATE_LIMITED"
+        if self.status is not None and self.status >= 500:
+            return "PROVIDER_ERROR"
+        if self.status is None:
+            return "NETWORK_ERROR"
+        return "REQUEST_REJECTED"
+
+
+def _retry_after_seconds(headers: Any) -> float | None:
+    value = headers.get("Retry-After") if headers is not None else None
+    if not value:
+        return None
+    try:
+        return max(0.0, min(float(value), 120.0))
+    except ValueError:
+        return None
+
+
 def _output_modalities(item: dict[str, Any]) -> list[str]:
     architecture = item.get("architecture") if isinstance(item.get("architecture"), dict) else {}
     outputs = architecture.get("output_modalities")
@@ -468,23 +514,62 @@ class LLMProviderClient:
         body = None
         if payload is not None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        LLMProviderClient.request_count += 1
+        if method == "POST":  # count translation calls; a model-list lookup is not one
+            LLMProviderClient.request_count += 1
         req = request.Request(url=url, data=body, headers=headers, method=method)
         try:
             with request.urlopen(req, timeout=self.timeout) as response:
                 raw = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            message = f"{provider_spec(self.provider)['label']} request failed with HTTP {exc.code}: {detail}"
-            raise RuntimeError(self._redact(message)) from exc
+            message = f"{provider_spec(self.provider)['label']} request failed with HTTP {exc.code}: {detail[:600]}"
+            raise ProviderError(
+                self._redact(message),
+                status=exc.code,
+                retry_after=_retry_after_seconds(exc.headers),
+            ) from exc
         except error.URLError as exc:
             message = f"{provider_spec(self.provider)['label']} request failed: {exc.reason}"
-            raise RuntimeError(self._redact(message)) from exc
+            raise ProviderError(self._redact(message)) from exc
+        except (TimeoutError, OSError) as exc:
+            message = f"{provider_spec(self.provider)['label']} request failed: {exc}"
+            raise ProviderError(self._redact(message)) from exc
 
         try:
-            return json.loads(raw)
+            parsed = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{provider_spec(self.provider)['label']} returned invalid JSON.") from exc
+            raise ProviderError(f"{provider_spec(self.provider)['label']} returned invalid JSON.") from exc
+        if method == "POST":
+            LLMProviderClient.record_usage(parsed)
+        return parsed
+
+    usage: dict[str, Any] = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "cost_reported": False}
+
+    @classmethod
+    def reset_counters(cls) -> None:
+        cls.request_count = 0
+        cls.usage = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "cost_reported": False}
+
+    @classmethod
+    def record_usage(cls, response: Any) -> None:
+        """Add the token counts a provider reports; providers that omit them add nothing."""
+        if not isinstance(response, dict):
+            return
+        usage = response.get("usage")
+        if isinstance(usage, dict):
+            prompt = usage.get("prompt_tokens", usage.get("input_tokens"))
+            completion = usage.get("completion_tokens", usage.get("output_tokens"))
+            if isinstance(usage.get("cost"), (int, float)):
+                cls.usage["cost"] += float(usage["cost"])
+                cls.usage["cost_reported"] = True
+        else:
+            meta = response.get("usageMetadata")
+            prompt = meta.get("promptTokenCount") if isinstance(meta, dict) else None
+            completion = meta.get("candidatesTokenCount") if isinstance(meta, dict) else None
+        if isinstance(prompt, int):
+            cls.usage["prompt_tokens"] += prompt
+        if isinstance(completion, int):
+            cls.usage["completion_tokens"] += completion
 
     def _redact(self, message: str) -> str:
         from mwt.secrets import redact_log
@@ -520,6 +605,8 @@ class LLMProviderClient:
         }
         if expect_json and self.supports_json_response:
             payload["response_format"] = {"type": "json_object"}
+        if self.provider == "openrouter":
+            payload["usage"] = {"include": True}
 
         response = self._request_json(
             "POST",

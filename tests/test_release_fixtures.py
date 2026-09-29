@@ -689,7 +689,7 @@ def test_cancelled_job_resumes_same_backup_set(tmp: Path) -> None:
     cancelled = {"value": False}
 
     def progress(event: dict) -> None:
-        if event.get("event") == "file_done":
+        if event.get("event") == "file_done" and event.get("phase") == "write":
             cancelled["value"] = True
 
     base = merge_nested(
