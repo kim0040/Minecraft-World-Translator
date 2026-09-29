@@ -9,8 +9,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from nbt import nbt
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -70,16 +73,22 @@ def listening(pid: int) -> str:
     return "\n".join(line for line in completed.stdout.splitlines() if str(pid) in line)
 
 
-def exchange(proc: subprocess.Popen[str], message: dict | None = None) -> dict:
+def exchange(proc: subprocess.Popen[str], message: dict | None = None, events: list[dict] | None = None) -> dict:
     if message is not None:
         assert proc.stdin is not None
         proc.stdin.write(json.dumps(message) + "\n")
         proc.stdin.flush()
     assert proc.stdout is not None
-    line = proc.stdout.readline()
-    if not line:
-        raise RuntimeError(proc.stderr.read() if proc.stderr else "desktop entry closed stdout")
-    return json.loads(line)
+    while True:
+        line = proc.stdout.readline()
+        if not line:
+            raise RuntimeError(proc.stderr.read() if proc.stderr else "desktop entry closed stdout")
+        reply = json.loads(line)
+        if reply.get("type", "").endswith(".progress"):
+            if events is not None:
+                events.append(reply)
+            continue
+        return reply
 
 
 def main() -> None:
@@ -90,7 +99,13 @@ def main() -> None:
             world = tmp / "world"
             region = world / "region" / "r.0.0.mca"
             write_region(region, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}'))), False)})
+            level = nbt.NBTFile()
+            data = nbt.TAG_Compound(name="Data")
+            data.tags.append(nbt.TAG_Int(name="DataVersion", value=4189))
+            level.tags.append(data)
+            level.write_file(filename=str(world / "level.dat"))
             original = hashes(world)
+            cancel_path = tmp / "operation.cancel"
             env = os.environ.copy()
             env.update({"POMI_API_KEY": "desktop-test-key", "POMI_API_BASE": base_url, "POMI_MODEL": "fixture"})
             proc = subprocess.Popen(
@@ -103,6 +118,8 @@ def main() -> None:
                     str(tmp / "reports"),
                     "--data-dir",
                     str(tmp / "userdata"),
+                    "--cancel-file",
+                    str(cancel_path),
                 ],
                 cwd=ROOT,
                 env=env,
@@ -117,32 +134,360 @@ def main() -> None:
                 assert hello["payload"]["localhostServer"] is False
                 assert hello["payload"]["productName"] == "PomiTranslate"
                 assert listening(proc.pid) == ""
+                remembered = exchange(
+                    proc,
+                    {"v": 1, "id": "remember", "type": "worlds.remember", "payload": {"worldDir": str(world)}},
+                )
+                assert remembered["payload"]["worlds"][0]["path"] == str(world.resolve())
+                inspected = exchange(
+                    proc,
+                    {"v": 1, "id": "inspect", "type": "world.inspect", "payload": {"worldDir": str(world)}},
+                )
+                assert inspected["payload"]["validJavaWorld"] is True
+                assert inspected["payload"]["kind"] == "java_world"
+                assert inspected["payload"]["dataVersions"] == [{"world": "world", "dataVersion": 4189}]
+                listed_worlds = exchange(
+                    proc,
+                    {"v": 1, "id": "worlds", "type": "worlds.list", "payload": {}},
+                )
+                assert listed_worlds["payload"]["worlds"][0]["available"] is True
+                scan_events: list[dict] = []
                 scan = exchange(
                     proc,
                     {"v": 1, "id": "scan", "type": "scan.start", "payload": {"worldDir": str(world)}},
+                    scan_events,
                 )
                 assert scan["payload"]["dryRun"] is True
                 assert scan["payload"]["candidateCount"] > 0
                 assert scan["payload"]["localhostServer"] is False
                 assert "Back up your world" in scan["payload"]["preTranslate"]
+                assert scan["payload"]["candidates"][0]["source"] == "Hello sign"
+                assert scan["payload"]["writeBlockers"] == []
+                assert scan["payload"]["scanPlanId"]
+                assert any(item["type"] == "scan.progress" for item in scan_events)
+                page = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "page",
+                        "type": "candidates.page",
+                        "payload": {"scanPlanId": scan["payload"]["scanPlanId"], "offset": 0, "limit": 100},
+                    },
+                )
+                assert page["payload"]["total"] == 1
+                assert page["payload"]["candidates"][0]["source"] == "Hello sign"
+                no_match = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "search",
+                        "type": "candidates.page",
+                        "payload": {"scanPlanId": scan["payload"]["scanPlanId"], "query": "absent"},
+                    },
+                )
+                assert no_match["payload"]["total"] == 0
                 assert hashes(world) == original
+                cancel_path.write_text("cancel", encoding="utf-8")
+                cancelled = exchange(
+                    proc,
+                    {"v": 1, "id": "cancelled-scan", "type": "scan.start", "payload": {"worldDir": str(world)}},
+                )
+                assert cancelled["payload"]["status"] == "cancelled"
+                assert hashes(world) == original
+                cancelled_translation = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "cancelled-translation",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": scan["payload"]["fingerprint"],
+                            "scanPlanId": scan["payload"]["scanPlanId"],
+                        },
+                    },
+                )
+                assert cancelled_translation["payload"]["status"] == "cancelled"
+                resumable = exchange(
+                    proc,
+                    {"v": 1, "id": "resume-status", "type": "resume.status", "payload": {"worldDir": str(world)}},
+                )
+                assert resumable["payload"]["available"] is True
+                assert resumable["payload"]["scanPlanId"] == scan["payload"]["scanPlanId"]
+                cancel_path.unlink()
+                resumed = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resume-translation",
+                        "type": "translate.resume",
+                        "payload": {"worldDir": str(world)},
+                    },
+                )
+                assert resumed["payload"]["status"] == "completed"
+                assert resumed["payload"]["backupSetId"]
+                assert hashes(world) != original
+                resumed_restore = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resume-restore",
+                        "type": "restore.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "backupSetId": resumed["payload"]["backupSetId"],
+                        },
+                    },
+                )
+                assert resumed_restore["payload"]["status"] == "restored"
+                assert hashes(world) == original
+                resume_gone = exchange(
+                    proc,
+                    {"v": 1, "id": "resume-gone", "type": "resume.status", "payload": {"worldDir": str(world)}},
+                )
+                assert resume_gone["payload"]["available"] is False
+                rejected = exchange(
+                    proc,
+                    {"v": 1, "id": "no-scan", "type": "translate.start", "payload": {"worldDir": str(world)}},
+                )
+                assert rejected["type"] == "response.error"
+                assert rejected["error"]["code"] == "SCAN_REQUIRED"
+                assert hashes(world) == original
+                excluded = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "excluded",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": scan["payload"]["fingerprint"],
+                            "scanPlanId": scan["payload"]["scanPlanId"],
+                            "excludedCandidateIds": [scan["payload"]["candidates"][0]["id"]],
+                        },
+                    },
+                )
+                assert excluded["payload"]["candidateCount"] == 0
+                assert hashes(world) == original
+                manual = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "manual",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": scan["payload"]["fingerprint"],
+                            "scanPlanId": scan["payload"]["scanPlanId"],
+                            "candidateOverrides": {
+                                scan["payload"]["candidates"][0]["id"]: "Manual sign"
+                            },
+                        },
+                    },
+                )
+                assert manual["payload"]["status"] == "completed"
+                assert manual["payload"]["providerRequests"] == 0
+                assert hashes(world) != original
+                manual_restore = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "manual-restore",
+                        "type": "restore.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "backupSetId": manual["payload"]["backupSetId"],
+                        },
+                    },
+                )
+                assert manual_restore["payload"]["status"] == "restored"
+                assert hashes(world) == original
+                exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "settings-change",
+                        "type": "settings.set",
+                        "payload": {"provider": "openai", "model": "changed-after-scan"},
+                    },
+                )
+                invalidated = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "stale-plan",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": scan["payload"]["fingerprint"],
+                            "scanPlanId": scan["payload"]["scanPlanId"],
+                        },
+                    },
+                )
+                assert invalidated["type"] == "response.error"
+                assert invalidated["error"]["code"] == "PLAN_INVALIDATED"
+                assert hashes(world) == original
+                exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "settings-restore",
+                        "type": "settings.set",
+                        "payload": {"provider": "openai", "model": "fixture"},
+                    },
+                )
+                translation_events: list[dict] = []
                 translated = exchange(
                     proc,
                     {
                         "v": 1,
                         "id": "translate",
                         "type": "translate.start",
-                        "payload": {"worldDir": str(world), "fingerprint": scan["payload"]["fingerprint"]},
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": scan["payload"]["fingerprint"],
+                            "scanPlanId": scan["payload"]["scanPlanId"],
+                        },
                     },
+                    translation_events,
                 )
                 assert translated["payload"]["status"] == "completed"
+                assert translated["payload"]["backupSetId"]
+                assert any(item["type"] == "translate.progress" for item in translation_events)
                 assert hashes(world) != original
+                backups = exchange(
+                    proc,
+                    {"v": 1, "id": "backups", "type": "backups.list", "payload": {"worldDir": str(world)}},
+                )
+                assert backups["payload"]["backups"][0]["backupSetId"] == translated["payload"]["backupSetId"]
                 restored = exchange(
                     proc,
-                    {"v": 1, "id": "restore", "type": "restore.start", "payload": {"worldDir": str(world)}},
+                    {
+                        "v": 1,
+                        "id": "restore",
+                        "type": "restore.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "backupSetId": translated["payload"]["backupSetId"],
+                        },
+                    },
                 )
                 assert restored["payload"]["status"] == "restored"
+                assert restored["payload"]["recoverySetId"]
                 assert hashes(world) == original
+                resource_pack = world / "resources.zip"
+                with zipfile.ZipFile(resource_pack, "w") as archive:
+                    archive.writestr("assets/pomi/lang/en_us.json", json.dumps({"pomi.hello": "Pack hello"}))
+                inspected_with_pack = exchange(
+                    proc,
+                    {"v": 1, "id": "inspect-pack", "type": "world.inspect", "payload": {"worldDir": str(world)}},
+                )
+                assert inspected_with_pack["payload"]["resourcePacks"] == [str(resource_pack)]
+                exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-settings",
+                        "type": "settings.set",
+                        "payload": {
+                            "provider": "openai",
+                            "model": "fixture",
+                            "resourcePackEnabled": True,
+                            "temperature": 0.2,
+                            "batchSize": 20,
+                            "requestTimeout": 60,
+                            "rpmLimit": 0,
+                            "tpmLimit": 0,
+                            "maxBatchRetries": 2,
+                        },
+                    },
+                )
+                pack_scan = exchange(
+                    proc,
+                    {"v": 1, "id": "resource-scan", "type": "scan.start", "payload": {"worldDir": str(world)}},
+                )
+                assert pack_scan["payload"]["candidateCount"] == 2
+                pack_page = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-candidates",
+                        "type": "candidates.page",
+                        "payload": {"scanPlanId": pack_scan["payload"]["scanPlanId"], "query": "Pack hello"},
+                    },
+                )
+                assert pack_page["payload"]["total"] == 1
+                all_pack_candidates = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-all-candidates",
+                        "type": "candidates.page",
+                        "payload": {"scanPlanId": pack_scan["payload"]["scanPlanId"], "limit": 200},
+                    },
+                )["payload"]["candidates"]
+                pack_original = hashes(world)
+                pack_translation = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-translate",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": pack_scan["payload"]["fingerprint"],
+                            "scanPlanId": pack_scan["payload"]["scanPlanId"],
+                            "candidateOverrides": {
+                                item["id"]: f"Manual {item['source']}" for item in all_pack_candidates
+                            },
+                        },
+                    },
+                )
+                assert pack_translation["payload"]["status"] == "completed"
+                assert pack_translation["payload"]["providerRequests"] == 0
+                assert pack_translation["payload"]["backupSetId"]
+                resource_backups = exchange(
+                    proc,
+                    {"v": 1, "id": "resource-backups", "type": "backups.list", "payload": {"worldDir": str(world)}},
+                )
+                translated_backup = next(
+                    item for item in resource_backups["payload"]["backups"]
+                    if item["backupSetId"] == pack_translation["payload"]["backupSetId"]
+                )
+                assert translated_backup["fileCount"] == 2, {
+                    "backup": translated_backup,
+                    "translation": pack_translation,
+                }
+                pack_restored = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-restore",
+                        "type": "restore.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "backupSetId": pack_translation["payload"]["backupSetId"],
+                        },
+                    },
+                )
+                assert pack_restored["payload"]["status"] == "restored"
+                assert hashes(world) == pack_original
+                with zipfile.ZipFile(resource_pack, "w") as archive:
+                    archive.writestr("assets/pomi/lang/en_us.json", json.dumps({"pomi.hello": "Pack changed"}))
+                pack_invalidated = exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "resource-stale",
+                        "type": "translate.start",
+                        "payload": {
+                            "worldDir": str(world),
+                            "fingerprint": pack_scan["payload"]["fingerprint"],
+                            "scanPlanId": pack_scan["payload"]["scanPlanId"],
+                        },
+                    },
+                )
+                assert pack_invalidated["payload"]["status"] == "invalidated"
             finally:
                 proc.kill()
                 proc.wait(timeout=5)

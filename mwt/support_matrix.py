@@ -23,6 +23,8 @@ VERIFIED_WHEN_PASSING = (
     "safety.multi_file_restore",
     "safety.plan_invalidation",
     "safety.malformed_chunk",
+    "safety.world_write_lock",
+    "safety.cancel_resume_backup",
 )
 
 ALWAYS_UNSUPPORTED = (

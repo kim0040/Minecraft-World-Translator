@@ -160,6 +160,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_batch_retries": 3,
         "max_file_write_retries": 2,
         "expected_world_fingerprint": "",
+        "excluded_candidate_ids": [],
+        "skip_provider_validation": False,
     },
 }
 
@@ -359,9 +361,12 @@ def apply_remembered_defaults(config: dict[str, Any], data_dir: Path | None) -> 
 
 def remember_run_settings(config: dict[str, Any], data_dir: Path | None, api_key: str | None = None) -> None:
     from mwt.secrets import remember_api_key
-    from mwt.userdata import public_settings_from_config, remember_user_settings
+    from mwt.userdata import public_settings_from_config, remember_recent_world, remember_user_settings
 
     remember_user_settings(public_settings_from_config(config), root=data_dir)
+    world_dir = str(config.get("world_dir") or "")
+    if world_dir and Path(world_dir).expanduser().is_dir():
+        remember_recent_world(Path(world_dir), root=data_dir)
     if api_key:
         remember_api_key(config["api"]["provider"], api_key)
 
@@ -583,12 +588,15 @@ class WorldTranslator:
         self.cancel_check = cancel_check
         self.checkpoint_path = Path(self.runtime_config["checkpoint_path"]) if self.runtime_config["checkpoint_path"] else None
         self.resume_from_checkpoint = bool(self.runtime_config["resume_from_checkpoint"])
+        self.checkpoint_loaded = False
         self.completed_region_files: set[str] = set()
         self.completed_resource_pack_paths: set[str] = set()
         self.translation_cache: dict[str, str] = {}
         self.candidate_texts: set[str] = set()
         self.file_errors: list[dict[str, Any]] = []
         self._run_backup = None
+        self._write_lock = None
+        self._session_locks = None
         self.report: dict[str, Any] = {
             "world_dir": config["world_dir"],
             "dry_run": config["dry_run"],
@@ -620,6 +628,14 @@ class WorldTranslator:
             self.save_checkpoint()
             raise TranslationCancelled("Translation was cancelled by the user.")
 
+    def release_write_lock(self) -> None:
+        if self._session_locks is not None:
+            self._session_locks.release()
+            self._session_locks = None
+        if self._write_lock is not None:
+            self._write_lock.release()
+            self._write_lock = None
+
     def checkpoint_config_fingerprint(self) -> str:
         """Identify settings that would make a resumed translation inconsistent."""
         relevant_config = {
@@ -635,11 +651,19 @@ class WorldTranslator:
             "prompt": self.config["prompt"],
             "scan": self.config["scan"],
             "resource_pack": self.config["resource_pack"],
+            "runtime": {
+                "excluded_candidate_ids": sorted(self.runtime_config.get("excluded_candidate_ids") or []),
+                "scan_plan_id": str(self.runtime_config.get("scan_plan_id") or ""),
+                "adapter_version": 1,
+                "translation_strategy_version": 1,
+            },
         }
         encoded = json.dumps(relevant_config, ensure_ascii=False, sort_keys=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
     def checkpoint_payload(self) -> dict[str, Any]:
+        from mwt.safety import world_fingerprint
+
         self.refresh_report_counts()
         return {
             "version": 2,
@@ -648,6 +672,13 @@ class WorldTranslator:
             "model": self.config["api"]["model"],
             "dry_run": self.config["dry_run"],
             "config_fingerprint": self.checkpoint_config_fingerprint(),
+            "world_fingerprint": world_fingerprint(Path(self.config["world_dir"])),
+            "resume": {
+                "scan_plan_id": str(self.runtime_config.get("scan_plan_id") or ""),
+                "expected_world_fingerprint": str(self.runtime_config.get("expected_world_fingerprint") or ""),
+                "excluded_candidate_ids": list(self.runtime_config.get("excluded_candidate_ids") or []),
+                "manual_overrides": dict(self.scan_config.get("overrides") or {}),
+            },
             "completed_region_files": sorted(self.completed_region_files),
             "completed_resource_pack_paths": sorted(self.completed_resource_pack_paths),
             "translation_cache": self.translator.cache if self.translator is not None else self.translation_cache,
@@ -668,6 +699,12 @@ class WorldTranslator:
         if checkpoint.get("config_fingerprint") != self.checkpoint_config_fingerprint():
             self.emit("checkpoint_ignored", reason="settings")
             return
+        from mwt.safety import world_fingerprint
+
+        current_fingerprint = world_fingerprint(Path(self.config["world_dir"]))
+        if checkpoint.get("world_fingerprint") != current_fingerprint:
+            self.emit("checkpoint_ignored", reason="world_fingerprint")
+            return
         self.completed_region_files = set(checkpoint.get("completed_region_files", []))
         self.completed_resource_pack_paths = set(checkpoint.get("completed_resource_pack_paths", []))
         self.translation_cache = dict(checkpoint.get("translation_cache", {}))
@@ -676,6 +713,12 @@ class WorldTranslator:
         if isinstance(saved_report, dict):
             self.report.update(saved_report)
             self.report["status"] = "running"
+        backup_set_id = str(self.report.get("backup_set_id") or "")
+        if backup_set_id:
+            from mwt.safety import BackupSet
+
+            self._run_backup = BackupSet.open_existing(Path(self.config["world_dir"]), backup_set_id)
+        self.checkpoint_loaded = True
         self.emit(
             "checkpoint_loaded",
             completed_region_files=len(self.completed_region_files),
@@ -710,7 +753,10 @@ class WorldTranslator:
         from llm_backends import LLMProviderClient
 
         LLMProviderClient.request_count = 0
-        self._run_backup = None
+        if not self.checkpoint_loaded:
+            self._run_backup = None
+        self._write_lock = None
+        self._session_locks = None
         world_dir = Path(self.config["world_dir"]).resolve()
         if not world_dir.exists() or not world_dir.is_dir():
             msg = f"World directory not found or invalid: {world_dir}"
@@ -721,26 +767,55 @@ class WorldTranslator:
 
         try:
             from mwt.layout import detect_write_blockers
+            from mwt.locking import MinecraftSessionLocks, MinecraftWorldInUse, WorldWriteLock, WorldWriteLocked
             from mwt.safety import world_fingerprint
+
+            if not self.config["dry_run"]:
+                self._write_lock = WorldWriteLock(world_dir)
+                try:
+                    self._write_lock.acquire()
+                except WorldWriteLocked as exc:
+                    self.report["status"] = "locked"
+                    self.report["errors"].append({"scope": "world_lock", "message": str(exc)})
+                    self.refresh_report_counts()
+                    self.write_report()
+                    self.release_write_lock()
+                    return self.report
+                self._session_locks = MinecraftSessionLocks(world_dir)
+                try:
+                    self._session_locks.acquire()
+                except MinecraftWorldInUse as exc:
+                    self.report["status"] = "locked"
+                    self.report["errors"].append({"scope": "minecraft_session", "message": str(exc)})
+                    self.refresh_report_counts()
+                    self.write_report()
+                    self.release_write_lock()
+                    return self.report
 
             blockers = detect_write_blockers(world_dir)
             self.report["write_blockers"] = blockers
             fingerprint = world_fingerprint(world_dir)
             self.report["world_fingerprint"] = fingerprint
             expected = str(self.runtime_config.get("expected_world_fingerprint") or "")
-            if expected and expected != fingerprint:
+            if expected and expected != fingerprint and not self.checkpoint_loaded:
                 self.report["status"] = "invalidated"
                 self.report["errors"].append({"scope": "plan", "message": "World changed after scan"})
                 self.refresh_report_counts()
                 self.write_report()
+                self.release_write_lock()
                 return self.report
             if blockers:
                 self.report["status"] = "unsupported"
                 self.report["errors"].append({"scope": "layout", "message": ",".join(blockers)})
                 self.refresh_report_counts()
                 self.write_report()
+                self.release_write_lock()
                 return self.report
-            if not self.config["dry_run"] and self.translator is not None:
+            if (
+                not self.config["dry_run"]
+                and self.translator is not None
+                and not self.runtime_config.get("skip_provider_validation", False)
+            ):
                 try:
                     self.translator.client.try_refresh_text_models()
                 except ModelCatalogError as exc:
@@ -749,6 +824,7 @@ class WorldTranslator:
                     self.report["errors"].append({"scope": "models", "message": str(exc)})
                     self.refresh_report_counts()
                     self.write_report()
+                    self.release_write_lock()
                     return self.report
                 if self.translator.client.model_info:
                     info = self.translator.client.model_info
@@ -828,6 +904,7 @@ class WorldTranslator:
                 candidate_text_count=self.report["candidate_text_count"],
                 error_count=len(self.report["errors"]),
             )
+            self.release_write_lock()
             return self.report
         except TranslationCancelled:
             self.report["status"] = "cancelled"
@@ -840,6 +917,7 @@ class WorldTranslator:
                 candidate_file_count=self.report.get("candidate_file_count", 0),
                 candidate_text_count=self.report.get("candidate_text_count", 0),
             )
+            self.release_write_lock()
             return self.report
         except Exception as exc:
             error_entry = {
@@ -852,6 +930,7 @@ class WorldTranslator:
             self.write_report()
             self.save_checkpoint()
             self.emit("fatal_error", message=error_entry["message"])
+            self.release_write_lock()
             raise
 
     def iter_region_files(self) -> list[Path]:
@@ -908,6 +987,9 @@ class WorldTranslator:
             return False
         stripped = text.strip()
         if not stripped:
+            return False
+        candidate_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+        if candidate_id in self.runtime_config.get("excluded_candidate_ids", []):
             return False
 
         if stripped in ("@", "#", "!", "?", ".", ",", "-", "~", "/"):
@@ -1017,9 +1099,18 @@ class WorldTranslator:
     def backup_once(self, path: Path) -> None:
         if not self.config["backup"]:
             return
-        backup_path = path.with_name(path.name + self.config["backup_suffix"])
-        if not backup_path.exists():
-            shutil.copy2(path, backup_path)
+        from mwt.safety import BackupSet
+
+        world_dir = Path(self.config["world_dir"]).resolve()
+        resolved = path.resolve()
+        if not resolved.is_relative_to(world_dir):
+            raise ValueError("Backup source is outside the selected world")
+        if self._run_backup is None:
+            self._run_backup = BackupSet.new(world_dir)
+        self._run_backup.add(resolved)
+        self._run_backup.verify()
+        self._run_backup.publish_latest()
+        self.report["backup_set_id"] = self._run_backup.backup_id
 
     def extract_command_json(self, command: str) -> tuple[str, str] | None:
         if not isinstance(command, str):
@@ -1487,7 +1578,7 @@ class WorldTranslator:
         if changed_chunks > 0 and not self.config["dry_run"]:
             world_dir = Path(self.config["world_dir"]).resolve()
             if self._run_backup is None:
-                self._run_backup = BackupSet(world_dir, "latest")
+                self._run_backup = BackupSet.new(world_dir)
             backup = self._run_backup
             backup.add(path)
             for chunk in region.chunks:
@@ -1497,6 +1588,8 @@ class WorldTranslator:
                 if mcc_path.is_file():
                     backup.add(mcc_path)
             backup.verify()
+            backup.publish_latest()
+            self.report["backup_set_id"] = backup.backup_id
             data, mcc_files = region.build()
             written = [path]
             self._write_world_bytes(path, data)
@@ -1667,6 +1760,8 @@ class WorldTranslator:
                 with tmp_path.open("rb") as tmp_file:
                     os.fsync(tmp_file.fileno())
                 os.replace(tmp_path, zip_path)
+                if self._run_backup is not None:
+                    self._run_backup.mark_written([zip_path])
             except Exception:
                 if tmp_path is not None:
                     tmp_path.unlink(missing_ok=True)

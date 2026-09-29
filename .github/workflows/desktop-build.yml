@@ -3,30 +3,63 @@ name: desktop-build
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   package:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-24.04
+            bundles: appimage,deb
+            artifact: src-tauri/target/release/bundle/appimage/*
+          - name: macOS
+            os: macos-14
+            bundles: app,dmg
+            artifact: |
+              src-tauri/target/release/bundle/macos/*.app
+              src-tauri/target/release/bundle/dmg/*.dmg
+          - name: Windows x64
+            os: windows-2025
+            bundles: nsis
+            artifact: src-tauri/target/release/bundle/nsis/*
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install pinned dependencies
+          cache: pip
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Install Python dependencies
         run: python -m pip install -r requirements.txt pyinstaller==6.16.0
-      - name: Package sidecar without a localhost server
+      - name: Install desktop dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build native sidecar
+        run: pnpm sidecar:build
+        env:
+          POMI_BUILD_PYTHON: python
+      - name: Check core and desktop contracts
         run: |
-          pyinstaller --noconfirm --clean --onefile --name PomiTranslate \
-            --paths . \
-            --hidden-import nbt \
-            --hidden-import lz4.block \
-            --hidden-import keyring \
-            --hidden-import mwt.desktop_entry \
-            --hidden-import mc_world_translator \
-            --hidden-import llm_backends \
-            --hidden-import env_utils \
-            packaging/pomi_desktop.py
+          python test_core.py
+          python tests/test_desktop_entry.py
+      - name: Build unsigned desktop package
+        run: pnpm exec tauri build --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v4
         with:
-          name: pomitranslate-linux-x64
-          path: dist/PomiTranslate
+          name: pomitranslate-${{ runner.os }}-${{ runner.arch }}-unsigned
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error

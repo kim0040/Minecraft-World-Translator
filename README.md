@@ -16,7 +16,7 @@ English | [한국어](docs/README.ko.md) | [日本語](docs/README.ja.md) | [简
 
 PomiTranslate is a free, local translator for Java Edition world text. The mascot is Pomi. The GitHub repository name stays `Minecraft-World-Translator`.
 
-The CLI and the packaged desktop entry use the same translator. A translation writes only after a verified backup. Scan Only does not call a provider and does not change world bytes. Selectors, resource locations, numbers, coordinates, and formatting placeholders stay as they are.
+The CLI and the Tauri desktop app use the same translator through a packaged JSONL sidecar. A translation writes only after a verified backup. Scan Only does not call a provider and does not change world bytes. Selectors, resource locations, numbers, coordinates, and formatting placeholders stay as they are.
 
 ![Pomi](assets/mascot/base/mascot_base_front_v1_512.png)
 
@@ -66,7 +66,7 @@ Public settings survive app updates. They live outside the install folder:
 - Windows: `%APPDATA%\PomiTranslate\settings.json`
 - Linux: `$XDG_DATA_HOME/PomiTranslate` or `~/.local/share/PomiTranslate/settings.json`
 
-A model catalog for the provider is stored beside that file. Deleting those files, or the keychain item, is how you clear them.
+A model catalog for the provider is stored beside that file. The desktop settings screen can delete the selected provider's key from the keychain.
 
 ![Text is sent to the provider you choose](assets/illustrations/docs/doc_api_notice_en_v1.png)
 
@@ -104,15 +104,29 @@ Restore the latest verified backup:
 python mc_world_translator.py --world-dir "/path/to/world" --restore-backup
 ```
 
-One run keeps a single backup manifest. Restoring puts back every file that run changed, including a second region such as `entities/`.
+Every write run creates a versioned backup set. Restoring puts back every file that run changed, including a second region such as `entities/` and an enabled world-local `resources.zip`, and first saves the current files as a recovery set. A write run also refuses to start while Java Edition's `session.lock` is held by Minecraft or a server.
 
 ![Back up before writing](assets/illustrations/docs/doc_backup_first_en_v1.png)
 
-## Desktop entry
+## Desktop app
+
+The desktop app uses Tauri 2 and Svelte 5. It provides recent-world selection, DataVersion information, structure-based compatibility status, Scan Only, candidate search and filters, exclusions, manual translations, provider and rate-limit settings, world-local `resources.zip` translation, progress and cooperative cancel, explicit resume of matching cancelled jobs, versioned backup history, and recovery-safe restore. It does not open a localhost port. Resume is offered only when the current world fingerprint, scan plan, translation settings, and verified backup set still match.
+
+Build the native app from source:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm sidecar:build
+pnpm exec tauri build
+```
+
+The sidecar build requires Python 3.12 and PyInstaller 6.16.0. The end user does not need Python, Node, or Rust after packaging.
+
+## Desktop protocol
 
 `python -m mwt.desktop_entry` speaks JSONL on stdin and stdout. It does not open a localhost port. `--notices` and `--about` print the safety text. `--scan` and `--translate` use the same core as the CLI.
 
-The GitHub Actions package job builds a one-file `PomiTranslate` executable with PyInstaller. Without Apple or Windows signing credentials, the release job stops at an unsigned draft and leaves signature verification enabled.
+GitHub Actions builds a native PyInstaller sidecar and an unsigned Tauri package on Linux, macOS, and Windows. These artifacts are not listed as supported platforms until clean-machine installation and the release smoke suite pass. Without signing credentials, the release workflow does not publish a signed release.
 
 ## Local web UI
 

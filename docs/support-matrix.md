@@ -25,6 +25,8 @@ Detected formats below are not writable.
 - safety.multi_file_restore: supported
 - safety.plan_invalidation: supported
 - safety.malformed_chunk: supported
+- safety.world_write_lock: supported
+- safety.cancel_resume_backup: supported
 
 ## Unsupported
 

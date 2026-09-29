@@ -16,7 +16,7 @@ PomiTranslate has no purchase, subscription, or in-app payment.
 
 PomiTranslate는 Java Edition 월드의 플레이어에게 보이는 글을 번역하는 무료 로컬 도구입니다. 마스코트는 Pomi입니다. GitHub 저장소 이름은 `Minecraft-World-Translator`로 둡니다.
 
-CLI와 패키지된 데스크톱 진입점은 같은 번역기를 씁니다. 번역은 검증된 백업이 생긴 뒤에만 월드를 고칩니다. Scan Only는 공급자에 요청을 보내지 않고 월드 바이트도 바꾸지 않습니다. 선택자, 리소스 위치, 숫자, 좌표, 서식 자리표시자는 그대로 둡니다.
+CLI와 Tauri 데스크톱 앱은 패키지된 JSONL sidecar를 통해 같은 번역기를 씁니다. 번역은 검증된 백업이 생긴 뒤에만 월드를 고칩니다. Scan Only는 공급자에 요청을 보내지 않고 월드 바이트도 바꾸지 않습니다. 선택자, 리소스 위치, 숫자, 좌표, 서식 자리표시자는 그대로 둡니다.
 
 ![Pomi](../assets/mascot/base/mascot_base_front_v1_512.png)
 
@@ -66,7 +66,7 @@ API 키는 운영체제 키체인의 서비스 이름 `PomiTranslate`에 저장�
 - Windows: `%APPDATA%\PomiTranslate\settings.json`
 - Linux: `$XDG_DATA_HOME/PomiTranslate` 또는 `~/.local/share/PomiTranslate/settings.json`
 
-공급자별 모델 목록도 그 옆에 저장됩니다. 그 파일이나 키체인 항목을 지우면 데이터가 삭제됩니다.
+공급자별 모델 목록도 그 옆에 저장됩니다. 데스크톱 설정 화면에서 현재 공급자의 키를 키체인에서 삭제할 수 있습니다.
 
 ![선택한 공급자로 글이 전송됨](../assets/illustrations/docs/doc_api_notice_v1.png)
 
@@ -104,15 +104,29 @@ python mc_world_translator.py \
 python mc_world_translator.py --world-dir "/path/to/world" --restore-backup
 ```
 
-한 번의 실행은 백업 목록을 하나만 유지합니다. 복구는 `entities`를 포함한, 그 실행이 고친 모든 파일을 되돌립니다.
+쓰기 실행마다 버전별 백업 세트를 만듭니다. 복구는 `entities`와 활성화한 월드 내부 `resources.zip`을 포함해 그 실행이 고친 모든 파일을 되돌리며, 현재 파일도 먼저 recovery 백업으로 보존합니다. Minecraft 또는 서버가 Java Edition `session.lock`을 잡고 있으면 쓰기를 시작하지 않습니다.
 
 ![쓰기 전에 백업](../assets/illustrations/docs/doc_backup_first_v1.png)
 
-## 데스크톱 진입점
+## 데스크톱 앱
+
+데스크톱 앱은 Tauri 2와 Svelte 5로 구성됩니다. 최근 월드 선택, DataVersion 정보, 구조 기반 호환성 상태, Scan Only, 후보 검색·필터·제외·직접 번역, 공급자·요청 제한 설정, 월드 내부 `resources.zip` 번역, 진행·취소, 조건이 맞는 취소 작업의 명시적 재개, 버전별 백업 기록, 복원 전 recovery 백업을 제공합니다. localhost 포트를 열지 않습니다. 현재 월드 지문, scan plan, 번역 설정, 검증 백업 세트가 모두 일치할 때만 재개를 제안합니다.
+
+소스에서 네이티브 앱을 빌드합니다.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm sidecar:build
+pnpm exec tauri build
+```
+
+sidecar 빌드에는 Python 3.12와 PyInstaller 6.16.0이 필요합니다. 패키지 설치 후 사용자는 Python, Node, Rust를 설치할 필요가 없습니다.
+
+## 데스크톱 프로토콜
 
 `python -m mwt.desktop_entry`는 표준 입력과 출력으로 JSONL을 주고받습니다. 로컬 포트를 열지 않습니다. `--notices`와 `--about`은 안전 안내를 출력합니다. `--scan`과 `--translate`는 CLI와 같은 코어를 씁니다.
 
-GitHub Actions 패키지 작업은 PyInstaller로 단일 파일 `PomiTranslate`를 만듭니다. Apple 또는 Windows 서명 자격이 없으면 릴리스 작업은 서명되지 않은 초안에서 멈추고, 서명 검증은 켜 둡니다.
+GitHub Actions는 Linux, macOS, Windows에서 PyInstaller sidecar와 서명되지 않은 Tauri 패키지를 만듭니다. clean-machine 설치와 릴리스 smoke를 통과하기 전에는 지원 플랫폼으로 적지 않습니다. 서명 자격이 없으면 서명된 릴리스를 공개하지 않습니다.
 
 ## 로컬 웹 UI
 

@@ -338,6 +338,15 @@ def test_desktop_settings(tmp: Path) -> None:
                     "baseUrl": "http://127.0.0.1:9/v1",
                     "wireFormat": "openai",
                     "targetLanguage": "한국어",
+                    "stylePrompt": "Keep names",
+                    "customSystemPrompt": "Translate safely",
+                    "temperature": 0.2,
+                    "batchSize": 25,
+                    "requestTimeout": 45,
+                    "rpmLimit": 30,
+                    "tpmLimit": 5000,
+                    "maxBatchRetries": 4,
+                    "resourcePackEnabled": True,
                     "apiKey": secret,
                 },
             },
@@ -345,6 +354,16 @@ def test_desktop_settings(tmp: Path) -> None:
             data,
         )
         handle({"v": 1, "id": "get", "type": "settings.get", "payload": {}}, tmp / "reports", data)
+        handle(
+            {
+                "v": 1,
+                "id": "get-rust-owned",
+                "type": "settings.get",
+                "payload": {"credentialOwner": "rust"},
+            },
+            tmp / "reports",
+            data,
+        )
     finally:
         entry.emit = original
     assert secret not in "\n".join(captured)
@@ -352,8 +371,19 @@ def test_desktop_settings(tmp: Path) -> None:
     assert saved["provider"] == "custom"
     assert saved["model"] == "local-model"
     assert saved["wire_format"] == "openai"
+    assert saved["style_prompt"] == "Keep names"
+    assert saved["custom_system_prompt"] == "Translate safely"
+    assert saved["temperature"] == 0.2
+    assert saved["batch_size"] == 25
+    assert saved["request_timeout"] == 45
+    assert saved["rpm_limit"] == 30
+    assert saved["tpm_limit"] == 5000
+    assert saved["max_batch_retries"] == 4
+    assert saved["resource_pack_enabled"] is True
     assert secret not in json.dumps(saved)
     assert load_api_key("custom") == secret
+    rust_owned = json.loads(captured[-1])
+    assert rust_owned["payload"]["apiKeyStored"] is False
     second = handle
     assert second is handle
     print("PASS providers.desktop_settings")

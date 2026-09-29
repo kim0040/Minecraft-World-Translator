@@ -421,7 +421,8 @@ def test_backup_restore_and_invalidation(tmp: Path, base_url: str) -> None:
 
     def guarded(path: Path, content: bytes) -> None:
         if path.name.endswith(".mca"):
-            copies = list((world / ".pomi-backups" / "latest").rglob("*.mca"))
+            pointer = json.loads((world / ".pomi-backups" / "latest.json").read_text(encoding="utf-8"))
+            copies = list((world / ".pomi-backups" / pointer["backupSetId"]).rglob("*.mca"))
             assert copies, "verified backup was missing before the world write"
             assert hashlib.sha256(copies[0].read_bytes()).hexdigest() == original_hash
             assert hashlib.sha256(path.read_bytes()).hexdigest() == original_hash
@@ -434,11 +435,16 @@ def test_backup_restore_and_invalidation(tmp: Path, base_url: str) -> None:
         shipped.write_bytes_atomic = real_write
     assert report["status"] == "completed"
     assert hashlib.sha256(region_path.read_bytes()).hexdigest() != original_hash
-    from mwt.safety import BackupSet
+    from mwt.safety import BackupError, BackupSet
 
-    BackupSet(world, "latest").restore()
+    translated = region_path.read_bytes()
+    recovery_id = BackupSet(world, "latest").restore()
     restore_hash = hashlib.sha256(region_path.read_bytes()).hexdigest()
     assert restore_hash == original_hash
+    assert "recovery" in recovery_id
+    assert BackupSet(world, recovery_id).manifest_path.is_file()
+    BackupSet(world, recovery_id).restore()
+    assert region_path.read_bytes() == translated
     print(f"original_hash {original_hash}")
     print(f"restore_hash {restore_hash}")
     print("restore_hash_matches_original")
@@ -456,11 +462,22 @@ def test_backup_restore_and_invalidation(tmp: Path, base_url: str) -> None:
     assert two_report["status"] == "completed"
     assert region_file.read_bytes() != original_region
     assert entities_file.read_bytes() != original_entities
-    manifest = json.loads((two / ".pomi-backups" / "latest" / "manifest.json").read_text(encoding="utf-8"))
+    latest = BackupSet(two, "latest")
+    manifest = json.loads(latest.manifest_path.read_text(encoding="utf-8"))
     listed = {entry["path"] for entry in manifest["files"]}
     assert "region/r.0.0.mca" in listed
     assert "entities/r.0.0.mca" in listed
-    BackupSet(two, "latest").restore()
+    tampered = json.loads(json.dumps(manifest))
+    tampered["files"][0]["path"] = "../escaped.mca"
+    latest.manifest_path.write_text(json.dumps(tampered), encoding="utf-8")
+    try:
+        latest.restore()
+        raise AssertionError("tampered backup path was accepted")
+    except BackupError:
+        pass
+    assert not (two.parent / "escaped.mca").exists()
+    latest.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    latest.restore()
     assert region_file.read_bytes() == original_region
     assert entities_file.read_bytes() == original_entities
     record("safety.multi_file_restore")
@@ -608,6 +625,110 @@ def test_checkpoint_rejection(tmp: Path) -> None:
     print("checkpoint_rejected")
 
 
+def test_world_write_lock(tmp: Path) -> None:
+    from mwt.locking import MinecraftSessionLocks, MinecraftWorldInUse, WorldWriteLock, WorldWriteLocked
+
+    world = tmp / "locked-world"
+    world.mkdir()
+    first = WorldWriteLock(world)
+    second = WorldWriteLock(world)
+    first.acquire()
+    try:
+        try:
+            second.acquire()
+            raise AssertionError("a second writer acquired the same world")
+        except WorldWriteLocked:
+            pass
+    finally:
+        first.release()
+    second.acquire()
+    second.release()
+    assert not (world / ".pomi-translate" / "write.lock").exists()
+    (world / "level.dat").write_bytes(b"\x1f\x8b")
+    (world / "session.lock").write_bytes(b"12345678")
+    minecraft = MinecraftSessionLocks(world)
+    competing = MinecraftSessionLocks(world)
+    minecraft.acquire()
+    try:
+        try:
+            competing.acquire()
+            raise AssertionError("a writer entered a world with a held Minecraft session lock")
+        except MinecraftWorldInUse:
+            pass
+        locked_config = merge_nested(
+            DEFAULT_CONFIG,
+            {
+                "world_dir": str(world),
+                "report_path": str(tmp / "locked-report.json"),
+                "inherit_translate_py": False,
+                "api": {"provider": "openai", "api_key": "unused", "model": "unused"},
+            },
+        )
+        locked_report = WorldTranslator(locked_config).run()
+        assert locked_report["status"] == "locked"
+        assert locked_report["errors"][0]["scope"] == "minecraft_session"
+    finally:
+        minecraft.release()
+    competing.acquire()
+    competing.release()
+    record("safety.world_write_lock")
+
+
+def test_cancelled_job_resumes_same_backup_set(tmp: Path) -> None:
+    from mwt.safety import BackupSet, list_backup_sets, world_fingerprint
+
+    world = tmp / "resume-world"
+    first_path = world / "region" / "r.0.0.mca"
+    second_path = world / "entities" / "r.0.0.mca"
+    write_region(first_path, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Hello sign"}'))), False)})
+    write_region(second_path, {0: (2, nbt_bytes(compound("sign", string("Text1", '{"text":"Front line"}'))), False)})
+    (world / "level.dat").write_bytes(b"\x1f\x8b")
+    original = {path.relative_to(world).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (first_path, second_path)}
+    fingerprint = world_fingerprint(world)
+    checkpoint = tmp / "resume.checkpoint.json"
+    cancelled = {"value": False}
+
+    def progress(event: dict) -> None:
+        if event.get("event") == "file_done":
+            cancelled["value"] = True
+
+    base = merge_nested(
+        DEFAULT_CONFIG,
+        {
+            "world_dir": str(world),
+            "report_path": str(tmp / "resume-report.json"),
+            "inherit_translate_py": False,
+            "api": {"provider": "openai", "api_key": "unused", "model": "manual-only"},
+            "scan": {"overrides": {"Hello sign": "Hola sign", "Front line": "Linea frontal"}},
+            "runtime": {
+                "checkpoint_enabled": True,
+                "checkpoint_path": str(checkpoint),
+                "expected_world_fingerprint": fingerprint,
+                "scan_plan_id": "a" * 64,
+                "skip_provider_validation": True,
+            },
+        },
+    )
+    first = WorldTranslator(base, progress_callback=progress, cancel_check=lambda: cancelled["value"]).run()
+    assert first["status"] == "cancelled"
+    assert first["changed_file_count"] == 1
+    assert checkpoint.is_file()
+    backup_id = first["backup_set_id"]
+    assert next(item for item in list_backup_sets(world) if item["backupSetId"] == backup_id)["fileCount"] == 1
+
+    resumed_config = merge_nested(base, {"runtime": {"resume_from_checkpoint": True}})
+    resumed = WorldTranslator(resumed_config, cancel_check=lambda: False).run()
+    assert resumed["status"] == "completed"
+    assert resumed["backup_set_id"] == backup_id
+    assert resumed["changed_file_count"] == 2
+    assert not checkpoint.exists()
+    assert next(item for item in list_backup_sets(world) if item["backupSetId"] == backup_id)["fileCount"] == 2
+    BackupSet(world, backup_id).restore()
+    restored = {path.relative_to(world).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (first_path, second_path)}
+    assert restored == original
+    record("safety.cancel_resume_backup")
+
+
 def main() -> None:
     import tempfile
 
@@ -625,6 +746,8 @@ def main() -> None:
             test_layouts(tmp, base_url)
             test_resource_pack(tmp, base_url)
             test_checkpoint_rejection(tmp)
+            test_world_write_lock(tmp)
+            test_cancelled_job_resumes_same_backup_set(tmp)
             matrix = render_support_matrix(RESULTS)
             destination = ROOT / "docs" / "support-matrix.md"
             destination.parent.mkdir(parents=True, exist_ok=True)

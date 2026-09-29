@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 SCHEMA = 1
@@ -62,6 +63,53 @@ def remember_user_settings(updates: dict, root: Path | None = None) -> dict:
     return current
 
 
+def list_recent_worlds(root: Path | None = None) -> list[dict]:
+    raw = load_user_settings(root).get("recent_worlds", [])
+    if not isinstance(raw, list):
+        return []
+    result: list[dict] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            continue
+        path = str(Path(item["path"]).expanduser().resolve())
+        if path in seen:
+            continue
+        seen.add(path)
+        result.append(
+            {
+                "path": path,
+                "name": Path(path).name or path,
+                "lastOpened": float(item.get("lastOpened") or 0),
+                "available": Path(path).is_dir(),
+            }
+        )
+    return sorted(result, key=lambda item: item["lastOpened"], reverse=True)[:12]
+
+
+def remember_recent_world(world: Path, root: Path | None = None) -> list[dict]:
+    path = str(world.expanduser().resolve())
+    existing = [item for item in list_recent_worlds(root) if item["path"] != path]
+    updated = [{"path": path, "lastOpened": time.time()}]
+    updated.extend({"path": item["path"], "lastOpened": item["lastOpened"]} for item in existing[:11])
+    remember_user_settings({"recent_worlds": updated, "last_world_dir": path}, root)
+    return list_recent_worlds(root)
+
+
+def forget_recent_world(world: Path, root: Path | None = None) -> list[dict]:
+    path = str(world.expanduser().resolve())
+    remaining = [
+        {"path": item["path"], "lastOpened": item["lastOpened"]}
+        for item in list_recent_worlds(root)
+        if item["path"] != path
+    ]
+    updates: dict = {"recent_worlds": remaining}
+    if load_user_settings(root).get("last_world_dir") == path:
+        updates["last_world_dir"] = ""
+    remember_user_settings(updates, root)
+    return list_recent_worlds(root)
+
+
 def _catalog_path(provider: str, root: Path | None = None) -> Path:
     safe = "".join(character if character.isalnum() or character in {"-", "_"} else "_" for character in provider)
     return user_data_dir(root) / "models" / f"{safe}.json"
@@ -104,5 +152,10 @@ def public_settings_from_config(config: dict) -> dict:
         "custom_system_prompt": prompt.get("custom_system_prompt", ""),
         "temperature": config.get("temperature", ""),
         "batch_size": config.get("batch_size", ""),
+        "request_timeout": api.get("request_timeout", ""),
+        "rpm_limit": api.get("rpm_limit", ""),
+        "tpm_limit": api.get("tpm_limit", ""),
+        "max_batch_retries": (config.get("runtime") or {}).get("max_batch_retries", ""),
+        "resource_pack_enabled": (config.get("resource_pack") or {}).get("enabled", False),
         "last_world_dir": config.get("world_dir", ""),
     }
