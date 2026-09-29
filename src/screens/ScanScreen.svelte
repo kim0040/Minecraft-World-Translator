@@ -1,0 +1,186 @@
+<script lang="ts">
+  import { app } from '../lib/app.svelte';
+  import { t, type MessageKey } from '../lib/i18n/index.svelte';
+  import { formatNumber, formatDuration, baseName } from '../lib/format';
+  import Icon from '../components/Icon.svelte';
+  import Callout from '../components/Callout.svelte';
+  import ProgressBar from '../components/ProgressBar.svelte';
+
+  let now = $state(Date.now());
+  $effect(() => {
+    if (app.busy !== 'scan') return;
+    const timer = setInterval(() => { now = Date.now(); }, 500);
+    return () => clearInterval(timer);
+  });
+
+  const scanning = $derived(app.busy === 'scan');
+  const scan = $derived(app.scan);
+  const done = $derived(!!scan && scan.status === 'completed');
+  const blockers = $derived(scan?.writeBlockers ?? []);
+  const kinds = $derived(
+    Object.entries(scan?.kinds ?? {}).sort((a, b) => b[1] - a[1])
+  );
+  const fileLabel = (file: string) => baseName(file);
+  const warnText = (w: { code: string; file?: string; count?: number }) => {
+    const key = `scan.warn.${w.code}` as MessageKey;
+    return t(key, { file: w.file ?? '', count: w.count ?? 0 });
+  };
+  const knownWarnings = ['chunk_unreadable', 'file_unwritable', 'file_unreadable'];
+  const coverage = $derived(scan?.coverage ?? []);
+  const scanned = $derived(coverage.filter((item) => item.scanned));
+  const notScanned = $derived(coverage.filter((item) => !item.scanned));
+  const blockerLine = (code: string) => {
+    const [kind, file] = code.split(': ');
+    return file ? t('scan.blockedFile', { file: fileLabel(file) }) : (knownBlockers.includes(kind) ? t(`world.blocked.${kind}` as MessageKey) : t('world.blocked.unknown'));
+  };
+  const knownBlockers = ['bedrock', 'mcr', 'linear', 'world_in_use', 'not_writable', 'not_readable', 'missing'];
+  const stale = $derived(!scan && !!app.resume === false && false);
+</script>
+
+<div class="page">
+  <header class="page-head">
+    <h1>{t('scan.title')}</h1>
+    <p class="lead">{t('scan.lead')}</p>
+  </header>
+
+  {#if scanning}
+    <section class="card working" aria-live="polite">
+      <div class="row">
+        <Icon name="search" size={22} />
+        <h2>{t('scan.running')}</h2>
+        <span class="spacer"></span>
+        <span class="muted num">{formatDuration((now - app.progress.startedAt) / 1000, app.locale)}</span>
+      </div>
+      <ProgressBar
+        label={t('scan.running')}
+        value={app.progress.fileTotal ? app.progress.fileIndex : null}
+        max={app.progress.fileTotal || 100}
+      />
+      <p class="muted num">{app.progress.fileTotal ? t('scan.reading', { index: app.progress.fileIndex, total: app.progress.fileTotal }) : t('common.loading')}</p>
+      <div><button type="button" class="btn btn-secondary" disabled={app.cancelling} onclick={() => app.cancel()}>{t('common.cancel')}</button></div>
+    </section>
+  {:else if !scan}
+    <section class="card start">
+      <div class="ico" aria-hidden="true"><Icon name="search" size={28} /></div>
+      <div class="copy">
+        <h2>{app.worldDir ? baseName(app.worldDir) : t('world.title')}</h2>
+        <ul class="promises">
+          <li><Icon name="shield" size={18} /> {t('world.lead')}</li>
+        </ul>
+      </div>
+      <button type="button" class="btn btn-primary btn-lg" disabled={!app.worldDir || !app.inspection?.validJavaWorld} onclick={() => app.startScan()}>
+        {t('scan.run')}
+      </button>
+    </section>
+  {:else}
+    {#if scan.status !== 'completed' || blockers.length}
+      <Callout tone="danger" title={t('scan.blocked')} role="alert">
+        <ul class="plain">{#each blockers as code (code)}<li>{blockerLine(code)}</li>{/each}</ul>
+        {#each scan.errors ?? [] as issue}<p>{issue.message}</p>{/each}
+      </Callout>
+    {/if}
+
+    {#if done && !blockers.length}
+      {#if scan.candidateCount === 0}
+        <Callout tone="warning" title={t('scan.none')}>{t('scan.noneHelp')}</Callout>
+      {:else}
+        <section class="summary" aria-label={t('scan.found', { count: formatNumber(scan.candidateCount, app.locale) })}>
+          <div class="stat card"><span class="v num">{formatNumber(scan.candidateCount, app.locale)}</span><span class="l">{t('scan.summary.texts')}</span></div>
+          <div class="stat card"><span class="v num">{formatNumber(scan.occurrenceCount ?? scan.candidateCount, app.locale)}</span><span class="l">{t('scan.summary.places')}</span></div>
+          <div class="stat card"><span class="v num">{formatNumber(scan.estimate?.requests ?? scan.requestEstimate ?? 0, app.locale)}</span><span class="l">{t('scan.summary.requests')}</span></div>
+        </section>
+        <p class="muted note">{t('scan.summary.repeats')}</p>
+
+        {#if kinds.length}
+          <section class="card kinds" aria-labelledby="kinds-title">
+            <h2 id="kinds-title" class="section-title">{t('scan.summary.kinds')}</h2>
+            <ul>
+              {#each kinds as [kind, count] (kind)}
+                <li><span class="kn">{t(`kind.${kind}` as MessageKey)}</span><span class="kc num">{formatNumber(count, app.locale)}</span></li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
+      {/if}
+    {/if}
+
+    {#if scan.warnings?.length}
+      <Callout tone="warning" title={t('scan.warnings')}>
+        <ul class="plain">
+          {#each scan.warnings as warning}
+            <li>{knownWarnings.includes(warning.code) ? warnText(warning) : (warning.message ?? t('scan.warn.unknown'))}</li>
+          {/each}
+        </ul>
+      </Callout>
+    {/if}
+
+    {#if coverage.length}
+      <section class="card coverage" aria-labelledby="coverage-title">
+        <h2 id="coverage-title" class="section-title">{t('coverage.title')}</h2>
+        <p class="muted">{t('coverage.lead')}</p>
+        <div class="cols">
+          <div>
+            <h3><span class="pill pill-success"><Icon name="check" size={12} /> {t('coverage.scanned')}</span></h3>
+            <ul>
+              {#each scanned as item (item.id)}<li>{t(`coverage.${item.id}` as MessageKey)}</li>{/each}
+            </ul>
+          </div>
+          <div>
+            <h3><span class="pill pill-warning"><Icon name="minus" size={12} /> {t('coverage.notScanned')}</span></h3>
+            <ul>
+              {#each notScanned as item (item.id)}
+                <li>
+                  {t(`coverage.${item.id}` as MessageKey)}
+                  {#if item.present}<span class="tag num">{t('coverage.count', { count: item.count ?? 0 })}</span>
+                  {:else}<span class="tag absent">{t('coverage.absent')}</span>{/if}
+                  {#if item.id === 'resource_pack' && item.present}<span class="tag">{t('coverage.enablePack')}</span>{/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        </div>
+      </section>
+    {/if}
+
+    <div class="cta">
+      {#if done && !blockers.length && scan.candidateCount > 0}
+        <button type="button" class="btn btn-primary btn-lg" onclick={() => app.goStep('review')}>
+          {t('scan.review')} <Icon name="chevron-right" size={20} />
+        </button>
+      {/if}
+      <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.startScan()}>
+        <Icon name="refresh" size={18} /> {t('scan.again')}
+      </button>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .working { padding: var(--space-5); display: grid; gap: var(--space-4); }
+  .working h2 { font-size: var(--text-lg); }
+  .start { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-5); padding: var(--space-5); }
+  .ico { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--accent-soft); color: var(--accent-soft-text); }
+  .copy h2 { font-size: var(--text-xl); overflow-wrap: anywhere; }
+  .promises { list-style: none; margin: var(--space-2) 0 0; padding: 0; color: var(--text-secondary); font-size: var(--text-sm); }
+  .promises li { display: flex; gap: var(--space-2); align-items: flex-start; }
+  .promises :global(.icon) { margin-top: 2px; color: var(--success-solid); }
+  .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+  .stat { padding: var(--space-4) var(--space-5); display: grid; gap: var(--space-1); }
+  .stat .v { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+  .stat .l { font-size: var(--text-sm); color: var(--text-secondary); }
+  .note { font-size: var(--text-sm); margin-top: calc(var(--space-2) * -1); }
+  .section-title { font-size: var(--text-lg); margin-bottom: var(--space-3); }
+  .kinds { padding: var(--space-5); }
+  .kinds ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-2) var(--space-5); }
+  .kinds li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+  .kc { font-weight: 600; }
+  .coverage { padding: var(--space-5); display: grid; gap: var(--space-3); }
+  .coverage .section-title { margin: 0; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-top: var(--space-2); }
+  .cols h3 { margin-bottom: var(--space-3); }
+  .cols ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+  .tag { display: inline-block; margin-inline-start: var(--space-2); padding: 1px 8px; border-radius: var(--radius-full); background: var(--bg-sunken); color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; }
+  .plain { margin: 0; padding-inline-start: 18px; }
+  .cta { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  @media (max-width: 800px) { .summary { grid-template-columns: 1fr; } .cols { grid-template-columns: 1fr; } .start { grid-template-columns: 1fr; } }
+</style>

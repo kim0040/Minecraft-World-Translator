@@ -41,55 +41,64 @@ from mwt.extract import TextExtractionMixin, TextRef
 
 STYLE_PRESETS: dict[str, str] = {
     "neutral": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 자연스러운 {target_language}로 번역해라.
-[스타일 규칙]
-1. 게임 진행 정보와 퍼즐 힌트는 이해하기 쉽게 번역한다.
-2. 고유명사, 인명, 제작자 이름, SNS 핸들, 브랜드명은 함부로 번역하지 말고 필요한 경우만 음역한다.
-3. 특수 기호(§, \\n, {0}, %s, %% 등), JSON 구조, 키 이름은 절대 망가뜨리지 마라.
-4. 결과물에는 설명 없이 번역 결과만 반환해라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 게임 맥락에 자연스러운 {target_language}로 번역하세요.
+
+[번역 지침]
+1. 인게임 상황(표지판, 책, 대화, 퀘스트 안내문)에 적합하고 명료한 어휘를 사용합니다.
+2. 퍼즐 힌트와 시스템 규칙 등 게임 진행에 직결된 핵심 정보는 플레이어가 명확하게 이해할 수 있도록 번역합니다.
+3. 고유명사, 인명, 제작자 닉네임, SNS 계정, 브랜드명은 임의로 번역하지 않고 원문을 유지하거나 널리 쓰이는 음역을 사용합니다.
+4. 서식 코드(§0~§f, §k~§r 등), 줄바꿈(\\n), 포맷 스트링({0}, %s 등), JSON 구조는 절대 훼손하거나 누락하지 말고 원형 그대로 보존합니다.
+5. 해설, 인사말, 부가 설명 없이 오직 번역된 결과 텍스트만 반환합니다.
 """.strip(),
     "casual": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 친근하고 캐주얼한 {target_language}로 번역해라.
-[스타일 규칙]
-1. 대사는 자연스럽고 읽기 쉽게 옮긴다.
-2. 퍼즐 힌트나 시스템 안내는 의미 전달이 최우선이다.
-3. 고유명사, 인명, 제작자 이름, SNS 핸들, 브랜드명은 함부로 번역하지 말고 필요한 경우만 음역한다.
-4. 특수 기호(§, \\n, {0}, %s, %% 등), JSON 구조, 키 이름은 절대 망가뜨리지 마라.
-5. 결과물에는 설명 없이 번역 결과만 반환해라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 친근하고 생동감 있는 대화체의 {target_language}로 번역하세요.
+
+[번역 지침]
+1. NPC 대사와 스토리 텍스트는 실제 인물이 말하는 것처럼 자연스럽고 매끄러운 구어체로 표현합니다.
+2. 퍼즐 힌트나 게임 시스템 안내문은 친절하면서도 핵심 의미가 왜곡 없이 전달되도록 합니다.
+3. 고유명사, 인명, 제작자 닉네임, 브랜드명은 함부로 번역하지 않고 원문을 보존합니다.
+4. 서식 코드(§ 및 서식 문자), 줄바꿈(\\n), 자리표시자({0}, %s 등), JSON 구조는 절대 변경하지 마세요.
+5. 해설이나 인사말 없이 오직 번역 결과만 반환합니다.
 """.strip(),
     "formal": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 차분하고 명료한 {target_language}로 번역해라.
-[스타일 규칙]
-1. 문체는 정돈되고 일관되게 유지한다.
-2. 퍼즐 힌트나 시스템 안내는 의미 전달이 최우선이다.
-3. 고유명사, 인명, 제작자 이름, SNS 핸들, 브랜드명은 함부로 번역하지 말고 필요한 경우만 음역한다.
-4. 특수 기호(§, \\n, {0}, %s, %% 등), JSON 구조, 키 이름은 절대 망가뜨리지 마라.
-5. 결과물에는 설명 없이 번역 결과만 반환해라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 격식 있고 단정한 문체의 {target_language}로 번역하세요.
+
+[번역 지침]
+1. 기록물, 일지, 비석, 공식 안내문 등에 어울리는 차분하고 절제된 문체를 유지합니다.
+2. 문장의 일관성을 지키며, 모호한 표현을 피하고 의미를 명확하고 간결하게 전달합니다.
+3. 고유명사, 인명, 제작자 닉네임 등은 원문을 보존합니다.
+4. 서식 코드(§ 및 서식 문자), 줄바꿈(\\n), 자리표시자({0}, %s 등), JSON 구조는 엄격히 보존합니다.
+5. 해설이나 부가 설명 없이 오직 번역 결과만 반환합니다.
 """.strip(),
     "polite": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 친절하고 정중한 존댓말을 사용하는 {target_language}로 번역해라.
-[스타일 규칙]
-1. '~해요', '~습니다' 등의 존댓말을 사용하여 예의 바른 느낌을 준다.
-2. 플레이어에게 다정하게 안내하는 느낌을 살린다.
-3. 고유명사와 특수 기호는 의미를 훼손하지 않아야 한다.
-4. 결과물에는 설명 없이 번역 결과만 반환해라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 플레이어에게 정중하게 안내하는 다정한 존댓말의 {target_language}로 번역하세요.
+
+[번역 지침]
+1. '~해요', '~합니다' 등 예의 바르고 부드러운 어미를 사용하여 플레이어를 친절하게 안내합니다.
+2. 퀘스트 설명이나 튜토리얼 텍스트의 가독성과 가이드 효과를 극대화합니다.
+3. 고유명사와 인명, 특수 서식 기호는 의미와 형태를 훼손하지 않습니다.
+4. 서식 코드(§), 줄바꿈(\\n), 자리표시자({0}, %s 등), JSON 구조는 절대 누락하지 마세요.
+5. 해설이나 인사말 없이 번역 결과 텍스트만 반환합니다.
 """.strip(),
     "story": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 몰입감 넘치는 소설이나 이야기풍의 {target_language}로 번역해라.
-[스타일 규칙]
-1. 단순 직역을 피하고 상황과 인물의 감정이 느껴지도록 윤문한다.
-2. 판타지나 어드벤처 소설에 나올 법한 수려하고 극적인 문체를 사용한다.
-3. 하지만 시스템 안내 등 핵심 정보가 묻히지 않도록 주의한다.
-4. 결과물에는 설명 없이 번역 결과만 반환해라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 한 편의 판타지/어드벤처 소설을 읽는 듯한 몰입감 넘치는 문체의 {target_language}로 번역하세요.
+
+[번역 지침]
+1. 단순 직역을 철저히 지양하고, 세계관의 분위기와 상황 속 긴장감, 인물의 감정이 생생히 전달되도록 윤문합니다.
+2. 서사적이고 풍부한 어휘를 활용하되, 퍼즐 힌트나 시스템 규칙 같은 필수 정보가 묻히지 않도록 균형을 잡습니다.
+3. 고유명사나 세계관 고유 명칭은 원작의 분위기를 살려 신중하게 처리합니다.
+4. 서식 코드(§ 및 서식 문자), 줄바꿈(\\n), 자리표시자({0}, %s 등), JSON 구조는 원형 그대로 완벽히 유지합니다.
+5. 해설이나 주석 없이 번역 결과만 반환합니다.
 """.strip(),
     "custom": """
-너는 마인크래프트 월드/맵 전문 번역가다.
-사용자가 주는 텍스트를 {target_language}로 번역해라. 사용자의 추가 지시에 전적으로 따라라.
+당신은 마인크래프트(Minecraft) 월드 및 맵 현지화 전문 번역가입니다.
+입력된 텍스트를 {target_language}로 번역하되, 사용자의 추가 지침을 충실히 반영하세요.
+서식 코드(§), 줄바꿈(\\n), 자리표시자({0}, %s 등)는 절대 훼손하지 마세요.
 """.strip(),
 }
 
@@ -595,6 +604,21 @@ class BatchTranslator:
             if provider_outage:
                 self.consecutive_failures += 1
             streak = self.consecutive_failures
+            abort: ProviderUnavailable | None = None
+            if getattr(exc, "fatal", False):
+                abort = ProviderUnavailable(str(exc), code=code, fatal=True)
+            elif streak >= MAX_CONSECUTIVE_REQUEST_FAILURES:
+                abort = ProviderUnavailable(
+                    f"{streak} requests in a row failed. Last error: {exc}",
+                    code=code,
+                )
+            # Publish the breaker while the failure counter is still locked. Otherwise a worker
+            # can take another queued batch before the coordinator observes this exception.
+            if abort is not None:
+                if self._abort is None:
+                    self._abort = abort
+                elif isinstance(self._abort, ProviderUnavailable):
+                    abort = self._abort
         self.emit(
             "translation_batch_error",
             batch_size=batch_size,
@@ -604,13 +628,8 @@ class BatchTranslator:
             status=status,
             message=str(exc),
         )
-        if getattr(exc, "fatal", False):
-            raise ProviderUnavailable(str(exc), code=code, fatal=True) from exc
-        if streak >= MAX_CONSECUTIVE_REQUEST_FAILURES:
-            raise ProviderUnavailable(
-                f"{streak} requests in a row failed. Last error: {exc}",
-                code=code,
-            ) from exc
+        if abort is not None:
+            raise abort from exc
         retry_after = getattr(exc, "retry_after", None)
         if retry_after:
             return float(retry_after)
@@ -626,6 +645,8 @@ class BatchTranslator:
             self.ensure_not_cancelled()
             try:
                 self.throttle(len(texts))
+                # The breaker may have tripped while this worker waited for the shared throttle.
+                self.ensure_not_cancelled()
                 self.emit("translation_batch_start", batch_size=len(texts), attempt=attempt, max_attempts=max_retries)
                 parsed = self.client.translate_mapping(
                     payload,

@@ -386,6 +386,25 @@ def test_desktop_settings(tmp: Path) -> None:
     assert load_api_key("custom") == secret
     rust_owned = json.loads(captured[-1])
     assert rust_owned["payload"]["apiKeyStored"] is False
+
+    # Switching away from Custom without an explicit URL must discard its hidden endpoint.
+    entry.emit = lambda message: None  # type: ignore[assignment]
+    try:
+        handle(
+            {
+                "v": 1,
+                "id": "switch-provider",
+                "type": "settings.set",
+                "payload": {"provider": "openrouter", "model": "fixture"},
+            },
+            tmp / "reports",
+            data,
+        )
+    finally:
+        entry.emit = original
+    switched = json.loads((data / "settings.json").read_text(encoding="utf-8"))
+    assert switched["provider"] == "openrouter"
+    assert switched["base_url"] == "https://openrouter.ai/api/v1"
     second = handle
     assert second is handle
     print("PASS providers.desktop_settings")

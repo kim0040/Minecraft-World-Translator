@@ -612,6 +612,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         return
     if kind == "settings.set":
         from mc_world_translator import DEFAULT_CONFIG, remember_run_settings
+        from llm_backends import default_base_url
         from mwt.userdata import remember_user_settings
 
         saved = _saved(data_dir)
@@ -650,6 +651,11 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             )
         )
         concurrency = int(bounded_number("concurrency", "concurrency", 4, 1, 8))
+        base_url = str(body.get("baseUrl") or body.get("base_url") or "")
+        if not base_url:
+            # The desktop UI deliberately omits a URL for public providers. This also migrates
+            # settings written by older builds that could retain a hidden Custom endpoint.
+            base_url = default_base_url(provider) if provider in {"openai", "gemini", "anthropic", "openrouter"} else str(saved.get("base_url") or "")
         config = {
             "world_dir": str(body.get("worldDir") or saved.get("last_world_dir") or ""),
             "temperature": temperature,
@@ -657,7 +663,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             "api": {
                 "provider": provider,
                 "model": str(body.get("model") or saved.get("model") or ""),
-                "base_url": str(body.get("baseUrl") or body.get("base_url") or saved.get("base_url") or ""),
+                "base_url": base_url,
                 "wire_format": str(body.get("wireFormat") or body.get("wire_format") or saved.get("wire_format") or ""),
                 "request_timeout": request_timeout,
                 "rpm_limit": rpm_limit,

@@ -12,7 +12,6 @@ import {
   type Estimate,
   type ModelInfo,
   type Notices,
-  type ProgressEvent,
   type RecentWorld,
   type ResumeStatus,
   type ScanResult,
@@ -20,8 +19,10 @@ import {
   type TranslationResult,
   type WorldInspection
 } from './api';
+import { CandidateSource } from './candidates.svelte';
 import { hasMessage, setLocale, t, type Locale, type MessageKey } from './i18n/index.svelte';
 import { applyTheme, type ThemeChoice } from './theme';
+import { emptyProgress, reduceProgress, type JobProgress } from './workflow';
 
 export type Page = 'workspace' | 'backups' | 'settings' | 'about';
 export type Step = 'world' | 'scan' | 'review' | 'run' | 'result';
@@ -29,26 +30,6 @@ export type Busy = '' | 'loading' | 'scan' | 'translate' | 'restore' | 'models';
 export type Tone = 'info' | 'success' | 'error';
 
 export const STEPS: Step[] = ['world', 'scan', 'review', 'run', 'result'];
-
-export type JobProgress = {
-  phase: 'idle' | 'collect' | 'translate' | 'write';
-  fileIndex: number;
-  fileTotal: number;
-  done: number;
-  total: number;
-  failed: number;
-  batch: number;
-  batches: number;
-  requests: number;
-  requestsEstimate: number;
-  retry: { attempt: number; max: number } | null;
-  startedAt: number;
-};
-
-const emptyProgress = (): JobProgress => ({
-  phase: 'idle', fileIndex: 0, fileTotal: 0, done: 0, total: 0, failed: 0, batch: 0, batches: 0,
-  requests: 0, requestsEstimate: 0, retry: null, startedAt: 0
-});
 
 const defaultSettings = (): Settings => ({
   provider: 'openai', model: '', base_url: '', wire_format: 'openai', target_language: '한국어', style_preset: 'neutral',
@@ -90,6 +71,10 @@ export class AppState {
   backups = $state<BackupSummary[]>([]);
 
   scan = $state<ScanResult | null>(null);
+  candidates = new CandidateSource(() => ({
+    excluded: [...this.excluded],
+    manual: Object.entries(this.overrides).filter(([, value]) => value.trim()).map(([id]) => id)
+  }));
   excluded = new SvelteSet<string>();
   overrides = $state<Record<string, string>>({});
   estimate = $state<Estimate | null>(null);
@@ -254,6 +239,7 @@ export class AppState {
 
   private resetJob(): void {
     this.scan = null;
+    this.candidates.reset('');
     this.excluded.clear();
     this.overrides = {};
     this.estimate = null;
@@ -337,6 +323,7 @@ export class AppState {
     for (const id of resumable.excludedCandidateIds || []) this.excluded.add(id);
     this.overrides = { ...(resumable.candidateOverrides || {}) };
     this.resume = resumable;
+    this.candidates.reset(resumable.scanPlanId, resumable.candidates, resumable.candidateCount);
     void this.loadEstimate();
   }
 
@@ -352,6 +339,7 @@ export class AppState {
       await this.persistSettings();
       this.scan = await callBackend<ScanResult>('scan.start', { worldDir: this.worldDir });
       this.estimate = this.scan.estimate ?? null;
+      this.candidates.reset(this.scan.scanPlanId, this.scan.candidates, this.scan.candidateCount);
     } catch (cause) {
       this.fail(cause);
     } finally {
@@ -387,52 +375,8 @@ export class AppState {
 
   // --- translate ---------------------------------------------------------------------------
 
-  private handleProgress(event: ProgressEvent): void {
-    const p = { ...this.progress };
-    switch (event.event) {
-      case 'scan_start':
-        p.phase = 'collect';
-        p.fileTotal = event.total_files ?? p.fileTotal;
-        break;
-      case 'file_start':
-      case 'file_done':
-        if (event.phase === 'write') p.phase = 'write';
-        else if (p.phase === 'idle') p.phase = 'collect';
-        p.fileIndex = event.index ?? p.fileIndex;
-        p.fileTotal = event.total ?? p.fileTotal;
-        break;
-      case 'phase_start':
-        if (event.phase === 'translate') {
-          p.phase = 'translate';
-          p.total = event.total ?? 0;
-          p.done = 0;
-          p.requestsEstimate = event.requests_estimate ?? 0;
-        } else if (event.phase === 'write') {
-          p.phase = 'write';
-          p.fileIndex = 0;
-          p.fileTotal = event.total ?? 0;
-        }
-        break;
-      case 'translation_progress':
-        p.phase = 'translate';
-        p.done = event.completed ?? p.done;
-        p.total = event.total ?? p.total;
-        p.failed = event.failed ?? p.failed;
-        p.batch = event.batch ?? p.batch;
-        p.batches = event.batches ?? p.batches;
-        p.requests = event.requests ?? p.requests;
-        p.retry = null;
-        break;
-      case 'translation_batch_error':
-        p.retry = { attempt: event.attempt ?? 1, max: event.max_attempts ?? 1 };
-        break;
-      case 'translation_batch_done':
-        p.retry = null;
-        break;
-      default:
-        return;
-    }
-    this.progress = p;
+  private handleProgress(event: import('./api').ProgressEvent): void {
+    this.progress = reduceProgress(this.progress, event);
   }
 
   async startTranslate(options: { resume?: boolean } = {}): Promise<void> {
@@ -516,7 +460,8 @@ export class AppState {
       worldDir: this.worldDir,
       provider: s.provider,
       model: s.model,
-      baseUrl: s.base_url,
+      // Public providers use their canonical endpoint. Only Custom exposes and persists a URL.
+      ...(s.provider === 'custom' ? { baseUrl: s.base_url } : {}),
       wireFormat: s.wire_format,
       targetLanguage: s.target_language,
       stylePreset: s.style_preset,

@@ -1,6 +1,7 @@
 /* Shared building blocks. Screen-specific layout lives in each screen's own <style>. */
 
 .card {
+  min-width: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -85,8 +86,9 @@
 .callout-danger .callout-icon, .callout-danger .callout-title { color: var(--danger-text); }
 
 /* Page structure */
-.page { display: grid; gap: var(--space-5); align-content: start; }
-.page-head { display: grid; gap: var(--space-2); }
+.page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-content: start; min-width: 0; }
+.page > * { min-width: 0; }
+.page-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
 .page-head h1 { font-size: var(--text-2xl); }
 .page-head .lead { color: var(--text-secondary); max-width: 62ch; }
 .eyebrow { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
@@ -96,6 +98,10 @@
 .muted { color: var(--text-secondary); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mono { font-family: var(--font-mono); }
+
+@media (max-width: 640px) {
+  .input, .select, .textarea { font-size: 16px; }
+}
 
 @keyframes pomi-spin { to { rotate: 360deg; } }
 .spin { animation: pomi-spin 0.9s linear infinite; }

@@ -1,0 +1,208 @@
+<script lang="ts">
+  import { tick } from 'svelte';
+  import { app } from '../lib/app.svelte';
+  import type { Candidate } from '../lib/api';
+  import { t, type MessageKey } from '../lib/i18n/index.svelte';
+  import { describeDetail, describeLocation, formatNumber } from '../lib/format';
+  import { visibleWindow } from '../lib/virtual';
+  import Icon from './Icon.svelte';
+
+  let { selectedId, onSelect }: { selectedId: string; onSelect: (candidate: Candidate) => void } = $props();
+
+  const ROW = 60;
+  const source = app.candidates;
+  let viewport: HTMLDivElement | undefined = $state();
+  let scrollTop = $state(0);
+  let height = $state(420);
+  let active = $state(0);
+
+  const win = $derived(visibleWindow({ scrollTop, viewportHeight: height, rowHeight: ROW, total: source.total }));
+  const indexes = $derived(Array.from({ length: Math.max(0, win.end - win.start) }, (_, i) => win.start + i));
+
+  // Ask for the pages under the window. The source ignores pages it already has.
+  $effect(() => {
+    source.ensure(win.start, win.end);
+  });
+
+  // A new query starts at the top.
+  $effect(() => {
+    void source.query; void source.kind; void source.state; void source.sort;
+    if (viewport) viewport.scrollTop = 0;
+    scrollTop = 0;
+    active = 0;
+  });
+
+  function kindLabel(kind: string): string {
+    return t(`kind.${kind}` as MessageKey);
+  }
+
+  function placeText(candidate: Candidate): string {
+    const first = candidate.locations?.[0];
+    const where = first ? describeLocation(first, app.locale) : candidate.location ?? '';
+    return where;
+  }
+
+  function detailText(candidate: Candidate): string {
+    return describeDetail(candidate.locations?.[0]?.detail, app.locale);
+  }
+
+  function stateOf(candidate: Candidate): 'excluded' | 'manual' | 'included' {
+    if (app.excluded.has(candidate.id)) return 'excluded';
+    return app.overrides[candidate.id]?.trim() ? 'manual' : 'included';
+  }
+
+  async function move(to: number, select = true): Promise<void> {
+    if (source.total === 0) return;
+    const next = Math.max(0, Math.min(source.total - 1, to));
+    active = next;
+    if (viewport) {
+      const top = next * ROW;
+      const header = 40;
+      if (top < viewport.scrollTop) viewport.scrollTop = top;
+      else if (top + ROW > viewport.scrollTop + viewport.clientHeight - header) viewport.scrollTop = top + ROW - viewport.clientHeight + header;
+    }
+    const candidate = await source.row(next);
+    await tick();
+    viewport?.querySelector<HTMLElement>(`[data-index="${next}"]`)?.focus();
+    if (select && candidate) onSelect(candidate);
+  }
+
+  async function openEditor(candidate: Candidate): Promise<void> {
+    onSelect(candidate);
+    await tick();
+    document.getElementById('manual-translation')?.focus();
+  }
+
+  function handleKey(event: KeyboardEvent, index: number, candidate: Candidate | undefined): void {
+    const page = Math.max(1, Math.floor(height / ROW) - 1);
+    const map: Record<string, () => void> = {
+      ArrowDown: () => void move(index + 1),
+      ArrowUp: () => void move(index - 1),
+      PageDown: () => void move(index + page),
+      PageUp: () => void move(index - page),
+      Home: () => void move(0),
+      End: () => void move(source.total - 1)
+    };
+    if (map[event.key]) {
+      event.preventDefault();
+      map[event.key]();
+    } else if (event.key === ' ' && candidate) {
+      event.preventDefault();
+      app.setIncluded(candidate.id, app.excluded.has(candidate.id));
+      onSelect(candidate);
+    } else if (event.key === 'Enter' && candidate) {
+      event.preventDefault();
+      void openEditor(candidate);
+    }
+  }
+</script>
+
+<div
+  class="viewport"
+  bind:this={viewport}
+  bind:clientHeight={height}
+  onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
+>
+  <table role="grid" aria-label={t('review.title')} aria-rowcount={source.total + 1} aria-colcount="5">
+    <thead>
+      <tr aria-rowindex="1">
+        <th class="c-include" scope="col"><span class="sr-only">{t('review.col.include')}</span></th>
+        <th class="c-source" scope="col">{t('review.col.source')}</th>
+        <th class="c-kind" scope="col">{t('review.col.kind')}</th>
+        <th class="c-where" scope="col">{t('review.col.where')}</th>
+        <th class="c-state" scope="col">{t('review.col.state')}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#if win.padTop > 0}<tr aria-hidden="true" class="pad" style:height="{win.padTop}px"><td colspan="5"></td></tr>{/if}
+      {#each indexes as index (index)}
+        {@const candidate = source.rowAt(index)}
+        {#if candidate}
+          {@const state = stateOf(candidate)}
+          <tr
+            class:selected={candidate.id === selectedId}
+            class:excluded={state === 'excluded'}
+            data-index={index}
+            aria-rowindex={index + 2}
+            aria-selected={candidate.id === selectedId}
+            aria-label={t('review.rowLabel', { source: candidate.source, kind: kindLabel(candidate.kind), places: t('common.places', { count: candidate.occurrences }) })}
+            tabindex={index === active ? 0 : -1}
+            style:height="{ROW}px"
+            onclick={() => { active = index; onSelect(candidate); }}
+            onkeydown={(event) => handleKey(event, index, candidate)}
+          >
+            <td class="c-include">
+              <input
+                type="checkbox"
+                tabindex="-1"
+                aria-label={t('review.detail.include')}
+                checked={state !== 'excluded'}
+                onclick={(event) => event.stopPropagation()}
+                onchange={(event) => app.setIncluded(candidate.id, event.currentTarget.checked)}
+              />
+            </td>
+            <td class="c-source"><span class="src">{candidate.source}</span></td>
+            <td class="c-kind">
+              <span class="kind">{kindLabel(candidate.kind)}</span>
+              {#if detailText(candidate)}<span class="detail">{detailText(candidate)}</span>{/if}
+            </td>
+            <td class="c-where">
+              <span class="where">{placeText(candidate)}</span>
+              {#if candidate.occurrences > 1}<span class="detail num">{t('common.places', { count: formatNumber(candidate.occurrences, app.locale) })}</span>{/if}
+            </td>
+            <td class="c-state">
+              {#if state === 'manual'}<span class="pill pill-accent"><Icon name="pencil" size={12} /> {t('review.state.manual.label')}</span>
+              {:else if state === 'excluded'}<span class="pill"><Icon name="minus" size={12} /> {t('review.state.excluded.label')}</span>
+              {:else}<span class="pill pill-success"><Icon name="check" size={12} /> {t('review.state.included.label')}</span>{/if}
+            </td>
+          </tr>
+        {:else}
+          <tr class="skeleton" aria-rowindex={index + 2} aria-busy="true" style:height="{ROW}px">
+            <td class="c-include"></td>
+            <td class="c-source"><span class="bone" style:width="{50 + ((index * 37) % 40)}%"></span></td>
+            <td class="c-kind"><span class="bone short"></span></td>
+            <td class="c-where"><span class="bone short"></span></td>
+            <td class="c-state"></td>
+          </tr>
+        {/if}
+      {/each}
+      {#if win.padBottom > 0}<tr aria-hidden="true" class="pad" style:height="{win.padBottom}px"><td colspan="5"></td></tr>{/if}
+    </tbody>
+  </table>
+  {#if source.total === 0 && !source.loading}
+    <div class="empty" role="status">
+      <p class="strong">{t('review.empty')}</p>
+      <p class="muted">{t('review.emptyHelp')}</p>
+    </div>
+  {/if}
+  {#if source.error}<div class="empty" role="alert"><p class="strong">{source.error}</p></div>{/if}
+</div>
+
+<style>
+  .viewport { position: relative; overflow: auto; height: 100%; min-height: 240px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); overscroll-behavior: contain; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--text-sm); }
+  th { position: sticky; top: 0; z-index: 2; height: 40px; padding: 0 var(--space-3); text-align: start; font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.04em; color: var(--text-secondary); background: var(--bg-sunken); border-bottom: 1px solid var(--border); }
+  td { padding: 0 var(--space-3); border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; }
+  tbody tr:not(.pad):not(.skeleton) { cursor: default; }
+  tr.selected td { background: var(--bg-selected); }
+  tr.excluded .src { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+  tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .c-include { width: 52px; text-align: center; padding: 0; }
+  .c-include input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; vertical-align: middle; }
+  .c-source { width: auto; }
+  .c-kind { width: 150px; }
+  .c-where { width: 210px; }
+  .c-state { width: 112px; }
+  .src { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-line; }
+  .kind, .where { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .where { font-weight: 500; font-family: var(--font-mono); font-size: var(--text-xs); }
+  .detail { display: block; font-size: var(--text-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (hover: hover) { tbody tr:not(.pad):not(.skeleton):not(.selected):hover td { background: var(--bg-hover); } }
+  .bone { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--bg-sunken), var(--bg-hover), var(--bg-sunken)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+  .bone.short { width: 60%; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .empty { position: absolute; inset: 40px 0 0; display: grid; place-content: center; text-align: center; gap: var(--space-1); padding: var(--space-5); }
+  .strong { font-weight: 700; }
+  @media (max-width: 1100px) { .c-where { width: 170px; } .c-kind { width: 120px; } }
+  @media (max-width: 900px) { .c-where { display: none; } th.c-where { display: none; } .c-state { width: 96px; } }
+</style>

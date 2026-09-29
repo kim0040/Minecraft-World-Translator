@@ -1,0 +1,263 @@
+<script lang="ts">
+  import { app } from '../lib/app.svelte';
+  import type { BackupSummary } from '../lib/api';
+  import { t } from '../lib/i18n/index.svelte';
+  import { baseName, formatBytes, formatDate, formatNumber, middleEllipsis } from '../lib/format';
+  import Callout from '../components/Callout.svelte';
+  import Dialog from '../components/Dialog.svelte';
+  import Icon from '../components/Icon.svelte';
+  import ProgressBar from '../components/ProgressBar.svelte';
+
+  let selectedBackup = $state<BackupSummary | null>(null);
+  let confirmRestore = $state(false);
+
+  const hasWorld = $derived(!!app.worldDir);
+  const restoring = $derived(app.busy === 'restore');
+  const actionBusy = $derived(app.isBusy || app.busy === 'loading');
+  const worldName = $derived(app.worldDir ? baseName(app.worldDir) : '');
+  const backups = $derived([...app.backups].sort((a, b) => backupTime(b.createdAt) - backupTime(a.createdAt)));
+
+  function backupTime(value: string): number {
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function dateLabel(value: string): string {
+    return formatDate(value, app.locale) || t('common.unknown');
+  }
+
+  function kindLabel(kind: BackupSummary['kind']): string {
+    if (kind === 'translation') return t('backups.kind.translation');
+    if (kind === 'recovery') return t('backups.kind.recovery');
+    return t('common.unknown');
+  }
+
+  function locationLabel(backup: BackupSummary): string {
+    return backup.inWorldFolder ? t('backups.location.world') : t('backups.location.app');
+  }
+
+  function openRestore(backup: BackupSummary): void {
+    if (actionBusy) return;
+    selectedBackup = backup;
+    confirmRestore = true;
+  }
+
+  function closeRestore(): void {
+    confirmRestore = false;
+    selectedBackup = null;
+  }
+
+  async function restoreSelected(): Promise<void> {
+    const backupSetId = selectedBackup?.backupSetId;
+    closeRestore();
+    if (backupSetId) await app.restore(backupSetId);
+  }
+</script>
+
+<div class="page">
+  <header class="page-head">
+    <h1>{t('backups.title')}</h1>
+    <p class="lead">{t('backups.lead')}</p>
+  </header>
+
+  {#if !hasWorld}
+    <section class="card empty-state" aria-labelledby="backups-no-world-title">
+      <div class="empty-icon" aria-hidden="true"><Icon name="archive" size={28} /></div>
+      <div class="empty-copy">
+        <h2 id="backups-no-world-title">{t('backups.noWorld')}</h2>
+        <p class="muted">{t('backups.noWorldHelp')}</p>
+      </div>
+      <div class="empty-actions">
+        <button type="button" class="btn btn-primary" disabled={actionBusy} onclick={() => app.chooseWorld()}>
+          <Icon name="folder" size={18} /> {t('backups.pickWorld')}
+        </button>
+        <button type="button" class="btn btn-secondary" onclick={() => app.goto('workspace')}>
+          {t('nav.workspace')}
+        </button>
+      </div>
+    </section>
+  {:else}
+    <section class="card world-context" aria-labelledby="backup-world-title">
+      <div class="context-icon" aria-hidden="true"><Icon name="folder" size={24} /></div>
+      <div class="context-copy">
+        <p class="eyebrow">{t('world.selected')}</p>
+        <h2 id="backup-world-title">{t('backups.world', { name: worldName })}</h2>
+        <p class="path mono" title={app.worldDir}>{middleEllipsis(app.worldDir, 96)}</p>
+      </div>
+      <span class="pill pill-accent num">{t('world.backupsCount', { count: formatNumber(backups.length, app.locale) })}</span>
+    </section>
+
+    {#if restoring}
+      <section class="card restoring" role="status" aria-live="polite" aria-label={t('status.restoring')}>
+        <div class="restoring-head">
+          <Icon name="refresh" size={20} />
+          <strong>{t('status.restoring')}</strong>
+        </div>
+        <ProgressBar label={t('status.restoring')} value={null} />
+        <p class="muted">{t('common.loading')}</p>
+      </section>
+    {/if}
+
+    {#if backups.length === 0}
+      <section class="card empty-state" aria-labelledby="backups-empty-title">
+        <div class="empty-icon" aria-hidden="true"><Icon name="archive" size={28} /></div>
+        <div class="empty-copy">
+          <h2 id="backups-empty-title">{t('backups.empty')}</h2>
+          <p class="muted">{t('backups.emptyHelp')}</p>
+        </div>
+        <button type="button" class="btn btn-secondary" disabled={actionBusy} onclick={() => app.goto('workspace')}>
+          {t('nav.workspace')} <Icon name="chevron-right" size={18} />
+        </button>
+      </section>
+    {:else}
+      <section aria-labelledby="backup-list-title">
+        <div class="list-heading">
+          <h2 id="backup-list-title" class="section-title">{t('backups.world', { name: worldName })}</h2>
+          <p class="muted num">{t('world.backupsCount', { count: formatNumber(backups.length, app.locale) })}</p>
+        </div>
+        <ul class="backup-list">
+          {#each backups as backup (backup.backupSetId)}
+            <li>
+              <article class="card backup-card">
+                <div class="backup-heading">
+                  <div class="backup-title">
+                    <span class="backup-icon" aria-hidden="true"><Icon name={backup.kind === 'recovery' ? 'undo' : 'archive'} size={20} /></span>
+                    <div>
+                      <h3>{kindLabel(backup.kind)}</h3>
+                      <p class="date num">{dateLabel(backup.createdAt)}</p>
+                    </div>
+                  </div>
+                  <span class:verified={backup.verified} class:unverified={!backup.verified} class="pill">
+                    <Icon name={backup.verified ? 'check-circle' : 'alert-triangle'} size={14} />
+                    {backup.verified ? t('backups.verified') : t('backups.unverified')}
+                  </span>
+                </div>
+
+                <ul class="backup-facts">
+                  <li class="num">{t('backups.files', { count: formatNumber(backup.fileCount, app.locale) })}</li>
+                  {#if backup.sizeBytes !== undefined}
+                    <li class="num">{t('backups.size', { size: formatBytes(backup.sizeBytes, app.locale) })}</li>
+                  {/if}
+                  <li>{locationLabel(backup)}</li>
+                </ul>
+
+                <div class="backup-footer">
+                  <code class="backup-id" title={backup.backupSetId}>{t('backups.id')}: {backup.backupSetId}</code>
+                  <button type="button" class="btn btn-secondary" disabled={actionBusy} onclick={() => openRestore(backup)}>
+                    <Icon name="undo" size={17} /> {t('backups.restore')}
+                  </button>
+                </div>
+              </article>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+  {/if}
+</div>
+
+{#if confirmRestore && selectedBackup}
+  <Dialog title={t('backups.restoreTitle')} onClose={closeRestore}>
+    <Callout tone="warning" title={kindLabel(selectedBackup.kind)}>
+      <p>{t('backups.restoreBody')}</p>
+    </Callout>
+    <ul class="confirm-facts">
+      <li><span>{t('world.selected')}</span><strong>{worldName}</strong></li>
+      <li><span>{t('backups.id')}</span><code>{selectedBackup.backupSetId}</code></li>
+      <li><span>{t('backups.files', { count: formatNumber(selectedBackup.fileCount, app.locale) })}</span></li>
+      <li><span>{t('backups.verified')}</span><strong>{selectedBackup.verified ? t('backups.verified') : t('backups.unverified')}</strong></li>
+    </ul>
+    {#snippet actions()}
+      <button type="button" class="btn btn-secondary" data-autofocus onclick={closeRestore}>{t('common.cancel')}</button>
+      <button type="button" class="btn btn-danger-solid" onclick={restoreSelected}>
+        <Icon name="undo" size={17} /> {t('backups.restore')}
+      </button>
+    {/snippet}
+  </Dialog>
+{/if}
+
+<style>
+  .empty-state {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-5);
+    padding: var(--space-6) var(--space-5);
+    border-style: dashed;
+    border-color: var(--border-strong);
+    box-shadow: none;
+  }
+  .empty-icon, .context-icon, .backup-icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    color: var(--accent-soft-text);
+    background: var(--accent-soft);
+    border-radius: var(--radius-lg);
+  }
+  .empty-icon { width: 56px; height: 56px; }
+  .empty-copy { min-width: 0; }
+  .empty-copy h2 { font-size: var(--text-xl); }
+  .empty-copy p { margin-top: var(--space-1); }
+  .empty-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: flex-end; }
+
+  .world-context {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+  }
+  .context-icon { width: 48px; height: 48px; }
+  .context-copy { min-width: 0; }
+  .context-copy h2 { font-size: var(--text-lg); margin-top: 2px; overflow-wrap: anywhere; }
+  .path { margin-top: 2px; color: var(--text-secondary); font-size: var(--text-sm); }
+
+  .restoring {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    border-color: var(--accent);
+  }
+  .restoring-head { display: flex; align-items: center; gap: var(--space-2); color: var(--accent-text); }
+  .restoring-head :global(.icon) { animation: pomi-spin 0.9s linear infinite; }
+  .restoring p { font-size: var(--text-sm); }
+
+  .list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin: var(--space-2) 0 var(--space-3); }
+  .section-title { font-size: var(--text-lg); }
+  .backup-list { display: grid; gap: var(--space-3); list-style: none; margin: 0; padding: 0; }
+  .backup-card { display: grid; gap: var(--space-4); padding: var(--space-5); }
+  .backup-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+  .backup-title { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+  .backup-icon { width: 40px; height: 40px; }
+  .backup-title h3 { font-size: var(--text-lg); overflow-wrap: anywhere; }
+  .date { color: var(--text-secondary); font-size: var(--text-sm); margin-top: 2px; }
+  .pill.verified { background: var(--success-soft); color: var(--success-text); }
+  .pill.unverified { background: var(--warning-soft); color: var(--warning-text); }
+
+  .backup-facts { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: var(--space-3) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .backup-facts li { min-height: 28px; display: inline-flex; align-items: center; padding: 0 var(--space-2); border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
+  .backup-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+  .backup-id { min-width: 0; overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--text-xs); }
+
+  .confirm-facts { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: var(--space-3) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .confirm-facts li { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); overflow-wrap: anywhere; }
+  .confirm-facts li > span { color: var(--text-secondary); font-size: var(--text-sm); }
+  .confirm-facts li > strong, .confirm-facts li > code { min-width: 0; color: var(--text); text-align: end; overflow-wrap: anywhere; }
+
+  @media (max-width: 640px) {
+    .empty-state, .world-context { grid-template-columns: 1fr; align-items: start; }
+    .empty-actions { justify-content: flex-start; }
+    .context-icon, .empty-icon { width: 44px; height: 44px; }
+    .world-context > .pill { justify-self: start; }
+    .backup-heading { flex-direction: column; align-items: flex-start; }
+    .backup-footer { align-items: flex-start; flex-direction: column; }
+    .backup-footer .btn { width: 100%; }
+  }
+
+  @media (max-width: 380px) {
+    .empty-actions, .empty-actions .btn { width: 100%; }
+    .empty-actions .btn { justify-content: center; }
+    .backup-card, .world-context, .empty-state { padding-inline: var(--space-4); }
+  }
+</style>

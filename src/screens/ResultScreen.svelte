@@ -1,0 +1,143 @@
+<script lang="ts">
+  import { app } from '../lib/app.svelte';
+  import { t, hasMessage, type MessageKey } from '../lib/i18n/index.svelte';
+  import { formatNumber, formatCompact, formatUsd } from '../lib/format';
+  import Icon from '../components/Icon.svelte';
+  import Callout from '../components/Callout.svelte';
+  import { resultPresentation } from '../lib/workflow';
+
+  const result = $derived(app.result);
+  const status = $derived(result?.status ?? 'failed');
+  const presentation = $derived(resultPresentation(status));
+  const tone = $derived(presentation.tone);
+  const titleKey = $derived(`result.${presentation.status}` as MessageKey);
+  const bodyKey = $derived(`result.${presentation.status}Body` as MessageKey);
+  const body = $derived(presentation.status === 'completed' ? t('result.completedBody', { files: formatNumber(result?.changedFileCount ?? 0, app.locale) }) : t(bodyKey));
+  const stats = $derived(result?.translation ?? {});
+  const firstError = $derived(result?.errors?.[0]);
+  const reason = $derived.by(() => {
+    if (!firstError?.code) return '';
+    const key = `result.errorCode.${firstError.code}`;
+    return hasMessage(key) ? t(key as MessageKey) : firstError.message ?? '';
+  });
+  const showReason = $derived(presentation.showReason);
+  const resumable = $derived(!!app.resume && app.isResumeStatus(status));
+  const usage = $derived(result?.usage);
+  const cards = $derived([
+    { label: t('result.stat.translated'), value: stats.translated ?? 0, tone: 'ok' },
+    { label: t('result.stat.unchanged'), value: stats.unchanged ?? 0, tone: '' },
+    { label: t('result.stat.failed'), value: stats.failed ?? 0, tone: (stats.failed ?? 0) > 0 ? 'bad' : '' },
+    { label: t('result.stat.kept'), value: stats.kept_original ?? 0, tone: (stats.kept_original ?? 0) > 0 ? 'warn' : '' },
+    { label: t('result.stat.files'), value: result?.changedFileCount ?? 0, tone: '' },
+    { label: t('result.stat.requests'), value: result?.providerRequests ?? 0, tone: '' }
+  ]);
+  const warnKnown = ['chunk_unreadable', 'file_unwritable', 'file_unreadable'];
+</script>
+
+<div class="page">
+  <header class="page-head">
+    <h1>{t('result.title')}</h1>
+  </header>
+
+  {#if result}
+    <Callout {tone} title={t(titleKey)} role="status">
+      {body}
+      {#if showReason && reason}<br />{reason}{/if}
+      {#snippet actions()}
+        {#if resumable}
+          <button type="button" class="btn btn-primary" disabled={app.isBusy} onclick={() => app.startTranslate({ resume: true })}><Icon name="refresh" size={18} /> {t('result.retry')}</button>
+        {/if}
+        {#if status === 'invalidated' || status === 'partial' || (!resumable && status !== 'completed')}
+          <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.goStep('scan')}>{t('result.retryAll')}</button>
+        {/if}
+        {#if result.backupSetId}
+          <button type="button" class="btn btn-secondary" onclick={() => app.goto('backups')}><Icon name="archive" size={18} /> {t('result.toBackups')}</button>
+        {/if}
+        {#if status === 'completed'}
+          <button type="button" class="btn btn-secondary" onclick={() => { app.goto('workspace'); app.goStep('world'); }}>{t('result.newRun')}</button>
+        {/if}
+      {/snippet}
+    </Callout>
+
+    <section class="stats" aria-label={t('result.title')}>
+      {#each cards as card (card.label)}
+        <div class="card stat {card.tone}"><span class="v num">{formatNumber(card.value, app.locale)}</span><span class="l">{card.label}</span></div>
+      {/each}
+      {#if usage && (usage.prompt_tokens || usage.completion_tokens)}
+        <div class="card stat wide">
+          <span class="v small num">{t('result.tokensValue', { input: formatCompact(usage.prompt_tokens ?? 0, app.locale), output: formatCompact(usage.completion_tokens ?? 0, app.locale) })}</span>
+          <span class="l">{t('result.stat.tokens')}</span>
+        </div>
+      {/if}
+      {#if usage?.cost_reported}
+        <div class="card stat wide">
+          <span class="v small num">{t('result.costValue', { cost: formatUsd(usage.cost ?? 0, app.locale) })}</span>
+          <span class="l">{t('result.stat.cost')}</span>
+        </div>
+      {/if}
+    </section>
+
+    {#if result.warnings?.length}
+      <Callout tone="warning" title={t('result.warnings')}>
+        <ul class="plain">
+          {#each result.warnings as warning}
+            <li>{warnKnown.includes(warning.code) ? t(`scan.warn.${warning.code}` as MessageKey, { file: warning.file ?? '', count: warning.count ?? 0 }) : warning.message ?? t('scan.warn.unknown')}</li>
+          {/each}
+        </ul>
+      </Callout>
+    {/if}
+
+    {#if result.translationSamples?.length}
+      <section class="card samples" aria-labelledby="samples-title">
+        <h2 id="samples-title">{t('result.samples')}</h2>
+        <p class="muted">{t('result.samplesLead')}</p>
+        <table>
+          <thead><tr><th scope="col">{t('result.before')}</th><th scope="col">{t('result.after')}</th></tr></thead>
+          <tbody>
+            {#each result.translationSamples as sample (sample.source)}
+              <tr><td lang="en">{sample.source}</td><td>{sample.translated}</td></tr>
+            {/each}
+          </tbody>
+        </table>
+      </section>
+    {/if}
+
+    {#if result.translationFailures?.length}
+      <section class="card samples" aria-labelledby="fail-title">
+        <h2 id="fail-title">{t('result.failures')}</h2>
+        <ul class="lines">
+          {#each result.translationFailures as item (item.source)}<li><strong>{item.source}</strong><span class="muted">{item.reason}</span></li>{/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if result.keptOriginalSamples?.length}
+      <section class="card samples" aria-labelledby="kept-title">
+        <h2 id="kept-title">{t('result.kept')}</h2>
+        <p class="muted">{t('result.keptHelp')}</p>
+        <ul class="lines">{#each result.keptOriginalSamples as source (source)}<li><strong>{source}</strong></li>{/each}</ul>
+      </section>
+    {/if}
+  {/if}
+</div>
+
+<style>
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+  .stat { padding: var(--space-4); display: grid; gap: 2px; }
+  .stat .v { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
+  .stat .v.small { font-size: var(--text-lg); letter-spacing: 0; }
+  .stat .l { font-size: var(--text-sm); color: var(--text-secondary); }
+  .stat.ok .v { color: var(--success-text); }
+  .stat.bad .v { color: var(--danger-text); }
+  .stat.warn .v { color: var(--warning-text); }
+  .stat.wide { grid-column: span 2; }
+  .samples { padding: var(--space-5); display: grid; gap: var(--space-3); }
+  .samples h2 { font-size: var(--text-lg); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  th { text-align: start; font-size: var(--text-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); }
+  td { padding: var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; width: 50%; }
+  td:first-child { color: var(--text-secondary); }
+  .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
+  .lines li { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--bg-sunken); overflow-wrap: anywhere; }
+  .plain { margin: 0; padding-inline-start: 18px; }
+</style>

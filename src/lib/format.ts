@@ -64,7 +64,7 @@ export function describeLocation(location: CandidateLocation, locale: Locale): s
   if (holder && location.pos) return `${holder} (${x}, ${y}, ${z})`;
   if (holder) return holder;
   const [cx, cz] = location.chunk ?? [];
-  return cx === undefined ? '' : translate(locale, 'detail.chunk', { x: cx, z: cz });
+  return cx === undefined || cz === undefined ? '' : translate(locale, 'detail.chunk', { x: cx, z: cz });
 }
 
 /** "front:2" → "Front, line 2". Unknown details are shown as they came. */

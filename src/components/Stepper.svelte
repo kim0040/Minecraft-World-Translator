@@ -18,6 +18,7 @@
           type="button"
           class="step"
           disabled={!reachable && !current}
+          aria-label={`${label(step)}${isDone(step) ? ` (${t('step.done')})` : current ? ` (${t('step.current')})` : ''}`}
           aria-current={current ? 'step' : undefined}
           onclick={() => app.goStep(step)}
         >

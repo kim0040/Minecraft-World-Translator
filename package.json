@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
+    "test:frontend": "vitest run tests/frontend",
     "build": "pnpm check && vite build",
     "sidecar:build": "node scripts/build-sidecar.mjs",
     "desktop:dev": "pnpm sidecar:build && tauri dev",

@@ -210,26 +210,37 @@ type BackendResponse<T> = {
 };
 
 let serial = 0;
+// The Rust shell owns one sidecar process at a time. Keep short read requests (candidate paging,
+// estimates, backup refreshes) in the same queue as long operations so a fast UI interaction
+// cannot race the cleanup of the preceding sidecar process.
+let backendQueue: Promise<void> = Promise.resolve();
 
-export async function callBackend<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
-  serial += 1;
-  const id = `ui-${Date.now()}-${serial}`;
-  let response: BackendResponse<T>;
-  try {
-    response = await invoke<BackendResponse<T>>('sidecar_request', { request: { v: 1, id, type, payload } });
-  } catch (cause) {
-    // Rust refuses a second request while one runs, and reports its own transport problems as text.
-    const text = cause instanceof Error ? cause.message : String(cause);
-    throw new BackendError(text, /still running/i.test(text) ? 'BUSY' : 'TRANSPORT');
-  }
-  if (response.id !== id) throw new BackendError('The translation core answered a different request.', 'TRANSPORT');
-  if (response.type === 'response.error') {
-    throw new BackendError(response.error?.message || response.error?.code || 'Translation core error', response.error?.code || '');
-  }
-  if (response.type !== 'response.ok' || !response.payload) {
-    throw new BackendError('The translation core response was incomplete.', 'TRANSPORT');
-  }
-  return response.payload;
+export function callBackend<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+  const run = async (): Promise<T> => {
+    serial += 1;
+    const id = `ui-${Date.now()}-${serial}`;
+    let response: BackendResponse<T>;
+    try {
+      response = await invoke<BackendResponse<T>>('sidecar_request', { request: { v: 1, id, type, payload } });
+    } catch (cause) {
+      // Rust reports transport and shell failures as text. The queue prevents normal UI requests
+      // from reaching its single-process BUSY guard.
+      const text = cause instanceof Error ? cause.message : String(cause);
+      throw new BackendError(text, /still running/i.test(text) ? 'BUSY' : 'TRANSPORT');
+    }
+    if (response.id !== id) throw new BackendError('The translation core answered a different request.', 'TRANSPORT');
+    if (response.type === 'response.error') {
+      throw new BackendError(response.error?.message || response.error?.code || 'Translation core error', response.error?.code || '');
+    }
+    if (response.type !== 'response.ok' || !response.payload) {
+      throw new BackendError('The translation core response was incomplete.', 'TRANSPORT');
+    }
+    return response.payload;
+  };
+
+  const result = backendQueue.then(run);
+  backendQueue = result.then(() => undefined, () => undefined);
+  return result;
 }
 
 export async function cancelBackend(): Promise<boolean> {

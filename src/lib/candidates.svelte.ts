@@ -22,7 +22,7 @@ export class CandidateSource {
   version = $state(0);
 
   private pages = new Map<number, Candidate[]>();
-  private inflight = new Set<number>();
+  private inflight = new Map<number, Promise<void>>();
   private token = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private scanPlanId = '';
@@ -64,18 +64,34 @@ export class CandidateSource {
     return this.pages.get(Math.floor(index / PAGE_SIZE))?.[index % PAGE_SIZE];
   }
 
+  /** Return a row after its page has loaded. Used by keyboard navigation across page boundaries. */
+  async row(index: number): Promise<Candidate | undefined> {
+    const loaded = this.rowAt(index);
+    if (loaded || !this.scanPlanId || index < 0 || index >= this.total) return loaded;
+    const page = Math.floor(index / PAGE_SIZE);
+    this.ensure(index, index + 1);
+    await this.inflight.get(page);
+    return this.rowAt(index);
+  }
+
   /** Load whichever pages cover rows start..end that are not here yet. */
   ensure(start: number, end: number): void {
     if (!this.scanPlanId) return;
     for (const page of pagesFor(start, Math.max(end, start + 1), PAGE_SIZE)) {
-      if (!this.pages.has(page) && !this.inflight.has(page)) void this.load(page);
+      if (!this.pages.has(page) && !this.inflight.has(page)) {
+        let request: Promise<void>;
+        request = this.load(page).finally(() => {
+          if (this.inflight.get(page) === request) this.inflight.delete(page);
+          this.loading = this.inflight.size > 0;
+        });
+        this.inflight.set(page, request);
+        this.loading = true;
+      }
     }
   }
 
   private async load(page: number): Promise<void> {
     const token = this.token;
-    this.inflight.add(page);
-    this.loading = true;
     const { excluded, manual } = this.ids();
     try {
       const response = await callBackend<CandidatePage>('candidates.page', {
@@ -96,11 +112,6 @@ export class CandidateSource {
       this.version += 1;
     } catch (cause) {
       if (token === this.token) this.error = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      if (token === this.token) {
-        this.inflight.delete(page);
-        this.loading = this.inflight.size > 0;
-      }
     }
   }
 
