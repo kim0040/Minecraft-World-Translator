@@ -65,6 +65,14 @@ def hashes(world: Path) -> dict[str, str]:
 
 
 def listening(pid: int) -> str:
+    """TCP listeners owned by ``pid``. Windows has no lsof, so read netstat there."""
+    if sys.platform == "win32":
+        completed = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True)
+        return "\n".join(
+            line
+            for line in completed.stdout.splitlines()
+            if "LISTENING" in line and line.split()[-1] == str(pid)
+        )
     completed = subprocess.run(
         ["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN"],
         capture_output=True,
@@ -157,7 +165,7 @@ def main() -> None:
                     proc,
                     {"v": 1, "id": "bootstrap", "type": "app.bootstrap", "payload": {"credentialOwner": "rust"}},
                 )
-                assert bootstrap["payload"]["settings"]["last_world_dir"] == str(world)
+                assert bootstrap["payload"]["settings"]["last_world_dir"] == str(world.resolve())
                 assert bootstrap["payload"]["worlds"][0]["path"] == str(world.resolve())
                 assert bootstrap["payload"]["worldInspection"]["validJavaWorld"] is True
                 assert bootstrap["payload"]["worldInspection"]["dataVersions"] == [

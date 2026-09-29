@@ -696,8 +696,10 @@ def test_atomic_write_preserves_existing_permissions():
         write_bytes_atomic(binary_path, b"new")
         write_text_atomic(text_path, "new")
 
-        assert binary_path.stat().st_mode & 0o777 == 0o640
-        assert text_path.stat().st_mode & 0o777 == 0o644
+        if os.name == "posix":  # Windows has no POSIX permission bits to preserve
+            assert binary_path.stat().st_mode & 0o777 == 0o640
+            assert text_path.stat().st_mode & 0o777 == 0o644
+        assert binary_path.read_bytes() == b"new" and text_path.read_text(encoding="utf-8") == "new"
 
     print("  [PASS] atomic_write_preserves_existing_permissions")
 
