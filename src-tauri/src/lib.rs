@@ -26,6 +26,7 @@ const ALLOWED_REQUESTS: &[&str] = &[
     "models.list",
     "scan.start",
     "candidates.page",
+    "estimate.get",
     "translate.start",
     "translate.resume",
     "backups.list",
@@ -33,6 +34,39 @@ const ALLOWED_REQUESTS: &[&str] = &[
 ];
 
 const KEYRING_SERVICE: &str = "PomiTranslate";
+
+/// Requests whose payload gets `credentialOwner: rust`, so the sidecar never touches the keychain.
+const CREDENTIAL_OWNER_REQUESTS: &[&str] = &[
+    "app.bootstrap",
+    "settings.get",
+    "settings.set",
+    "models.list",
+    "translate.start",
+    "translate.resume",
+];
+
+/// Requests that need the stored API key, which Rust reads and puts in the payload.
+const KEY_INJECTED_REQUESTS: &[&str] = &["models.list", "translate.start", "translate.resume"];
+
+fn is_allowed_request(kind: &str) -> bool {
+    ALLOWED_REQUESTS.contains(&kind)
+}
+
+/// Remove and return every complete line in `buffer`, without its trailing whitespace.
+/// A partial last line stays in the buffer for the next chunk.
+fn drain_complete_lines(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let mut lines = Vec::new();
+    while let Some(newline) = buffer.iter().position(|byte| *byte == b'\n') {
+        let mut line: Vec<u8> = buffer.drain(..=newline).collect();
+        while line.last().is_some_and(|byte| byte.is_ascii_whitespace()) {
+            line.pop();
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+    }
+    lines
+}
 
 fn keyring_entry(provider: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYRING_SERVICE, provider).map_err(|_| "OS credential store is unavailable".into())
@@ -72,7 +106,7 @@ async fn sidecar_request(
         .and_then(Value::as_str)
         .ok_or("Missing request type")?
         .to_string();
-    if !ALLOWED_REQUESTS.contains(&kind.as_str()) {
+    if !is_allowed_request(&kind) {
         return Err("Unsupported request type".into());
     }
     let id = request
@@ -102,7 +136,7 @@ async fn sidecar_request(
             "payload": {"provider": provider, "deleted": true, "apiKeyStored": false}
         }));
     }
-    if matches!(kind.as_str(), "app.bootstrap" | "settings.get" | "settings.set" | "models.list" | "translate.start" | "translate.resume") {
+    if CREDENTIAL_OWNER_REQUESTS.contains(&kind.as_str()) {
         if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
             payload.insert("credentialOwner".into(), Value::String("rust".into()));
         }
@@ -122,7 +156,7 @@ async fn sidecar_request(
         if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
             payload.remove("apiKey");
         }
-    } else if matches!(kind.as_str(), "models.list" | "translate.start" | "translate.resume") && !provider.is_empty() {
+    } else if KEY_INJECTED_REQUESTS.contains(&kind.as_str()) && !provider.is_empty() {
         if let Some(secret) = read_key(&provider)? {
             if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
                 payload.insert("apiKey".into(), Value::String(secret));
@@ -177,14 +211,7 @@ async fn sidecar_request(
                 if stdout_buffer.len() > 8 * 1024 * 1024 {
                     break Err("Translation core returned an oversized message".into());
                 }
-                while let Some(newline) = stdout_buffer.iter().position(|byte| *byte == b'\n') {
-                    let mut line: Vec<u8> = stdout_buffer.drain(..=newline).collect();
-                    while line.last().is_some_and(|byte| byte.is_ascii_whitespace()) {
-                        line.pop();
-                    }
-                    if line.is_empty() {
-                        continue;
-                    }
+                for line in drain_complete_lines(&mut stdout_buffer) {
                     let Ok(message) = serde_json::from_slice::<Value>(&line) else {
                         break 'events Err("Translation core returned an invalid JSONL message".into());
                     };
@@ -250,6 +277,11 @@ async fn sidecar_request(
 }
 
 #[tauri::command]
+fn operation_active(state: State<'_, ActiveSidecar>) -> bool {
+    state.0.lock().map(|active| active.is_some()).unwrap_or(false)
+}
+
+#[tauri::command]
 fn cancel_active(state: State<'_, ActiveSidecar>) -> Result<bool, String> {
     let active = state.0.lock().map_err(|_| "Sidecar state is unavailable")?;
     let Some(process) = active.as_ref() else {
@@ -269,15 +301,71 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(ActiveSidecar::default())
-        .invoke_handler(tauri::generate_handler![sidecar_request, cancel_active, credential_status])
+        .invoke_handler(tauri::generate_handler![sidecar_request, cancel_active, credential_status, operation_active])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let active = window.state::<ActiveSidecar>();
                 if active.0.lock().map(|child| child.is_some()).unwrap_or(false) {
                     api.prevent_close();
+                    // Tell the window why it did not close, instead of ignoring the click.
+                    let _ = window.emit("pomi-close-blocked", true);
                 }
             }
         })
         .run(tauri::generate_context!())
         .expect("failed to run PomiTranslate");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_known_requests_reach_the_sidecar() {
+        for kind in [
+            "app.bootstrap", "settings.set", "scan.start", "candidates.page", "estimate.get",
+            "translate.start", "translate.resume", "backups.list", "restore.start", "models.list",
+        ] {
+            assert!(is_allowed_request(kind), "{kind} must be allowed");
+        }
+        for kind in ["", "shell.exec", "scan.start ", "SCAN.START", "settings.set/../x", "translate"] {
+            assert!(!is_allowed_request(kind), "{kind:?} must be refused");
+        }
+    }
+
+    #[test]
+    fn requests_that_carry_a_key_also_hand_credential_ownership_to_rust() {
+        for kind in KEY_INJECTED_REQUESTS {
+            assert!(CREDENTIAL_OWNER_REQUESTS.contains(kind), "{kind} is given a key but not told Rust owns it");
+            assert!(is_allowed_request(kind));
+        }
+        for kind in CREDENTIAL_OWNER_REQUESTS.iter().chain(KEY_INJECTED_REQUESTS) {
+            assert!(is_allowed_request(kind), "{kind} is listed but not allowed");
+        }
+        // Reading a world or a plan never needs the key.
+        for kind in ["scan.start", "candidates.page", "estimate.get", "restore.start", "backups.list"] {
+            assert!(!KEY_INJECTED_REQUESTS.contains(&kind), "{kind} must not receive the API key");
+        }
+    }
+
+    #[test]
+    fn a_message_split_across_chunks_is_reassembled() {
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice(b"{\"a\":1}\n{\"b\":");
+        assert_eq!(drain_complete_lines(&mut buffer), vec![b"{\"a\":1}".to_vec()]);
+        assert_eq!(buffer, b"{\"b\":".to_vec(), "the partial line waits for its end");
+        buffer.extend_from_slice(b"2}\r\n\n  \n");
+        assert_eq!(drain_complete_lines(&mut buffer), vec![b"{\"b\":2}".to_vec()]);
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn several_messages_in_one_chunk_come_out_in_order() {
+        let mut buffer = b"one\ntwo\nthree\n".to_vec();
+        let lines: Vec<String> = drain_complete_lines(&mut buffer)
+            .into_iter()
+            .map(|line| String::from_utf8(line).unwrap())
+            .collect();
+        assert_eq!(lines, ["one", "two", "three"]);
+    }
 }

@@ -1,12 +1,33 @@
 name: ci
 
+# Runs only where it protects something: a pull request into main, or a push to main. Pushes to a
+# feature branch run nothing until a pull request exists. Docs, images and the UI do not touch the
+# Python core, so they do not start it. A newer run replaces one still going for the same ref.
 on:
-  push:
   pull_request:
+    branches: [main]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "tests/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "tests/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

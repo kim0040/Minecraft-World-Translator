@@ -1,31 +1,59 @@
 name: desktop-build
 
+# Building three installers costs about twenty runner minutes, ten of them on macOS and Windows,
+# which bill at a higher rate. It does not run on ordinary pushes or pull requests. Start it by
+# hand (Actions > desktop-build > Run workflow, or `gh workflow run desktop-build`) when a change
+# to packaging needs checking, or by pushing a release tag.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which installers to build"
+        type: choice
+        default: linux
+        options: [linux, all]
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  plan:
+    name: Choose installers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          ALL: ${{ github.event_name == 'push' || inputs.platforms == 'all' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          entries = [
+              {"name": "Linux x64", "os": "ubuntu-24.04", "bundles": "appimage,deb",
+               "artifact": "src-tauri/target/release/bundle/appimage/*"},
+              {"name": "macOS", "os": "macos-14", "bundles": "app,dmg",
+               "artifact": "src-tauri/target/release/bundle/macos/*.app\nsrc-tauri/target/release/bundle/dmg/*.dmg"},
+              {"name": "Windows x64", "os": "windows-2025", "bundles": "nsis",
+               "artifact": "src-tauri/target/release/bundle/nsis/*"},
+          ]
+          if os.environ["ALL"] != "true":
+              entries = entries[:1]  # a manual run builds Linux only unless "all" is chosen
+          print("matrix=" + json.dumps({"include": entries}))
+          PY
+
   package:
     name: ${{ matrix.name }}
+    needs: plan
+    timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: Linux x64
-            os: ubuntu-24.04
-            bundles: appimage,deb
-            artifact: src-tauri/target/release/bundle/appimage/*
-          - name: macOS
-            os: macos-14
-            bundles: app,dmg
-            artifact: |
-              src-tauri/target/release/bundle/macos/*.app
-              src-tauri/target/release/bundle/dmg/*.dmg
-          - name: Windows x64
-            os: windows-2025
-            bundles: nsis
-            artifact: src-tauri/target/release/bundle/nsis/*
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

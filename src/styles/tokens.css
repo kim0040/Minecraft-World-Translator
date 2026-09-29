@@ -1,0 +1,92 @@
+/*
+ * PomiTranslate design tokens.
+ *
+ * Primitives name a value and are never used in a component. Semantic tokens name a job and are
+ * the only tier components reference. Ramps are generated in OKLCH (docs/design-system.md) and
+ * every text pair below was measured: body text 4.5:1, control borders 3:1.
+ * Brand: the wordmark's blue is blue-600, its ink is neutral-900.
+ */
+:root {
+  /* neutral, warm (hue 72) */
+  --neutral-50: #f9f8f7; --neutral-100: #f2f0ed; --neutral-200: #e6e2dd; --neutral-300: #d6d0c8;
+  --neutral-400: #beb6ac; --neutral-500: #a39a8e; --neutral-600: #867b6f; --neutral-700: #6b6257;
+  --neutral-800: #524a41; --neutral-900: #3a342e; --neutral-950: #25211d;
+  /* accent: the brand blue */
+  --blue-50: #eff7ff; --blue-100: #e0efff; --blue-200: #c4e1ff; --blue-300: #a3ceff; --blue-400: #78afff;
+  --blue-500: #508eff; --blue-600: #2c6cec; --blue-700: #1b55cb; --blue-800: #1343a3; --blue-900: #0f3278;
+  /* status */
+  --green-100: #e2f6e6; --green-300: #a6e2b5; --green-600: #13954e; --green-700: #007937; --green-800: #005d28;
+  --amber-100: #fceeda; --amber-300: #f1ca90; --amber-600: #ad6f00; --amber-800: #6e4000; --amber-900: #4f2d00;
+  --red-50: #fff4f2; --red-100: #ffe7e3; --red-300: #ffb5aa; --red-600: #d73f39; --red-700: #b32423; --red-800: #8c1717;
+
+  /* type */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', 'Malgun Gothic',
+    'Segoe UI', Roboto, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Noto Sans Mono CJK KR', monospace;
+  --text-xs: 12px; --text-sm: 13px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px; --text-2xl: 26px;
+
+  /* space (4px grid) and shape */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-7: 48px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 999px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --sidebar-width: 232px;
+  --sidebar-rail: 68px;
+}
+
+/* semantic, light */
+:root, :root[data-theme='light'] {
+  color-scheme: light;
+  --bg-page: var(--neutral-50);
+  --bg-surface: #ffffff;
+  --bg-sunken: var(--neutral-100);
+  --bg-hover: var(--neutral-100);
+  --bg-selected: var(--blue-50);
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --border-control: var(--neutral-600);
+  --text: var(--neutral-900);
+  --text-secondary: var(--neutral-700);
+  --text-on-accent: #ffffff;
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-700);
+  --accent-text: var(--blue-700);
+  --accent-soft: var(--blue-100);
+  --accent-soft-text: var(--blue-800);
+  --focus-ring: var(--blue-600);
+  --success-soft: var(--green-100); --success-text: var(--green-800); --success-solid: var(--green-700);
+  --warning-soft: var(--amber-100); --warning-text: var(--amber-900); --warning-solid: var(--amber-600);
+  --danger-soft: var(--red-50); --danger-text: var(--red-700); --danger-solid: var(--red-700); --danger-border: var(--red-300);
+  --shadow-card: 0 1px 2px rgb(58 52 46 / 0.06), 0 4px 16px rgb(58 52 46 / 0.06);
+  --shadow-pop: 0 2px 6px rgb(58 52 46 / 0.10), 0 16px 48px rgb(58 52 46 / 0.18);
+  --scrim: rgb(37 33 29 / 0.55);
+  --image-outline: rgb(0 0 0 / 0.1);
+}
+
+/* semantic, dark. A token swap, not a reversal: surfaces darken, vividness drops, text lightens. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-page: #120f0b;
+  --bg-surface: #1d1914;
+  --bg-sunken: #27221d;
+  --bg-hover: #27221d;
+  --bg-selected: #132b5a;
+  --border: #37322c;
+  --border-strong: #4a443d;
+  --border-control: #6d6862;
+  --text: #f1eeea;
+  --text-secondary: #b5b0aa;
+  --text-on-accent: #ffffff;
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-500);
+  --accent-text: var(--blue-300);
+  --accent-soft: #132b5a;
+  --accent-soft-text: var(--blue-300);
+  --focus-ring: var(--blue-400);
+  --success-soft: #112d1a; --success-text: var(--green-300); --success-solid: var(--green-600);
+  --warning-soft: #362508; --warning-text: var(--amber-300); --warning-solid: var(--amber-300);
+  --danger-soft: #451915; --danger-text: var(--red-300); --danger-solid: var(--red-600); --danger-border: #7a2c26;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 0.5), 0 16px 48px rgb(0 0 0 / 0.6);
+  --scrim: rgb(0 0 0 / 0.65);
+  --image-outline: rgb(255 255 255 / 0.1);
+}

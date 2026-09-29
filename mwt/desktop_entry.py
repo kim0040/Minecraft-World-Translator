@@ -53,6 +53,7 @@ def _scan_scope_fingerprint(data_dir: Path) -> str:
     relevant = {
         "target_language": str(saved.get("target_language") or ""),
         "resource_pack_enabled": bool(saved.get("resource_pack_enabled")),
+        "skip_target_language_text": saved.get("skip_target_language_text", True) is not False,
         "extractor": EXTRACTOR_VERSION,
     }
     encoded = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -83,6 +84,53 @@ def _checkpoint_path(data_dir: Path, scan_plan_id: str) -> Path:
 def _request_estimate(candidate_count: int, batch_size: int) -> int:
     """Translation batches across the whole world, so this is exact unless a provider call fails."""
     return -(-int(candidate_count) // max(1, int(batch_size))) if candidate_count else 0
+
+
+def _model_price(saved: dict, data_dir: Path) -> dict | None:
+    """Per-token price from the model catalog the provider itself published, when it published one."""
+    from mwt.userdata import load_model_catalog
+
+    provider = str(saved.get("provider") or "")
+    model = str(saved.get("model") or "")
+    if not provider or not model:
+        return None
+    for item in load_model_catalog(provider, root=data_dir):
+        if item.get("id") != model:
+            continue
+        try:
+            prompt = float(item.get("pricing_prompt"))
+            completion = float(item.get("pricing_completion"))
+        except (TypeError, ValueError):
+            return None
+        if prompt < 0 or completion < 0:
+            return None
+        return {"input": prompt, "output": completion, "perMillionInput": prompt * 1e6, "perMillionOutput": completion * 1e6}
+    return None
+
+
+def _estimate(records: list[dict], saved: dict, data_dir: Path) -> dict:
+    """Requests are exact. Tokens and cost are an estimate calibrated on one real run: the cost
+    band's upper edge is twice the list price, the ratio that run showed."""
+    count = len(records)
+    chars = sum(len(str(record.get("source") or "")) for record in records)
+    batch_size = int(saved.get("batch_size") or 40)
+    requests = _request_estimate(count, batch_size)
+    input_tokens = requests * 450 + int(count * 4 + chars / 3.2)
+    output_tokens = int(count * 5 + chars * 0.85)
+    price = _model_price(saved, data_dir)
+    cost = None
+    if price and count:
+        low = input_tokens * price["input"] + output_tokens * price["output"]
+        cost = {"low": low, "high": low * 2}
+    return {
+        "candidateCount": count,
+        "requests": requests,
+        "sourceChars": chars,
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "price": price,
+        "cost": cost,
+    }
 
 
 def _format_location(location: dict) -> str:
@@ -443,7 +491,10 @@ def _run_translator(
                 "style_prompt": str(saved.get("style_prompt") or ""),
                 "custom_system_prompt": str(saved.get("custom_system_prompt") or ""),
             },
-            "scan": {"overrides": manual_overrides or {}},
+            "scan": {
+                "overrides": manual_overrides or {},
+                "skip_target_language_text": saved.get("skip_target_language_text", True) is not False,
+            },
             "resource_pack": {
                 "enabled": bool(resource_pack_paths),
                 "zip_paths": resource_pack_paths,
@@ -619,6 +670,11 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "custom_system_prompt": text_setting("customSystemPrompt", "custom_system_prompt"),
             },
             "runtime": {"max_batch_retries": max_batch_retries, "concurrency": concurrency},
+            "scan": {
+                "skip_target_language_text": bool(
+                    body.get("skipTargetLanguageText", saved.get("skip_target_language_text", True))
+                )
+            },
             "resource_pack": {
                 "enabled": bool(body.get("resourcePackEnabled", saved.get("resource_pack_enabled", False)))
             },
@@ -802,11 +858,21 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "errors": report.get("errors", []),
                     "warnings": report.get("warnings", []),
                     "requestEstimate": _request_estimate(len(records), batch_size),
+                    "estimate": _estimate(records, _saved(data_dir), data_dir),
                     "coverage": _coverage(world, bool(_saved(data_dir).get("resource_pack_enabled"))),
                     "candidates": report.get("candidate_preview", []),
                 },
             }
         )
+        return
+    if kind == "estimate.get":
+        plan = _load_scan_plan(data_dir, str(body.get("scanPlanId") or ""))
+        if not plan:
+            raise ValueError("Scan plan was not found")
+        skipped = {str(item) for item in body.get("excludedCandidateIds") or []}
+        skipped.update(str(item) for item in body.get("overrideCandidateIds") or [])
+        included = [item for item in plan.get("candidates", []) if isinstance(item, dict) and item.get("id") not in skipped]
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _estimate(included, _saved(data_dir), data_dir)})
         return
     if kind == "candidates.page":
         scan_plan_id = str(body.get("scanPlanId") or "")

@@ -1,0 +1,259 @@
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+export type Provider = 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'custom';
+export type Locale = 'ko' | 'en' | 'ja';
+
+export type Settings = {
+  provider: Provider | string;
+  model: string;
+  base_url: string;
+  wire_format: string;
+  target_language: string;
+  style_preset: string;
+  style_prompt?: string;
+  custom_system_prompt?: string;
+  temperature?: number;
+  batch_size?: number;
+  request_timeout?: number;
+  rpm_limit?: number;
+  tpm_limit?: number;
+  max_batch_retries?: number;
+  concurrency?: number;
+  resource_pack_enabled?: boolean;
+  skip_target_language_text?: boolean;
+  ui_language?: Locale;
+  last_world_dir: string;
+};
+
+export type Notices = { firstLaunch: string; about: string; backupWarning: string; apiWarning: string };
+
+export type RecentWorld = { path: string; name: string; lastOpened: number; available: boolean };
+
+export type WorldInspection = {
+  validJavaWorld: boolean;
+  kind: 'java_world' | 'server_root' | 'missing' | 'unknown';
+  childWorlds?: string[];
+  regionDirs?: string[];
+  resourcePacks?: string[];
+  dataVersions?: { world: string; dataVersion: number | null }[];
+  writeBlockers: string[];
+};
+
+export type BackupSummary = {
+  backupSetId: string;
+  createdAt: string;
+  fileCount: number;
+  verified: boolean;
+  kind?: 'translation' | 'recovery';
+  sizeBytes?: number;
+  inWorldFolder?: boolean;
+};
+
+export type CandidateLocation = {
+  kind?: string;
+  holder?: string;
+  pos?: [number, number, number] | null;
+  detail?: string;
+  chunk?: [number, number];
+  file?: string;
+};
+
+export type Candidate = {
+  id: string;
+  source: string;
+  kind: string;
+  kinds?: Record<string, number>;
+  occurrences: number;
+  locations?: CandidateLocation[];
+  location?: string;
+};
+
+export type CoverageItem = { id: string; scanned: boolean; present: boolean; count?: number };
+
+export type Estimate = {
+  candidateCount: number;
+  requests: number;
+  sourceChars: number;
+  inputTokens: number;
+  outputTokens: number;
+  price: { input: number; output: number; perMillionInput: number; perMillionOutput: number } | null;
+  cost: { low: number; high: number } | null;
+};
+
+export type BackendWarning = { code: string; file?: string; count?: number; message?: string; compression?: number[] };
+
+export type ScanResult = {
+  status: string;
+  candidateCount: number;
+  occurrenceCount?: number;
+  kinds?: Record<string, number>;
+  providerRequests: number;
+  fingerprint: string;
+  scanPlanId: string;
+  dryRun: boolean;
+  writeBlockers?: string[];
+  errors?: { scope?: string; message?: string }[];
+  warnings?: BackendWarning[];
+  requestEstimate?: number;
+  estimate?: Estimate;
+  coverage?: CoverageItem[];
+  candidates?: Candidate[];
+};
+
+export type CandidatePage = {
+  candidates: Candidate[];
+  offset: number;
+  total: number;
+  hasMore: boolean;
+  kinds: Record<string, number>;
+};
+
+export type CandidateQuery = {
+  scanPlanId: string;
+  offset: number;
+  limit: number;
+  query?: string;
+  kind?: string;
+  state?: 'all' | 'included' | 'excluded' | 'manual';
+  sort?: 'order' | 'source' | 'count' | 'kind';
+  excludedCandidateIds?: string[];
+  overrideCandidateIds?: string[];
+};
+
+export type TranslationStats = { unique: number; translated: number; failed: number; kept_original: number; unchanged: number };
+
+export type TranslationResult = {
+  status: 'completed' | 'partial' | 'needs_retry' | 'failed' | 'cancelled' | 'locked' | 'invalidated' | 'unsupported' | string;
+  candidateCount: number;
+  changedFileCount: number;
+  providerRequests?: number;
+  backupSetId?: string;
+  errors?: { scope?: string; code?: string; message?: string; file?: string }[];
+  warnings?: BackendWarning[];
+  translation?: Partial<TranslationStats>;
+  translationFailures?: { source: string; reason: string }[];
+  translationSamples?: { source: string; translated: string }[];
+  keptOriginalSamples?: string[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number; cost_reported?: boolean };
+};
+
+export type ResumeStatus = {
+  available: boolean;
+  scanPlanId?: string;
+  fingerprint?: string;
+  candidateCount?: number;
+  candidates?: Candidate[];
+  excludedCandidateIds?: string[];
+  candidateOverrides?: Record<string, string>;
+  savedAt?: number;
+  status?: string;
+  translatedCount?: number;
+  reason?: string;
+  backupSetId?: string;
+};
+
+export type BootstrapPayload = {
+  notices: Notices;
+  settings: Settings;
+  apiKeyStored: boolean;
+  worlds: RecentWorld[];
+  worldInspection: WorldInspection | null;
+  backups: BackupSummary[];
+  resume: ResumeStatus;
+};
+
+export type ModelInfo = {
+  id: string;
+  display_name?: string;
+  pricing_prompt?: string;
+  pricing_completion?: string;
+  context_length?: number;
+};
+
+export type ProgressEvent = {
+  event: string;
+  phase?: 'collect' | 'translate' | 'write';
+  index?: number;
+  total?: number;
+  total_files?: number;
+  completed?: number;
+  failed?: number;
+  batch?: number;
+  batches?: number;
+  requests?: number;
+  requests_estimate?: number;
+  attempt?: number;
+  max_attempts?: number;
+  code?: string;
+  status?: string | number;
+  message?: string;
+  file?: string;
+  candidate_text_count?: number;
+};
+
+export class BackendError extends Error {
+  code: string;
+  constructor(message: string, code = '') {
+    super(message);
+    this.name = 'BackendError';
+    this.code = code;
+  }
+}
+
+type BackendResponse<T> = {
+  v: number;
+  id: string;
+  type: 'response.ok' | 'response.error';
+  payload?: T;
+  error?: { code?: string; message?: string; details?: unknown };
+};
+
+let serial = 0;
+
+export async function callBackend<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+  serial += 1;
+  const id = `ui-${Date.now()}-${serial}`;
+  let response: BackendResponse<T>;
+  try {
+    response = await invoke<BackendResponse<T>>('sidecar_request', { request: { v: 1, id, type, payload } });
+  } catch (cause) {
+    // Rust refuses a second request while one runs, and reports its own transport problems as text.
+    const text = cause instanceof Error ? cause.message : String(cause);
+    throw new BackendError(text, /still running/i.test(text) ? 'BUSY' : 'TRANSPORT');
+  }
+  if (response.id !== id) throw new BackendError('The translation core answered a different request.', 'TRANSPORT');
+  if (response.type === 'response.error') {
+    throw new BackendError(response.error?.message || response.error?.code || 'Translation core error', response.error?.code || '');
+  }
+  if (response.type !== 'response.ok' || !response.payload) {
+    throw new BackendError('The translation core response was incomplete.', 'TRANSPORT');
+  }
+  return response.payload;
+}
+
+export async function cancelBackend(): Promise<boolean> {
+  return invoke<boolean>('cancel_active');
+}
+
+export async function credentialStored(provider: string): Promise<boolean> {
+  return invoke<boolean>('credential_status', { provider });
+}
+
+export async function operationActive(): Promise<boolean> {
+  return invoke<boolean>('operation_active');
+}
+
+type Unsubscribe = () => void;
+
+/** Progress lines from a running scan or translation. */
+export async function onProgress(handler: (event: ProgressEvent) => void): Promise<Unsubscribe> {
+  return listen<{ payload?: ProgressEvent }>('pomi-progress', ({ payload }) => {
+    if (payload?.payload) handler(payload.payload);
+  });
+}
+
+/** Sent by the shell when the window's close button is pressed during an operation. */
+export async function onCloseBlocked(handler: () => void): Promise<Unsubscribe> {
+  return listen('pomi-close-blocked', () => handler());
+}
