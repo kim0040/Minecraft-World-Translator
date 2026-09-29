@@ -139,6 +139,33 @@ def main() -> None:
                     {"v": 1, "id": "remember", "type": "worlds.remember", "payload": {"worldDir": str(world)}},
                 )
                 assert remembered["payload"]["worlds"][0]["path"] == str(world.resolve())
+                exchange(
+                    proc,
+                    {
+                        "v": 1,
+                        "id": "bootstrap-settings",
+                        "type": "settings.set",
+                        "payload": {
+                            "worldDir": str(world),
+                            "provider": "openai",
+                            "model": "fixture",
+                            "credentialOwner": "rust",
+                        },
+                    },
+                )
+                bootstrap = exchange(
+                    proc,
+                    {"v": 1, "id": "bootstrap", "type": "app.bootstrap", "payload": {"credentialOwner": "rust"}},
+                )
+                assert bootstrap["payload"]["settings"]["last_world_dir"] == str(world)
+                assert bootstrap["payload"]["worlds"][0]["path"] == str(world.resolve())
+                assert bootstrap["payload"]["worldInspection"]["validJavaWorld"] is True
+                assert bootstrap["payload"]["worldInspection"]["dataVersions"] == [
+                    {"world": "world", "dataVersion": 4189}
+                ]
+                assert bootstrap["payload"]["backups"] == []
+                assert bootstrap["payload"]["resume"]["available"] is False
+                assert bootstrap["payload"]["notices"]["firstLaunch"]
                 inspected = exchange(
                     proc,
                     {"v": 1, "id": "inspect", "type": "world.inspect", "payload": {"worldDir": str(world)}},

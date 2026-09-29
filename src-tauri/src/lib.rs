@@ -13,6 +13,7 @@ struct ActiveProcess {
 struct ActiveSidecar(Mutex<Option<ActiveProcess>>);
 
 const ALLOWED_REQUESTS: &[&str] = &[
+    "app.bootstrap",
     "notices.get",
     "settings.get",
     "settings.set",
@@ -50,6 +51,14 @@ fn delete_key(provider: &str) -> Result<(), String> {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(_) => Err("Could not delete the API key from the OS credential store".into()),
     }
+}
+
+#[tauri::command]
+fn credential_status(provider: String) -> Result<bool, String> {
+    if provider.is_empty() {
+        return Ok(false);
+    }
+    Ok(read_key(&provider)?.is_some())
 }
 
 #[tauri::command]
@@ -93,7 +102,7 @@ async fn sidecar_request(
             "payload": {"provider": provider, "deleted": true, "apiKeyStored": false}
         }));
     }
-    if matches!(kind.as_str(), "settings.get" | "settings.set" | "models.list" | "translate.start" | "translate.resume") {
+    if matches!(kind.as_str(), "app.bootstrap" | "settings.get" | "settings.set" | "models.list" | "translate.start" | "translate.resume") {
         if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
             payload.insert("credentialOwner".into(), Value::String("rust".into()));
         }
@@ -260,7 +269,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(ActiveSidecar::default())
-        .invoke_handler(tauri::generate_handler![sidecar_request, cancel_active])
+        .invoke_handler(tauri::generate_handler![sidecar_request, cancel_active, credential_status])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let active = window.state::<ActiveSidecar>();

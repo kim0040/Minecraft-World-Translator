@@ -24,6 +24,7 @@ export type Settings = {
   tpm_limit?: number;
   max_batch_retries?: number;
   resource_pack_enabled?: boolean;
+  ui_language?: 'ko' | 'en' | 'ja';
   last_world_dir: string;
 };
 
@@ -92,4 +93,8 @@ export async function callBackend<T>(type: string, payload: Record<string, unkno
 
 export async function cancelBackend(): Promise<boolean> {
   return invoke<boolean>('cancel_active');
+}
+
+export async function credentialStored(provider: string): Promise<boolean> {
+  return invoke<boolean>('credential_status', { provider });
 }

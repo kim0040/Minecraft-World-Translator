@@ -347,6 +347,7 @@ def test_desktop_settings(tmp: Path) -> None:
                     "tpmLimit": 5000,
                     "maxBatchRetries": 4,
                     "resourcePackEnabled": True,
+                    "uiLanguage": "ja",
                     "apiKey": secret,
                 },
             },
@@ -380,6 +381,7 @@ def test_desktop_settings(tmp: Path) -> None:
     assert saved["tpm_limit"] == 5000
     assert saved["max_batch_retries"] == 4
     assert saved["resource_pack_enabled"] is True
+    assert saved["ui_language"] == "ja"
     assert secret not in json.dumps(saved)
     assert load_api_key("custom") == secret
     rust_owned = json.loads(captured[-1])

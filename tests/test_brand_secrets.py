@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -97,7 +98,25 @@ def test_secrets_stay_out_of_settings_and_logs() -> None:
     print("secret absent from settings dump and log")
 
 
+def test_desktop_locale_catalogs_cover_visible_keys() -> None:
+    app = (ROOT / "src" / "App.svelte").read_text(encoding="utf-8")
+    catalog = (ROOT / "src" / "lib" / "i18n.ts").read_text(encoding="utf-8")
+    used = set(re.findall(r"\bt\('([^']+)'", app))
+    english = catalog.split("const en:", 1)[1].split("};", 1)[0]
+    japanese = catalog.split("const ja:", 1)[1].split("};", 1)[0]
+    pattern = r"'([^']+)'\s*:"
+    english_keys = set(re.findall(pattern, english))
+    japanese_keys = set(re.findall(pattern, japanese))
+    assert used.issubset(english_keys)
+    assert english_keys == japanese_keys
+    assert "ui_language" not in (ROOT / "mwt" / "desktop_entry.py").read_text(encoding="utf-8").split(
+        "def _settings_fingerprint", 1
+    )[1].split("def _scan_plan_id", 1)[0]
+    print("desktop locale catalogs cover visible keys")
+
+
 if __name__ == "__main__":
     test_surfaces()
     test_secrets_stay_out_of_settings_and_logs()
+    test_desktop_locale_catalogs_cover_visible_keys()
     print("BRAND_SECRETS_PASSED")

@@ -79,7 +79,7 @@ def _level_data_version(level_path: Path) -> int | None:
         return None
 
 
-def _world_inspection(world: Path) -> dict:
+def _world_inspection(world: Path, *, recursive_blockers: bool = True) -> dict:
     import os
 
     from mwt.layout import detect_write_blockers, discover_region_dirs
@@ -97,7 +97,7 @@ def _world_inspection(world: Path) -> dict:
         )
     except OSError:
         return {"validJavaWorld": False, "kind": "unknown", "writeBlockers": ["not_readable"]}
-    blockers = detect_write_blockers(root)
+    blockers = detect_write_blockers(root, recursive=recursive_blockers)
     if world_is_in_use(root):
         blockers.append("world_in_use")
     if not os.access(root, os.R_OK | os.W_OK):
@@ -169,8 +169,7 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
     if not jobs_dir.is_dir():
         return {}
     current_settings = _settings_fingerprint(data_dir)
-    current_world = world_fingerprint(resolved_world)
-    candidates: list[dict] = []
+    preliminary: list[tuple[dict, dict, dict, dict]] = []
     for path in jobs_dir.glob("*.checkpoint.json"):
         try:
             checkpoint = json.loads(path.read_text(encoding="utf-8"))
@@ -182,11 +181,23 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
                 checkpoint.get("version") != 2
                 or report.get("status") != "cancelled"
                 or Path(str(checkpoint.get("world_dir") or "")).expanduser().resolve() != resolved_world
-                or checkpoint.get("world_fingerprint") != current_world
                 or plan.get("settingsFingerprint") != current_settings
                 or plan.get("worldFingerprint") != resume.get("expected_world_fingerprint")
             ):
                 continue
+            preliminary.append((checkpoint, resume, report, plan))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    if not preliminary:
+        return {}
+
+    current_world = world_fingerprint(resolved_world)
+    candidates: list[dict] = []
+    for checkpoint, resume, report, plan in preliminary:
+        try:
+            if checkpoint.get("world_fingerprint") != current_world:
+                continue
+            scan_plan_id = str(resume.get("scan_plan_id") or "")
             plan_candidates = [item for item in plan.get("candidates", []) if isinstance(item, dict)]
             id_by_source = {str(item.get("source")): str(item.get("id")) for item in plan_candidates}
             candidate_overrides = {
@@ -360,11 +371,43 @@ def _settings_payload(data_dir: Path, provider: str = "", *, check_keyring: bool
     }
 
 
+def _bootstrap_payload(data_dir: Path, requested_world: str = "", *, check_keyring: bool = True) -> dict:
+    from mwt.userdata import list_recent_worlds
+
+    settings = _settings_payload(data_dir, check_keyring=check_keyring)
+    selected = str(requested_world or settings["settings"].get("last_world_dir") or "")
+    world = Path(selected).expanduser() if selected else None
+    inspection = _world_inspection(world, recursive_blockers=False) if world else None
+    valid_world = bool(world and inspection and inspection.get("validJavaWorld"))
+    return {
+        "notices": payload(),
+        **settings,
+        "worlds": list_recent_worlds(data_dir),
+        "worldInspection": inspection,
+        "backups": list_backup_sets(world) if valid_world else [],
+        "resume": (_resume_candidate(data_dir, world) or {"available": False}) if valid_world else {"available": False},
+    }
+
+
 def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | None = None) -> None:
     kind = message.get("type")
     request_id = message.get("id", "")
     body = message.get("payload") or {}
     world = Path(body.get("worldDir", "")).expanduser()
+    if kind == "app.bootstrap":
+        emit(
+            {
+                "v": 1,
+                "id": request_id,
+                "type": "response.ok",
+                "payload": _bootstrap_payload(
+                    data_dir,
+                    str(body.get("worldDir") or ""),
+                    check_keyring=body.get("credentialOwner") != "rust",
+                ),
+            }
+        )
+        return
     if kind == "notices.get":
         emit({"v": 1, "id": request_id, "type": "response.ok", "payload": payload()})
         return
@@ -382,6 +425,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         return
     if kind == "settings.set":
         from mc_world_translator import DEFAULT_CONFIG, remember_run_settings
+        from mwt.userdata import remember_user_settings
 
         saved = _saved(data_dir)
         provider = str(body.get("provider") or saved.get("provider") or "openai")
@@ -444,6 +488,10 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         }
         supplied_key = str(body.get("apiKey") or "")
         remember_run_settings(config, data_dir, supplied_key or None)
+        ui_language = str(body.get("uiLanguage") or saved.get("ui_language") or "ko")
+        if ui_language not in {"ko", "en", "ja"}:
+            raise ValueError("Unsupported interface language")
+        remember_user_settings({"ui_language": ui_language}, data_dir)
         emit(
             {
                 "v": 1,

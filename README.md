@@ -110,7 +110,7 @@ Every write run creates a versioned backup set. Restoring puts back every file t
 
 ## Desktop app
 
-The desktop app uses Tauri 2 and Svelte 5. It provides recent-world selection, DataVersion information, structure-based compatibility status, Scan Only, candidate search and filters, exclusions, manual translations, provider and rate-limit settings, world-local `resources.zip` translation, progress and cooperative cancel, explicit resume of matching cancelled jobs, versioned backup history, and recovery-safe restore. It does not open a localhost port. Resume is offered only when the current world fingerprint, scan plan, translation settings, and verified backup set still match.
+The desktop app uses Tauri 2 and Svelte 5. It provides Korean, English, and Japanese interface languages, recent-world selection, DataVersion information, structure-based compatibility status, Scan Only, candidate search and filters, exclusions, manual translations, provider and rate-limit settings, world-local `resources.zip` translation, progress and cooperative cancel, explicit resume of matching cancelled jobs, versioned backup history, and recovery-safe restore. Interface language is separate from the translation target language. It does not open a localhost port. Resume is offered only when the current world fingerprint, scan plan, translation settings, and verified backup set still match.
 
 Build the native app from source:
 

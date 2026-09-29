@@ -55,7 +55,7 @@ def discover_region_dirs(world_dir: Path) -> list[str]:
     return found
 
 
-def detect_write_blockers(world_dir: Path) -> list[str]:
+def detect_write_blockers(world_dir: Path, *, recursive: bool = True) -> list[str]:
     root = world_dir.resolve()
     reasons: list[str] = []
     database = root / "db"
@@ -67,6 +67,8 @@ def detect_write_blockers(world_dir: Path) -> list[str]:
         if header != b"\x1f\x8b" and database.is_dir():
             if "bedrock" not in reasons:
                 reasons.append("bedrock")
+    if not recursive:
+        return reasons
     for path in root.rglob("*"):
         if not path.is_file():
             continue
