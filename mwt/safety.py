@@ -264,7 +264,7 @@ def list_backup_sets(world_dir: Path, stores: list[Path] | None = None) -> list[
                     "verified": data.get("verified") is True,
                     "kind": "recovery" if backup_id.endswith("-recovery") else "translation",
                     "sizeBytes": sum(int(item.get("size", 0)) for item in files if str(item.get("size", "")).isdigit()),
-                    "inWorldFolder": store == legacy_backup_store(world_dir),
+                    "inWorldFolder": store.resolve() == legacy_backup_store(world_dir),
                 })
             except (OSError, ValueError, TypeError):
                 continue
