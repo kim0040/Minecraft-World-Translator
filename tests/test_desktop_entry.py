@@ -433,7 +433,9 @@ def main() -> None:
                     proc,
                     {"v": 1, "id": "inspect-pack", "type": "world.inspect", "payload": {"worldDir": str(world)}},
                 )
-                assert inspected_with_pack["payload"]["resourcePacks"] == [str(resource_pack)]
+                assert [str(Path(item).resolve()) for item in inspected_with_pack["payload"]["resourcePacks"]] == [
+                    str(resource_pack.resolve())
+                ]
                 exchange(
                     proc,
                     {
