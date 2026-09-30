@@ -107,7 +107,7 @@ Settings는 저장 방식·저장 여부·변경·삭제를 표시한다. 저장
 - 플랫폼별 permission, 권한 실패 시 fail closed, symlink 거부.
 - startup·Settings 조회·일반 저장·scan에서 키체인 호출 0회. opt-in migration/keychain 모드만 접근.
 - 공개 provider에 숨은 Custom endpoint나 POMI_* 환경변수가 있어도 UI가 선택한 credential을 잘못된 host로 전송하지 않음. CLI의 의도된 환경변수 override 계약과 구분.
-- Rust vault unit tests → frontend/Python contract → 실제 Tauri 재시작·모드 전환 E2E.
+- Rust vault unit tests → browser fixture의 mode/migration/error UX → frontend/Python contract → 마지막 Tauri 재시작·permission·모드 전환 E2E. 실제 credential 보호를 browser mock PASS로 대신하지 않으며, UX 수정마다 app bundle을 만들지 않는다. [웹 우선 절차](browser-first-testing-plan.md)를 따른다.
 - paid API는 모든 로컬 검증 후 최소 1건. 남은 전체 예산 상한 $1 유지.
 
 새 저장 모드를 구현했다고 Phase 2 전체를 자동 완료 처리하지 않는다. 전체 gate는 인계 문서를 따른다.

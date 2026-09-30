@@ -32,6 +32,12 @@
 - 스캔하는 곳: 각 차원의 `region`, `entities`, 켜 둔 경우 월드 안 `resources.zip`.
 - 스캔하지 않는 곳: 데이터팩, `data/*.dat`(command storage, scoreboard), `level.dat`, 플레이어 데이터. 외부 리소스팩 선택/merge는 현재 desktop UI에서 제공하지 않는다. backend/CLI 기능과 desktop parity를 구분한다.
 
+## 새 검증 절차 — 미완
+
+[웹 우선 검증 계획](browser-first-testing-plan.md)에 따라 같은 제품 Svelte UI를 Vite/test fixture로 먼저 검사한다. UI/기능·반응형 수정마다 앱을 패키지하지 않고 실제 Python/JSONL 계약을 선검증한 뒤 마지막에 Tauri/native E2E를 수행한다. 현재 fixture injection은 있지만 모든 기능이 순수 browser에 연결된 상태나 새 matrix 검증 완료를 뜻하지 않는다.
+
+고정 비율 없이 width/height/zoom 변화, ultrawide·세로형·짧은 높이·320px·연속 resize를 처리하고 editor/action/detail 접근과 상태/focus를 유지하는 것이 새 완료 기준이다.
+
 ## 이전 검증 기록
 
 이전 세션에서 frontend/Python/Rust/build, 대표 screenshot·responsive·dark·keyboard, 실제 Tauri local mock 번역/복원과 117파일 byte-identical 복원을 기록했다. 실제 provider라고 생각한 후속 실행은 stale localhost endpoint를 호출했으므로 mock 검증으로만 인정한다. endpoint 수정 코드는 있지만 최종 실제 provider gate는 남았다. 이번 문서 작업은 이 결과를 재실행하지 않았고 새 HEAD의 완료 증거로 단정하지 않는다. 상세 결과·한계·산출물은 인계 문서에 있다.

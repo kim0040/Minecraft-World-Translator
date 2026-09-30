@@ -7,7 +7,7 @@
 
 1. 프로젝트 루트 `AGENTS.md` 및 사용자 최신 지시.
 2. 이 인계 문서.
-3. [credential 저장 변경 계획](credential-storage-plan.md).
+3. [credential 저장 변경 계획](credential-storage-plan.md)과 [웹 우선 검증·화면 비율 대응 계획](browser-first-testing-plan.md).
 4. [개정된 구현 계획](PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md). 프로젝트 루트에도 원본이 있으며, 이 저장소의 사본만으로 원격 인계 가능하다.
 5. [현재 코드 상태](current-state.md), [남은 작업](remaining-work.md), [fixture 지원 표](support-matrix.md).
 
@@ -118,10 +118,12 @@ shots: <repo>/output/playwright/ (ignored)
 
 ## 6. 다음 실행 순서 — Phase 2 우선
 
+최신 사용자 요청: **앱 bundle 이전에 같은 Svelte UI를 웹으로 최대한 검증하고, Tauri 빌드/패키지 E2E는 최후 gate로 남긴다.** 고정 aspect ratio에 의존하지 않고 좁은/넓은/낮은/세로형 창과 resize/zoom을 처리한다. 상세 실행 계약과 현재 browser harness의 한계는 [웹 우선 검증 계획](browser-first-testing-plan.md)을 따른다.
+
 ### 2-A. 기준선·빌드·실제 상태 복구
 
 - Git/WIP 조사, 문서와 소스 불일치 기록.
-- package scripts 기준 `pnpm check`, `pnpm test:frontend`, `pnpm build`.
+- package scripts 기준 `pnpm check`, `pnpm test:frontend`부터 실행. Vite + test-only fixture로 웹 UI/기능을 먼저 복구하고, `pnpm build`로 frontend production compile을 확인한다. sidecar packaging/Tauri .app은 이 단계에서 반복하지 않는다.
 - 오류가 나면 기존 화면 구조를 유지하며 수정. Svelte rune/import/prop/i18n/backend type/browser API 확인.
 - 원본 sample을 복사하고 테스트 copy에 hash snapshot 생성.
 
@@ -159,9 +161,11 @@ shots: <repo>/output/playwright/ (ignored)
 
 ### 2-E. 최종 Phase 2 gate
 
+실행 순서는 정적/unit → browser fixture UI/기능 → 실제 Python/JSONL → frontend build → 마지막 sidecar packaging/Tauri/native E2E다. 아래 항목이 나열된 순서 때문에 초기에 앱을 반복 빌드하지 않는다. native 전용 기능의 성공을 browser mock으로 대신하지 않는다.
+
 - 아래 frontend/Python/Rust/build 모두 성공.
 - 모든 페이지, 실제 backend 연결, dark/system/light.
-- 1440×900, 1180×800, 1024×768, 840×620, 최소 320px 접근 가능.
+- 1440×900, 1180×800, 1024×768, 840×620, 최소 320px 접근 가능. 16:9/ultrawide/세로형/짧은 높이와 breakpoint 전후·연속 resize도 웹 우선 matrix로 검증한다. viewport/height/zoom 변화에도 선택·draft·focus와 action 접근을 보존한다.
 - 200% zoom: footer/dialog/detail/버튼 접근, overlap/clipping 없음. effective CSS viewport만 검사했다면 그 방법을 명시.
 - keyboard 전체 workflow, focus visible/trap/restore/ESC/tab/labels/live/progress/reduced motion.
 - 14 screenshot: 01-world-empty, 02-world-selected, 03-scan-running, 04-scan-complete, 05-review, 06-review-selected, 07-run-confirm, 08-run-progress, 09-result-success, 10-result-failed, 11-backups, 12-settings, 13-about, 14-dark-review. 실제 렌더링 확인.
@@ -215,6 +219,8 @@ shots: <repo>/output/playwright/ (ignored)
 - Phase 3: 구현→테스트→실제 확인→docs→diff review→commit→push. cross-platform 최종 gate를 생략하지 않음.
 
 ## 8. 검증 명령과 비용·데이터 경계
+
+아래는 전체 gate의 명령 목록이며 매 UI 수정마다 전부 실행하는 pipeline이 아니다. 웹 검증에는 `pnpm dev`와 fixture injection/유지되는 browser suite를 사용한다. browser 자동화 script가 없으면 먼저 추가하고 정확한 실행 명령을 문서화한다. `sidecar:build`와 Tauri bundle 명령은 웹/코어 검증 후 마지막에 수행한다.
 
 제품 저장소의 Python 3.12 `.venv`를 사용한다. 설치 상태와 package scripts는 실행 전 확인한다.
 
@@ -282,5 +288,6 @@ PomiTranslate 작업을 이어서 진행해줘.
 기존 Phase 2 화면과 Phase 0/1 core를 보존하고, 새 로컬 암호화 credential 저장 계획을 포함해 Phase 2를 검증까지 완료해줘.
 완료 gate를 통과한 뒤 docs/diff review → Phase 2 commit/push → Phase 3 구현/검증/docs/commit/push 순서로 진행해줘.
 인계의 이전 검증 기록을 현 HEAD 결과로 단정하지 말고, paid API 총 추가 $1 상한·copy world만 write·secret 비노출·서명/public release 별도 승인 경계를 지켜줘.
+웹 fixture와 실제 Python/JSONL로 UIUX·기능을 최대한 먼저 검사하고 앱 bundle/Tauri E2E는 최후 gate로 남겨줘. 화면 비율·짧은 높이·ultrawide·세로형·연속 resize·200%에서도 사용 가능하게 해줘. 상세는 docs/browser-first-testing-plan.md를 따라줘.
 누락 기능/외부 검증이 있으면 완료라고 하지 말고 구체적인 remaining gate와 증거를 보고해줘.
 ```

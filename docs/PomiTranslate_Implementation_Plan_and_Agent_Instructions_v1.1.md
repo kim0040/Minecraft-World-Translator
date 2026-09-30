@@ -35,6 +35,14 @@ DB와 키 파일 모두에 접근할 수 있는 같은 사용자 프로세스는
 
 ---
 
+## 2026-09-30 추가 개정 — 웹 선검증과 화면 비율 대응
+
+최신 사용자 요청에 따라 같은 제품 Svelte 화면의 UI/UX·가능한 기능을 **브라우저에서 먼저 검증**한다. 정적/unit → 웹 fixture → 실제 Python/JSONL → frontend production build → 마지막 Tauri/native/패키지 E2E 순서다. 반복적인 UI 조정마다 sidecar/.app/installer를 다시 만들지 않는다. native credential/file chooser/패키징/실제 restore의 최종 검증은 유지한다.
+
+화면은 width와 height에 유동적으로 대응해야 한다. 기존 viewport와 320px/200%에 더해 16:9, ultrawide, 세로형, 짧은 높이, breakpoint 전후 및 연속 resize에서 clipping/overlap 없는 접근·작업 완료, 선택/draft/focus 보존을 검증한다. 브라우저 mock 성공과 실제 backend/native 성공은 별도 증거로 보고한다.
+
+현재 browser fixture를 유지·보강하고, 개발 bridge는 필요할 때만 production과 분리해 구현한다. [상세 browser 실행·반응형 계약](browser-first-testing-plan.md)이 후속 인계와 기존 장기 milestone의 검사 순서보다 우선한다. 이번 개정은 문서 계획이며 새 browser suite나 반응형 검증이 완료됐다는 뜻이 아니다.
+
 # 제품명 및 공식 표기
 
 ## PomiTranslate 🐾

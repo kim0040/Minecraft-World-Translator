@@ -6,16 +6,18 @@
 
 ## Phase 2 — 구현 존재, 완료 gate 미통과
 
+검증 순서: **웹 fixture UI/기능 → 실제 Python/JSONL 코어 → frontend build → 마지막 Tauri/native E2E**. 반복 UI 수정을 위해 앱을 매번 빌드하지 않는다. 상세: [웹 우선 검증·유동 화면 계획](browser-first-testing-plan.md).
+
 - [ ] Rust 로컬 encrypted credential DB + 설치별 master key + 플랫폼 permission.
 - [ ] local 기본 / session-only / opt-in keychain, 기존 키 가져오기·rollback, CLI 호환.
 - [ ] keychain 상태 확인을 실제 secret read에서 metadata 조회로 변경.
 - [ ] public provider/Custom endpoint 최종 Rust boundary 및 POMI_* 환경변수의 UI 설정 덮어쓰기 차단/계약 회귀.
 - [ ] restore 후 result step이 남는 state/화면 문제 해결.
-- [ ] 모든 페이지 기능·i18n·theme·responsive·keyboard 최종 확인.
+- [ ] 같은 제품 Svelte UI의 browser harness/Playwright 유지, 모든 페이지 기능·i18n·theme·responsive·keyboard 선검증.
 - [ ] candidate 10k/100k 실제 virtual DOM·memory·latency. virtual range unit test와 구분.
 - [ ] legacy Web UI 기능 parity 표와 gap 해소. 확인 전 삭제 금지.
 - [ ] frontend/Python/Rust/sidecar/Tauri build 전체 gate.
-- [ ] 14 screenshot inspection, 1440/1180/1024/840/320, 200%, dark.
+- [ ] 14 screenshot inspection, 1440/1180/1024/840/320, 200%, dark. 16:9/ultrawide/세로형/짧은 창/연속 resize에서 layout·draft·focus·action 접근 유지.
 - [ ] 실제 Tauri workflow, 최소 실제 provider 호출·usage/비용, backup/restore byte-identical.
 - [ ] 문서/diff review 후 Phase 2 완료 commit → push.
 
