@@ -1,0 +1,479 @@
+mod keychain_transaction;
+mod private_fs;
+
+use ring::{
+    aead::{self, Aad, LessSafeKey, Nonce, UnboundKey},
+    rand::{SecureRandom, SystemRandom},
+};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
+use zeroize::Zeroizing;
+
+pub const PROVIDERS: &[&str] = &[
+    "openai",
+    "gemini",
+    "anthropic",
+    "openrouter",
+    "comet",
+    "custom",
+];
+const SCHEMA: i64 = 1;
+const KEYRING_SERVICE: &str = "PomiTranslate";
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    #[default]
+    Local,
+    Session,
+    Keychain,
+}
+impl Mode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Session => "session",
+            Self::Keychain => "keychain",
+        }
+    }
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "local" => Ok(Self::Local),
+            "session" => Ok(Self::Session),
+            "keychain" => Ok(Self::Keychain),
+            _ => Err("Unknown credential storage mode".into()),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Status {
+    pub mode: Mode,
+    pub stored: bool,
+}
+
+#[derive(Debug)]
+pub struct SaveError {
+    pub message: String,
+    pub uncertain: bool,
+}
+impl From<String> for SaveError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            uncertain: false,
+        }
+    }
+}
+impl From<&str> for SaveError {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+
+pub fn validate_provider(provider: &str) -> Result<(), String> {
+    if PROVIDERS.contains(&provider) {
+        Ok(())
+    } else {
+        Err("Unsupported credential provider".into())
+    }
+}
+
+#[derive(Default)]
+pub struct Credentials {
+    sessions: Mutex<HashMap<String, Zeroizing<String>>>,
+}
+
+struct Vault {
+    root: PathBuf,
+    key_dir: PathBuf,
+    db: PathBuf,
+}
+impl Vault {
+    fn new(root: &Path) -> Self {
+        Self {
+            root: root.join("credentials"),
+            key_dir: root.join("credential-key"),
+            db: root.join("credentials/credentials.sqlite"),
+        }
+    }
+    fn connection(&self, create: bool) -> Result<Option<(Connection, private_fs::Lock)>, String> {
+        if !self
+            .root
+            .try_exists()
+            .map_err(|_| "Cannot inspect credential storage")?
+            && !create
+        {
+            return Ok(None);
+        }
+        private_fs::directory(&self.root)?;
+        let lock = private_fs::Lock::acquire(&self.root.join("vault.lock"))?;
+        let exists = self
+            .db
+            .try_exists()
+            .map_err(|_| "Cannot inspect credential database")?;
+        if !exists && !create {
+            return Ok(None);
+        }
+        if exists {
+            private_fs::check(&self.db, false)?;
+        } else {
+            private_fs::open(&self.db, true)?;
+        }
+        for suffix in ["-journal", "-wal", "-shm"] {
+            let path = PathBuf::from(format!("{}{suffix}", self.db.display()));
+            if path
+                .try_exists()
+                .map_err(|_| "Cannot inspect credential journal")?
+            {
+                private_fs::check(&path, false)?;
+            }
+        }
+        let conn = Connection::open(&self.db).map_err(|_| "Cannot open credential database")?;
+        conn.pragma_update(None, "journal_mode", "DELETE")
+            .map_err(|_| "Cannot configure credential database")?;
+        conn.pragma_update(None, "secure_delete", "ON")
+            .map_err(|_| "Cannot configure credential database")?;
+        if !exists {
+            conn.execute_batch("BEGIN IMMEDIATE; CREATE TABLE vault_meta (schema_version INTEGER NOT NULL); INSERT INTO vault_meta VALUES (1); CREATE TABLE accounts (provider TEXT PRIMARY KEY, mode TEXT NOT NULL, known_keychain INTEGER NOT NULL DEFAULT 0); CREATE TABLE credentials (provider TEXT PRIMARY KEY, cipher_version INTEGER NOT NULL, key_id BLOB NOT NULL, nonce BLOB NOT NULL, ciphertext BLOB NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())); COMMIT;").map_err(|_| "Cannot initialize credential database")?;
+        }
+        let schema: i64 = conn
+            .query_row("SELECT schema_version FROM vault_meta", [], |row| {
+                row.get(0)
+            })
+            .map_err(|_| "Credential database schema is invalid")?;
+        if schema != SCHEMA {
+            return Err("Unsupported credential database version".into());
+        }
+        Ok(Some((conn, lock)))
+    }
+    fn master(&self, conn: &Connection, create: bool) -> Result<Zeroizing<Vec<u8>>, String> {
+        let path = self.key_dir.join("master.key");
+        if !self.key_dir.exists() || !path.exists() {
+            let count: i64 = conn
+                .query_row("SELECT count(*) FROM credentials", [], |row| row.get(0))
+                .map_err(|_| "Cannot inspect stored credentials")?;
+            if !create || count > 0 {
+                return Err("Credential master key is missing; re-enter the API key after recovering or clearing the damaged vault".into());
+            }
+            private_fs::directory(&self.key_dir)?;
+            let mut key = Zeroizing::new(vec![0u8; 48]);
+            SystemRandom::new()
+                .fill(&mut key)
+                .map_err(|_| "Secure randomness is unavailable")?;
+            let temporary = self.key_dir.join("master.new");
+            // An interrupted creation must be inspected, not overwritten silently.
+            let mut file = private_fs::open(&temporary, true)?;
+            file.write_all(&key)
+                .and_then(|_| file.sync_all())
+                .map_err(|_| "Cannot save credential master key")?;
+            fs::rename(&temporary, &path).map_err(|_| "Cannot commit credential master key")?;
+        }
+        private_fs::check(&self.key_dir, true)?;
+        let file = private_fs::open(&path, false)?;
+        let mut key = Zeroizing::new(Vec::new());
+        file.take(49)
+            .read_to_end(&mut key)
+            .map_err(|_| "Cannot read credential master key")?;
+        if key.len() != 48 {
+            return Err("Credential master key is invalid".into());
+        }
+        Ok(key)
+    }
+}
+
+fn mode_of(conn: &Connection, provider: &str) -> Result<Mode, String> {
+    let value: Option<String> = conn
+        .query_row(
+            "SELECT mode FROM accounts WHERE provider=?1",
+            [provider],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|_| "Cannot inspect credential mode")?;
+    value.as_deref().map(Mode::parse).unwrap_or(Ok(Mode::Local))
+}
+fn aad(provider: &str, id: &[u8]) -> Vec<u8> {
+    serde_json::to_vec(&("PomiTranslate", SCHEMA, 1, provider, id))
+        .expect("fixed credential metadata")
+}
+fn cipher(key: &[u8]) -> Result<LessSafeKey, String> {
+    UnboundKey::new(&aead::AES_256_GCM, &key[..32])
+        .map(LessSafeKey::new)
+        .map_err(|_| "Cannot initialize credential encryption".into())
+}
+fn decrypt(
+    conn: &Connection,
+    vault: &Vault,
+    provider: &str,
+) -> Result<Option<Zeroizing<String>>, String> {
+    let row: Option<(i64, Vec<u8>, Vec<u8>, Vec<u8>)> = conn
+        .query_row(
+            "SELECT cipher_version,key_id,nonce,ciphertext FROM credentials WHERE provider=?1",
+            [provider],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()
+        .map_err(|_| "Cannot read encrypted credential")?;
+    let Some((version, id, nonce, ciphertext)) = row else {
+        return Ok(None);
+    };
+    let key = vault.master(conn, false)?;
+    if version != 1 || id != key[32..] || nonce.len() != 12 {
+        return Err("Credential metadata or master key does not match".into());
+    }
+    let mut bytes = Zeroizing::new(ciphertext);
+    let plain = cipher(&key)?
+        .open_in_place(
+            Nonce::try_assume_unique_for_key(&nonce).map_err(|_| "Invalid credential nonce")?,
+            Aad::from(aad(provider, &id)),
+            &mut bytes,
+        )
+        .map_err(|_| {
+            "Credential authentication failed; stored data was altered or the master key is wrong"
+        })?;
+    let value = std::str::from_utf8(plain).map_err(|_| "Decrypted credential is invalid")?;
+    Ok(Some(Zeroizing::new(value.to_owned())))
+}
+fn keychain(provider: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, provider)
+        .map_err(|_| "OS credential store is unavailable".into())
+}
+fn read_keychain(provider: &str) -> Result<Option<Zeroizing<String>>, String> {
+    match keychain(provider)?.get_password() {
+        Ok(value) => Ok(Some(Zeroizing::new(value))),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(_) => Err("Could not read the API key from the OS credential store".into()),
+    }
+}
+
+impl Credentials {
+    pub fn status(&self, root: &Path, provider: &str) -> Result<Status, String> {
+        validate_provider(provider)?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "Credential session is unavailable")?;
+        let vault = Vault::new(root);
+        let Some((conn, _lock)) = vault.connection(false)? else {
+            return Ok(Status {
+                mode: Mode::Local,
+                stored: false,
+            });
+        };
+        let mode = mode_of(&conn, provider)?;
+        let stored = match mode {
+            Mode::Local => conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM credentials WHERE provider=?1)",
+                    [provider],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "Cannot inspect credential metadata")?,
+            Mode::Session => sessions.contains_key(provider),
+            Mode::Keychain => conn
+                .query_row(
+                    "SELECT known_keychain FROM accounts WHERE provider=?1",
+                    [provider],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(|_| "Cannot inspect credential metadata")?,
+        };
+        Ok(Status { mode, stored })
+    }
+    pub fn read(&self, root: &Path, provider: &str) -> Result<Option<Zeroizing<String>>, String> {
+        validate_provider(provider)?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "Credential session is unavailable")?;
+        let vault = Vault::new(root);
+        let Some((conn, _lock)) = vault.connection(false)? else {
+            return Ok(None);
+        };
+        match mode_of(&conn, provider)? {
+            Mode::Local => decrypt(&conn, &vault, provider),
+            Mode::Session => Ok(sessions
+                .get(provider)
+                .map(|s| Zeroizing::new(s.to_string()))),
+            Mode::Keychain => read_keychain(provider),
+        }
+    }
+    pub fn save(
+        &self,
+        root: &Path,
+        provider: &str,
+        mode: Mode,
+        supplied: &str,
+    ) -> Result<Status, SaveError> {
+        validate_provider(provider)?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "Credential session is unavailable")?;
+        let vault = Vault::new(root);
+        let (mut conn, _lock) = vault
+            .connection(true)?
+            .ok_or("Cannot initialize credential storage")?;
+        let previous = mode_of(&conn, provider)?;
+        let secret = if !supplied.is_empty() {
+            Some(Zeroizing::new(supplied.to_owned()))
+        } else if previous == mode {
+            None
+        } else {
+            match previous {
+                Mode::Local => decrypt(&conn, &vault, provider)?,
+                Mode::Session => sessions
+                    .get(provider)
+                    .map(|s| Zeroizing::new(s.to_string())),
+                Mode::Keychain => read_keychain(provider)?,
+            }
+        };
+        let tx = conn
+            .transaction()
+            .map_err(|_| "Cannot begin credential transaction")?;
+        // A storage-mode change moves this application's copy. Do not leave a dormant
+        // local key behind that can be reactivated after a session expires or is deleted.
+        // Existing rows from earlier versions also must not substitute for a missing key.
+        if mode != Mode::Local || (previous != mode && secret.is_none()) {
+            tx.execute("DELETE FROM credentials WHERE provider=?1", [provider])
+                .map_err(|_| "Cannot remove previous encrypted credential")?;
+        }
+        if let Some(ref secret) = secret {
+            if mode == Mode::Local {
+                let key = vault.master(&tx, true)?;
+                let mut nonce = [0u8; 12];
+                SystemRandom::new()
+                    .fill(&mut nonce)
+                    .map_err(|_| "Secure randomness is unavailable")?;
+                let mut bytes = Zeroizing::new(secret.as_bytes().to_vec());
+                cipher(&key)?
+                    .seal_in_place_append_tag(
+                        Nonce::assume_unique_for_key(nonce),
+                        Aad::from(aad(provider, &key[32..])),
+                        &mut *bytes,
+                    )
+                    .map_err(|_| "Could not encrypt credential")?;
+                tx.execute("INSERT INTO credentials(provider,cipher_version,key_id,nonce,ciphertext) VALUES (?1,1,?2,?3,?4) ON CONFLICT(provider) DO UPDATE SET cipher_version=1,key_id=excluded.key_id,nonce=excluded.nonce,ciphertext=excluded.ciphertext,updated_at=unixepoch()", params![provider,&key[32..],&nonce[..],&*bytes]).map_err(|_| "Could not store encrypted credential")?;
+                if decrypt(&tx, &vault, provider)?
+                    .as_deref()
+                    .map(|s| s.as_str())
+                    != Some(secret.as_str())
+                {
+                    return Err("Credential verification failed".into());
+                }
+            }
+        }
+        let known = if mode == Mode::Keychain && secret.is_some() {
+            true
+        } else {
+            tx.query_row(
+                "SELECT known_keychain FROM accounts WHERE provider=?1",
+                [provider],
+                |row| row.get::<_, bool>(0),
+            )
+            .optional()
+            .map_err(|_| "Cannot inspect credential metadata")?
+            .unwrap_or(false)
+        };
+        tx.execute("INSERT INTO accounts(provider,mode,known_keychain) VALUES (?1,?2,?3) ON CONFLICT(provider) DO UPDATE SET mode=excluded.mode,known_keychain=excluded.known_keychain", params![provider,mode.label(),known]).map_err(|_| "Cannot save credential mode")?;
+        // Derive the acknowledgement inside this transaction. A second status read after
+        // commit could fail and falsely report that an already committed key was not saved.
+        let stored = match mode {
+            Mode::Local => tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM credentials WHERE provider=?1)",
+                    [provider],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "Cannot inspect credential metadata")?,
+            Mode::Session => secret.is_some() || sessions.contains_key(provider),
+            Mode::Keychain => known,
+        };
+        if mode == Mode::Keychain && secret.is_some() {
+            let entry = keychain(provider)?;
+            let previous_key = read_keychain(provider)?;
+            keychain_transaction::commit(
+                || {
+                    entry
+                        .set_password(secret.as_ref().unwrap())
+                        .map_err(|_| "OS credential write failed".into())
+                },
+                || {
+                    tx.commit()
+                        .map_err(|_| "Credential metadata commit failed".into())
+                },
+                || match previous_key.as_ref() {
+                    Some(previous) => entry
+                        .set_password(previous)
+                        .map_err(|_| "OS credential recovery failed".into()),
+                    None => match entry.delete_credential() {
+                        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                        Err(_) => Err("OS credential recovery failed".into()),
+                    },
+                },
+            )?;
+        } else {
+            tx.commit()
+                .map_err(|_| "Cannot commit credential transaction")?;
+        }
+        if mode == Mode::Session {
+            if let Some(secret) = secret {
+                sessions.insert(provider.to_owned(), secret);
+            }
+        } else {
+            sessions.remove(provider);
+        }
+        Ok(Status { mode, stored })
+    }
+    pub fn import_keychain(&self, root: &Path, provider: &str) -> Result<Status, String> {
+        validate_provider(provider)?;
+        let secret = read_keychain(provider)?
+            .ok_or("No existing API key was found in the OS credential store")?;
+        self.save(root, provider, Mode::Local, &secret)
+            .map_err(|error| error.message)
+    }
+    pub fn delete(&self, root: &Path, provider: &str) -> Result<(), String> {
+        validate_provider(provider)?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "Credential session is unavailable")?;
+        let vault = Vault::new(root);
+        let Some((mut conn, _lock)) = vault.connection(false)? else {
+            return Ok(());
+        };
+        let tx = conn
+            .transaction()
+            .map_err(|_| "Cannot begin credential transaction")?;
+        if mode_of(&tx, provider)? == Mode::Keychain {
+            match keychain(provider)?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => (),
+                Err(_) => return Err("Could not delete keychain credential".into()),
+            }
+            tx.execute(
+                "UPDATE accounts SET known_keychain=0 WHERE provider=?1",
+                [provider],
+            )
+            .map_err(|_| "Cannot update credential metadata")?;
+        }
+        // Purge any local copy, including rows left by an older storage-mode switch.
+        tx.execute("DELETE FROM credentials WHERE provider=?1", [provider])
+            .map_err(|_| "Cannot delete encrypted credential")?;
+        tx.commit()
+            .map_err(|_| "Cannot commit credential deletion")?;
+        sessions.remove(provider);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests;

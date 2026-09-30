@@ -22,7 +22,7 @@
     const key = `world.blocked.${code}` as MessageKey;
     try { return t(key); } catch { return t('world.blocked.unknown'); }
   };
-  const knownBlockers = ['bedrock', 'mcr', 'linear', 'world_in_use', 'not_writable', 'not_readable', 'missing'];
+  const knownBlockers = ['bedrock', 'mcr', 'linear', 'world_in_use', 'not_writable', 'not_readable', 'missing', 'unsafe_path'];
   const name = $derived(app.worldDir ? baseName(app.worldDir) : '');
   const kind = $derived((app.inspection?.kind ?? 'unknown') as 'java_world' | 'server_root' | 'unknown');
 </script>
@@ -111,7 +111,7 @@
               <span class="ico" aria-hidden="true"><Icon name="folder" size={20} /></span>
               <span class="txt">
                 <span class="n">{world.name || baseName(world.path)}</span>
-                <span class="p mono truncate" title={world.path}>{middleEllipsis(world.path, 64)}</span>
+                {#if world.path !== app.worldDir}<span class="p mono truncate" title={world.path}>{middleEllipsis(world.path, 64)}</span>{/if}
               </span>
               <span class="meta">
                 {#if !world.available}<span class="pill pill-warning">{t('world.missing')}</span>

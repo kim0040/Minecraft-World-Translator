@@ -100,11 +100,11 @@ def test_secrets_stay_out_of_settings_and_logs() -> None:
 
 def test_desktop_locale_catalogs_cover_visible_keys() -> None:
     visible_sources = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "src").rglob("*.svelte"))
-    used = set(re.findall(r"\bt\('([^']+)'", visible_sources))
-    pattern = r"'([^']+)'\s*:"
-    korean_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "ko.ts").read_text(encoding="utf-8")))
-    english_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "en.ts").read_text(encoding="utf-8")))
-    japanese_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "ja.ts").read_text(encoding="utf-8")))
+    used = {match[1] for match in re.findall(r"\bt\((['\"])(.*?)\1", visible_sources)}
+    pattern = r"^\s*['\"]([^'\"]+)['\"]\s*:"
+    korean_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "ko.ts").read_text(encoding="utf-8"), re.MULTILINE))
+    english_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "en.ts").read_text(encoding="utf-8"), re.MULTILINE))
+    japanese_keys = set(re.findall(pattern, (ROOT / "src" / "lib" / "i18n" / "ja.ts").read_text(encoding="utf-8"), re.MULTILINE))
     assert used.issubset(korean_keys)
     assert used.issubset(english_keys)
     assert used.issubset(japanese_keys)

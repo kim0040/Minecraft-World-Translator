@@ -5,10 +5,10 @@
   import { describeDetail, describeLocation, formatNumber } from '../lib/format';
   import Icon from './Icon.svelte';
 
-  let { candidate, onClose }: { candidate: Candidate | null; onClose?: () => void } = $props();
+  let { candidate, onClose, showHeading = true }: { candidate: Candidate | null; onClose?: () => void; showHeading?: boolean } = $props();
 
   const included = $derived(candidate ? !app.excluded.has(candidate.id) : false);
-  const manual = $derived(candidate ? app.overrides[candidate.id] ?? '' : '');
+  const manual = $derived(candidate ? app.manualTranslation(candidate) : '');
   const tokens = $derived.by(() => {
     if (!candidate) return [];
     const found = candidate.source.match(/§.|%(?:\d+\$)?[sdif]|\{[A-Za-z0-9_]+\}/g) ?? [];
@@ -25,10 +25,10 @@
       <p>{t('review.detail.empty')}</p>
     </div>
   {:else}
-    <header class="top">
+    {#if showHeading}<header class="top">
       <h2>{t('review.detail.title')}</h2>
       {#if onClose}<button type="button" class="btn btn-quiet btn-icon btn-sm" aria-label={t('review.detail.close')} onclick={onClose}><Icon name="x" size={18} /></button>{/if}
-    </header>
+    </header>{/if}
 
     <section class="block">
       <h3>{t('review.detail.source')}</h3>

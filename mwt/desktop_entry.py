@@ -8,11 +8,22 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 from mwt.extract import CATEGORIES, EXTRACTOR_VERSION
+from mwt.desktop_settings import (
+    DEFAULT_CONTINUE_ON_FILE_ERROR,
+    DEFAULT_MAX_FILE_WRITE_RETRIES,
+    normalize_continue_on_file_error,
+    normalize_max_file_write_retries,
+    normalize_resource_pack_options,
+    normalize_scan_options,
+    normalize_source_overrides,
+)
 from mwt.notices import ABOUT, FIRST_LAUNCH, PRE_TRANSLATE, payload
-from mwt.safety import BackupSet, backup_store, legacy_backup_store, list_backup_sets
+from mwt.safety import BackupSet, ExternalTargetError, backup_store, legacy_backup_store, list_backup_sets
+from mwt.desktop_resource_packs import ExternalPackUnavailable, normalize_external_pack_paths, pack_scope_signature, selected_pack_files
 
 
 # A job stopped by the user, by an outage, or by a provider error keeps its translated strings
@@ -42,6 +53,27 @@ def _settings_fingerprint(data_dir: Path) -> str:
             "resource_pack_enabled",
         )
     }
+    relevant.update(
+        {
+            "source_overrides": normalize_source_overrides(
+                saved.get("source_overrides", {}), field="saved source_overrides"
+            ),
+            "continue_on_file_error": normalize_continue_on_file_error(
+                saved.get("continue_on_file_error", DEFAULT_CONTINUE_ON_FILE_ERROR),
+                field="saved continue_on_file_error",
+            ),
+            "max_file_write_retries": normalize_max_file_write_retries(
+                saved.get("max_file_write_retries", DEFAULT_MAX_FILE_WRITE_RETRIES),
+                field="saved max_file_write_retries",
+            ),
+            "resource_pack_options": normalize_resource_pack_options(
+                saved=saved.get("resource_pack_options")
+            ),
+        }
+    )
+    external_paths = normalize_external_pack_paths(saved.get("external_resource_pack_paths", []))
+    if external_paths:
+        relevant["external_resource_pack_paths"] = external_paths
     encoded = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -50,12 +82,21 @@ def _scan_scope_fingerprint(data_dir: Path) -> str:
     """What decides which texts a scan finds. Provider, model and prompt settings do not, so
     changing them does not throw a reviewed scan away."""
     saved = _saved(data_dir)
+    scan_options = normalize_scan_options(saved=saved.get("scan_options"))
+    resource_pack_options = normalize_resource_pack_options(
+        saved=saved.get("resource_pack_options")
+    )
     relevant = {
-        "target_language": str(saved.get("target_language") or ""),
+        "target_language": str(saved.get("target_language") or "한국어"),
         "resource_pack_enabled": bool(saved.get("resource_pack_enabled")),
+        "resource_pack_options": resource_pack_options,
         "skip_target_language_text": saved.get("skip_target_language_text", True) is not False,
+        "scan_options": scan_options,
         "extractor": EXTRACTOR_VERSION,
     }
+    external_scope = pack_scope_signature(saved)
+    if external_scope:
+        relevant["external_resource_packs"] = external_scope
     encoded = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -111,8 +152,16 @@ def _model_price(saved: dict, data_dir: Path) -> dict | None:
 def _estimate(records: list[dict], saved: dict, data_dir: Path) -> dict:
     """Requests are exact. Tokens and cost are an estimate calibrated on one real run: the cost
     band's upper edge is twice the list price, the ratio that run showed."""
-    count = len(records)
-    chars = sum(len(str(record.get("source") or "")) for record in records)
+    source_overrides = normalize_source_overrides(
+        saved.get("source_overrides", {}), field="saved source_overrides"
+    )
+    translatable = [
+        record
+        for record in records
+        if str(record.get("source") or "") not in source_overrides
+    ]
+    count = len(translatable)
+    chars = sum(len(str(record.get("source") or "")) for record in translatable)
     batch_size = int(saved.get("batch_size") or 40)
     requests = _request_estimate(count, batch_size)
     input_tokens = requests * 450 + int(count * 4 + chars / 3.2)
@@ -201,17 +250,17 @@ def _world_inspection(world: Path, *, recursive_blockers: bool = True) -> dict:
         blockers.append("not_writable")
     valid = bool(root_world or child_worlds) and "bedrock" not in blockers
     resource_packs = []
-    if root_world and (root / "resources.zip").is_file():
+    if root_world and (root / "resources.zip").is_file() and not (root / "resources.zip").is_symlink():
         resource_packs.append(str(root / "resources.zip"))
     for child_name in child_worlds:
         resource_pack = root / child_name / "resources.zip"
-        if resource_pack.is_file():
+        if resource_pack.is_file() and not resource_pack.is_symlink() and resource_pack.resolve().is_relative_to(root):
             resource_packs.append(str(resource_pack))
     world_roots = [root] if root_world else [root / name for name in child_worlds]
     data_versions = [
         {
             "world": item.name or item.as_posix(),
-            "dataVersion": _level_data_version(item / "level.dat"),
+            "dataVersion": _level_data_version(item / "level.dat") if (item / "level.dat").resolve().is_relative_to(root) else None,
         }
         for item in world_roots
     ]
@@ -233,6 +282,7 @@ def _save_scan_plan(
     world_fingerprint: str,
     scope_fingerprint: str,
     candidates: list[dict],
+    external_pack_fingerprints: dict | None = None,
 ) -> None:
     path = _scan_plan_path(data_dir, scan_plan_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -242,6 +292,7 @@ def _save_scan_plan(
         "worldFingerprint": world_fingerprint,
         "scopeFingerprint": scope_fingerprint,
         "candidates": candidates,
+        "externalPackFingerprints": external_pack_fingerprints or {},
     }
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
@@ -256,8 +307,9 @@ def _load_scan_plan(data_dir: Path, scan_plan_id: str) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def _coverage(world: Path, resource_pack_enabled: bool) -> list[dict]:
+def _coverage(world: Path, resource_pack_enabled: bool, scan_options: dict | None = None, external_pack_paths: list[str] | None = None) -> list[dict]:
     """What a scan reads and what it does not, so the result never reads as "the whole world"."""
+    options = normalize_scan_options(scan_options)
     root = world.expanduser().resolve()
     roots = [root] if (root / "level.dat").is_file() else [
         child for child in sorted(root.iterdir()) if child.is_dir() and (child / "level.dat").is_file()
@@ -270,17 +322,36 @@ def _coverage(world: Path, resource_pack_enabled: bool) -> list[dict]:
     storage = count("data/command_storage_*.dat")
     playerdata = count("playerdata/*.dat")
     resource_packs = count("resources.zip")
-    return [
+    coverage = [
         {"id": "regions", "scanned": True, "present": True},
         {"id": "entities", "scanned": True, "present": True},
         {"id": "resource_pack", "scanned": bool(resource_pack_enabled), "present": resource_packs > 0, "count": resource_packs},
+        {"id": "external_resource_pack", "scanned": bool(resource_pack_enabled and external_pack_paths), "present": bool(external_pack_paths), "count": len(external_pack_paths or [])},
         {"id": "datapacks", "scanned": False, "present": datapacks > 0, "count": datapacks},
         {"id": "command_storage", "scanned": False, "present": storage > 0, "count": storage},
         {"id": "playerdata", "scanned": False, "present": playerdata > 0, "count": playerdata},
     ]
+    option_rows = (
+        ("standard_signs", "translate_signs"),
+        ("standard_books", "translate_books"),
+        ("standard_custom_names", "translate_custom_names"),
+        ("standard_item_names", "translate_item_names"),
+        ("standard_lore", "translate_lore"),
+        ("standard_titles", "translate_titles"),
+        ("standard_filtered_titles", "translate_filtered_titles"),
+        ("standard_command_output", "translate_command_output"),
+        ("standard_text_displays", "translate_text_displays"),
+    )
+    coverage.extend(
+        {"id": coverage_id, "scanned": bool(options[option]), "scopeOption": True}
+        for coverage_id, option in option_rows
+    )
+    return coverage
 
 
-def _candidate_page(plan: dict, body: dict) -> dict:
+def _candidate_page(
+    plan: dict, body: dict, source_overrides: dict[str, str] | None = None
+) -> dict:
     """Filter, sort and slice a scan plan on this side, so the count and the rows always agree."""
     candidates = [item for item in plan.get("candidates", []) if isinstance(item, dict)]
     query = str(body.get("query") or "").strip().casefold()
@@ -293,13 +364,22 @@ def _candidate_page(plan: dict, body: dict) -> dict:
         ]
     excluded = {str(item) for item in body.get("excludedCandidateIds") or []}
     manual = {str(item) for item in body.get("overrideCandidateIds") or []}
+    global_overrides = normalize_source_overrides(
+        {} if source_overrides is None else source_overrides,
+        field="saved source_overrides",
+    )
     state = str(body.get("state") or "all")
     if state == "included":
         candidates = [item for item in candidates if item.get("id") not in excluded]
     elif state == "excluded":
         candidates = [item for item in candidates if item.get("id") in excluded]
     elif state == "manual":
-        candidates = [item for item in candidates if item.get("id") in manual]
+        candidates = [
+            item
+            for item in candidates
+            if item.get("id") in manual
+            or str(item.get("source") or "") in global_overrides
+        ]
     facets: dict[str, int] = {}
     for item in candidates:
         name = str(item.get("kind") or "other")
@@ -335,8 +415,11 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
     jobs_dir = data_dir / "jobs"
     if not jobs_dir.is_dir():
         return {}
-    current_scope = _scan_scope_fingerprint(data_dir)
-    current_translation = _settings_fingerprint(data_dir)
+    try:
+        current_scope = _scan_scope_fingerprint(data_dir)
+        current_translation = _settings_fingerprint(data_dir)
+    except (OSError, ValueError, RuntimeError):
+        return {}
     preliminary: list[tuple[dict, dict, dict, dict]] = []
     for path in jobs_dir.glob("*.checkpoint.json"):
         try:
@@ -360,7 +443,11 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
     if not preliminary:
         return {}
 
-    current_world = world_fingerprint(resolved_world)
+    try:
+        current_world = world_fingerprint(resolved_world)
+    except (OSError, ValueError, RuntimeError):
+        # Inspection reports the unreadable/unsafe path; never reuse its checkpoint.
+        return {}
     candidates: list[dict] = []
     for checkpoint, resume, report, plan in preliminary:
         try:
@@ -380,6 +467,14 @@ def _resume_candidate(data_dir: Path, world: Path) -> dict:
                     "scanPlanId": scan_plan_id,
                     "fingerprint": str(resume.get("expected_world_fingerprint") or ""),
                     "candidateCount": len(plan_candidates),
+                    "occurrenceCount": sum(int(item.get("occurrences") or 0) for item in plan_candidates),
+                    "kinds": {kind: sum(item.get("kind") == kind for item in plan_candidates) for kind in {str(item.get("kind") or "unknown") for item in plan_candidates}},
+                    "coverage": _coverage(
+                        resolved_world,
+                        bool(_saved(data_dir).get("resource_pack_enabled")),
+                        _saved(data_dir).get("scan_options"),
+                        _saved(data_dir).get("external_resource_pack_paths", []),
+                    ),
                     "candidates": plan_candidates[:200],
                     "excludedCandidateIds": list(resume.get("excluded_candidate_ids") or []),
                     "candidateOverrides": candidate_overrides,
@@ -422,6 +517,8 @@ def _run_translator(
     scan_plan_id: str = "",
     resume_from_checkpoint: bool = False,
     on_translation_failure: str = "stop",
+    desktop_context: dict | None = None,
+    external_pack_fingerprints: dict | None = None,
 ) -> dict:
     import os
 
@@ -429,6 +526,40 @@ def _run_translator(
     from mwt.secrets import load_api_key
 
     saved = _saved(data_dir)
+    scan_options = normalize_scan_options(saved=saved.get("scan_options"), defaults=DEFAULT_CONFIG["scan"])
+    resource_pack_options = normalize_resource_pack_options(
+        saved=saved.get("resource_pack_options")
+    )
+    persistent_source_overrides = normalize_source_overrides(
+        saved.get("source_overrides", {}), field="saved source_overrides"
+    )
+    source_overrides = dict(persistent_source_overrides)
+    if manual_overrides is not None and not isinstance(manual_overrides, dict):
+        raise ValueError("candidateOverrides must be an object")
+    candidate_overrides: dict[str, str] = {}
+    for source, translated in (manual_overrides or {}).items():
+        if not isinstance(source, str) or not isinstance(translated, str):
+            raise ValueError("candidateOverrides must map strings to strings")
+        cleaned = translated.strip()
+        if not cleaned or len(cleaned) > 32_000:
+            raise ValueError("A manual override is empty or too long")
+        candidate_overrides[source] = cleaned
+    # Per-run review edits take precedence over persistent exact-source replacements.
+    source_overrides.update(candidate_overrides)
+    continue_on_file_error = normalize_continue_on_file_error(
+        saved.get("continue_on_file_error", DEFAULT_CONTINUE_ON_FILE_ERROR),
+        field="saved continue_on_file_error",
+    )
+    max_file_write_retries = normalize_max_file_write_retries(
+        saved.get("max_file_write_retries", DEFAULT_MAX_FILE_WRITE_RETRIES),
+        field="saved max_file_write_retries",
+    )
+    temperature = saved.get("temperature")
+    if temperature in (None, ""):
+        temperature = DEFAULT_CONFIG["temperature"]
+    max_batch_retries = saved.get("max_batch_retries")
+    if max_batch_retries in (None, ""):
+        max_batch_retries = DEFAULT_CONFIG["runtime"]["max_batch_retries"]
     provider = os.environ.get("POMI_PROVIDER") or str(saved.get("provider") or "openai")
     model = os.environ.get("POMI_MODEL") or str(saved.get("model") or "")
     base_url = os.environ.get("POMI_API_BASE") or str(saved.get("base_url") or "")
@@ -439,10 +570,17 @@ def _run_translator(
         or (load_api_key(provider) if allow_keyring_fallback else "")
         or ""
     )
+    if desktop_context is not None:
+        from mwt.desktop_provider import resolve_desktop_provider
+        selected = resolve_desktop_provider(desktop_context, saved)
+        provider, model, base_url, wire_format = (selected[key] for key in ("provider", "model", "base_url", "wire_format"))
+        api_key = "" if dry_run else selected["api_key"]
     resource_pack_paths = []
+    selected_packs = []
     if bool(saved.get("resource_pack_enabled")):
         inspection = _world_inspection(world)
-        resource_pack_paths = list(inspection.get("resourcePacks") or [])
+        selected_packs = selected_pack_files(saved)
+        resource_pack_paths = list(dict.fromkeys([*(inspection.get("resourcePacks") or []), *(str(path) for path in selected_packs)]))
     checkpoint_path = _checkpoint_path(data_dir, scan_plan_id) if scan_plan_id else report_path.with_suffix(".checkpoint.json")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     if scan_plan_id and not dry_run and not resume_from_checkpoint:
@@ -453,7 +591,7 @@ def _run_translator(
             "world_dir": str(world),
             "dry_run": dry_run,
             "report_path": str(report_path),
-            "temperature": float(saved.get("temperature") or DEFAULT_CONFIG["temperature"]),
+            "temperature": float(temperature),
             "batch_size": int(saved.get("batch_size") or DEFAULT_CONFIG["batch_size"]),
             "inherit_translate_py": False,
             "runtime": {
@@ -466,12 +604,14 @@ def _run_translator(
                 "excluded_candidate_ids": excluded_candidate_ids or [],
                 "skip_provider_validation": skip_provider_validation,
                 "backup_store": str(backup_store(world, data_dir)),
+                "authorized_external_pack_paths": [str(path) for path in selected_packs],
+                "expected_external_pack_fingerprints": external_pack_fingerprints or {},
                 "concurrency": int(saved.get("concurrency") or 4),
                 "translation_settings_fingerprint": _settings_fingerprint(data_dir),
                 "on_translation_failure": "skip" if on_translation_failure == "skip" else "stop",
-                "max_batch_retries": int(
-                    saved.get("max_batch_retries") or DEFAULT_CONFIG["runtime"]["max_batch_retries"]
-                ),
+                "max_batch_retries": int(max_batch_retries),
+                "continue_on_file_error": continue_on_file_error,
+                "max_file_write_retries": max_file_write_retries,
             },
             "api": {
                 "provider": provider,
@@ -486,18 +626,21 @@ def _run_translator(
                 "tpm_limit": int(saved.get("tpm_limit") or 0),
             },
             "prompt": {
-                "target_language": os.environ.get("POMI_TARGET_LANGUAGE") or saved.get("target_language") or "한국어",
-                "style_preset": os.environ.get("POMI_STYLE_PRESET") or saved.get("style_preset") or "neutral",
+                "target_language": (os.environ.get("POMI_TARGET_LANGUAGE") if desktop_context is None else None) or saved.get("target_language") or "한국어",
+                "style_preset": (os.environ.get("POMI_STYLE_PRESET") if desktop_context is None else None) or saved.get("style_preset") or "neutral",
                 "style_prompt": str(saved.get("style_prompt") or ""),
                 "custom_system_prompt": str(saved.get("custom_system_prompt") or ""),
             },
             "scan": {
-                "overrides": manual_overrides or {},
+                **scan_options,
+                "overrides": source_overrides,
                 "skip_target_language_text": saved.get("skip_target_language_text", True) is not False,
             },
             "resource_pack": {
                 "enabled": bool(resource_pack_paths),
                 "zip_paths": resource_pack_paths,
+                "external_zip_paths": normalize_external_pack_paths(saved.get("external_resource_pack_paths", [])),
+                **resource_pack_options,
             },
         },
     )
@@ -507,7 +650,11 @@ def _run_translator(
         records = [_candidate_record(source, translator.occurrences.get(source)) for source in translator._candidate_order]
         report["candidate_preview"] = records[:candidate_limit]
         report["_candidate_records"] = records
-    remember_run_settings(config, data_dir, None)
+    persisted_config = {
+        **config,
+        "scan": {**config["scan"], "overrides": persistent_source_overrides},
+    }
+    remember_run_settings(persisted_config, data_dir, None)
     # The run only knows whether this world has a pack. The user's choice must survive a world without one.
     from mwt.userdata import remember_user_settings
 
@@ -539,7 +686,7 @@ def hello() -> None:
                     "region.lz4",
                     "region.external_chunk",
                 ],
-                "providers": ["openai", "gemini", "anthropic", "openrouter", "custom"],
+                "providers": ["openai", "gemini", "anthropic", "openrouter", "comet", "custom"],
                 "notices": payload(),
             },
         }
@@ -549,7 +696,24 @@ def hello() -> None:
 def _settings_payload(data_dir: Path, provider: str = "", *, check_keyring: bool = True) -> dict:
     from mwt.secrets import load_api_key
 
-    saved = _saved(data_dir)
+    saved = dict(_saved(data_dir))
+    if not saved.get("provider"):
+        saved["provider"] = "openai"
+    saved["source_overrides"] = normalize_source_overrides(
+        saved.get("source_overrides", {}), field="saved source_overrides"
+    )
+    saved["continue_on_file_error"] = normalize_continue_on_file_error(
+        saved.get("continue_on_file_error", DEFAULT_CONTINUE_ON_FILE_ERROR),
+        field="saved continue_on_file_error",
+    )
+    saved["max_file_write_retries"] = normalize_max_file_write_retries(
+        saved.get("max_file_write_retries", DEFAULT_MAX_FILE_WRITE_RETRIES),
+        field="saved max_file_write_retries",
+    )
+    saved["resource_pack_options"] = normalize_resource_pack_options(
+        saved=saved.get("resource_pack_options")
+    )
+    saved["external_resource_pack_paths"] = normalize_external_pack_paths(saved.get("external_resource_pack_paths", []))
     chosen = provider or str(saved.get("provider") or "")
     return {
         "settings": saved,
@@ -598,6 +762,12 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
     if kind == "notices.get":
         emit({"v": 1, "id": request_id, "type": "response.ok", "payload": payload()})
         return
+    if kind == "settings.import_legacy":
+        from mwt.desktop_legacy_import import parse_legacy_settings
+
+        config = parse_legacy_settings(body.get("source"))
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": {"config": config}})
+        return
     if kind == "settings.get":
         emit(
             {
@@ -610,12 +780,68 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             }
         )
         return
+    if kind == "settings.restore":
+        from mwt.userdata import restore_user_settings
+
+        previous, expected = body.get("settings"), body.get("expectedSettings")
+        if body.get("credentialOwner") != "rust" or not isinstance(previous, dict) or not isinstance(expected, dict):
+            raise ValueError("Invalid settings recovery request")
+        restored = restore_user_settings(previous, expected, data_dir)
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": {"settings": restored}})
+        return
     if kind == "settings.set":
-        from mc_world_translator import DEFAULT_CONFIG, remember_run_settings
+        from mc_world_translator import DEFAULT_CONFIG
         from llm_backends import default_base_url
-        from mwt.userdata import remember_user_settings
+        from mwt.userdata import list_recent_worlds, public_settings_from_config, remember_user_settings
 
         saved = _saved(data_dir)
+        if "scan_options" in body:
+            raise ValueError("Use scanOptions for desktop scan preferences")
+        if "resource_pack_options" in body:
+            raise ValueError("Use resourcePackOptions for desktop resource-pack preferences")
+        scan_options = normalize_scan_options(
+            body.get("scanOptions") if "scanOptions" in body else None,
+            saved=saved.get("scan_options"),
+            defaults=DEFAULT_CONFIG["scan"],
+        )
+        if "resourcePackOptions" in body and not isinstance(body["resourcePackOptions"], dict):
+            raise ValueError("resourcePackOptions must be an object")
+        resource_pack_options = normalize_resource_pack_options(
+            body.get("resourcePackOptions") if "resourcePackOptions" in body else None,
+            saved=saved.get("resource_pack_options"),
+        )
+        external_pack_paths = normalize_external_pack_paths(body.get("externalResourcePackPaths", saved.get("external_resource_pack_paths", [])))
+
+        def public_setting(camel_name: str, saved_name: str, default):
+            if camel_name in body:
+                return body[camel_name]
+            if saved_name in body:
+                return body[saved_name]
+            return saved.get(saved_name, default)
+
+        source_overrides = normalize_source_overrides(
+            public_setting("sourceOverrides", "source_overrides", {}),
+            field="sourceOverrides",
+        )
+        continue_on_file_error = normalize_continue_on_file_error(
+            public_setting(
+                "continueOnFileError",
+                "continue_on_file_error",
+                DEFAULT_CONTINUE_ON_FILE_ERROR,
+            ),
+            field="continueOnFileError",
+        )
+        max_file_write_retries = normalize_max_file_write_retries(
+            public_setting(
+                "maxFileWriteRetries",
+                "max_file_write_retries",
+                DEFAULT_MAX_FILE_WRITE_RETRIES,
+            ),
+            field="maxFileWriteRetries",
+        )
+        ui_language = str(body.get("uiLanguage") or saved.get("ui_language") or "ko")
+        if ui_language not in {"ko", "en", "ja"}:
+            raise ValueError("Unsupported interface language")
         provider = str(body.get("provider") or saved.get("provider") or "openai")
         def text_setting(camel_name: str, saved_name: str, default: str = "") -> str:
             if camel_name in body:
@@ -655,7 +881,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         if not base_url:
             # The desktop UI deliberately omits a URL for public providers. This also migrates
             # settings written by older builds that could retain a hidden Custom endpoint.
-            base_url = default_base_url(provider) if provider in {"openai", "gemini", "anthropic", "openrouter"} else str(saved.get("base_url") or "")
+            base_url = default_base_url(provider) if provider in {"openai", "gemini", "anthropic", "openrouter", "comet"} else str(saved.get("base_url") or "")
         config = {
             "world_dir": str(body.get("worldDir") or saved.get("last_world_dir") or ""),
             "temperature": temperature,
@@ -675,22 +901,42 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "style_prompt": text_setting("stylePrompt", "style_prompt"),
                 "custom_system_prompt": text_setting("customSystemPrompt", "custom_system_prompt"),
             },
-            "runtime": {"max_batch_retries": max_batch_retries, "concurrency": concurrency},
+            "runtime": {
+                "max_batch_retries": max_batch_retries,
+                "concurrency": concurrency,
+                "continue_on_file_error": continue_on_file_error,
+                "max_file_write_retries": max_file_write_retries,
+            },
             "scan": {
+                **scan_options,
+                "overrides": source_overrides,
                 "skip_target_language_text": bool(
                     body.get("skipTargetLanguageText", saved.get("skip_target_language_text", True))
                 )
             },
             "resource_pack": {
-                "enabled": bool(body.get("resourcePackEnabled", saved.get("resource_pack_enabled", False)))
+                "enabled": bool(body.get("resourcePackEnabled", saved.get("resource_pack_enabled", False))),
+                "external_zip_paths": external_pack_paths,
+                **resource_pack_options,
             },
         }
-        supplied_key = str(body.get("apiKey") or "")
-        remember_run_settings(config, data_dir, supplied_key or None)
-        ui_language = str(body.get("uiLanguage") or saved.get("ui_language") or "ko")
-        if ui_language not in {"ko", "en", "ja"}:
-            raise ValueError("Unsupported interface language")
-        remember_user_settings({"ui_language": ui_language}, data_dir)
+        # Rust-owned requests never read or write a Python keyring credential. Validate all
+        # public preferences before one atomic file replacement, including UI language.
+        supplied_key = "" if body.get("credentialOwner") == "rust" else str(body.get("apiKey") or "")
+        if supplied_key:
+            from mwt.secrets import remember_api_key
+
+            remember_api_key(provider, supplied_key)
+        updates = {**public_settings_from_config(config), "ui_language": ui_language}
+        if config["world_dir"] and Path(config["world_dir"]).expanduser().is_dir():
+            path = str(Path(config["world_dir"]).expanduser().resolve())
+            recent = list_recent_worlds(data_dir)
+            updates["recent_worlds"] = [{"path": path, "lastOpened": time.time()}] + [
+                {"path": item["path"], "lastOpened": item["lastOpened"]}
+                for item in recent if item["path"] != path
+            ][:11]
+            updates["last_world_dir"] = path
+        remember_user_settings(updates, data_dir)
         emit(
             {
                 "v": 1,
@@ -771,6 +1017,9 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 },
             },
         )
+        if body.get("credentialOwner") == "rust":
+            from mwt.desktop_provider import resolve_desktop_provider
+            config["api"].update(resolve_desktop_provider(body, saved))
         try:
             models = LLMProviderClient(config).try_refresh_text_models()
         except Exception as exc:
@@ -792,6 +1041,18 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             }
         )
         return
+    if kind == "provider.usage":
+        from mwt.desktop_usage import fetch_openrouter_usage
+
+        result = fetch_openrouter_usage(body, _saved(data_dir))
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": result})
+        return
+    if kind == "prompt.enhance":
+        from mwt.desktop_prompt import enhance_desktop_prompt
+
+        result = enhance_desktop_prompt(body, _saved(data_dir), data_dir)
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": result})
+        return
     if kind == "scan.start":
         inspection = _world_inspection(world)
         if not inspection["validJavaWorld"]:
@@ -809,6 +1070,8 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 }
             )
             return
+        scope_before = _scan_scope_fingerprint(data_dir)
+        pack_inputs = pack_scope_signature(_saved(data_dir))
         report = _run_translator(
             world,
             dry_run=True,
@@ -819,6 +1082,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 {"v": 1, "id": request_id, "type": "scan.progress", "payload": event}
             ),
             cancel_check=(lambda: cancel_path.is_file()) if cancel_path else None,
+            desktop_context=body if body.get("credentialOwner") == "rust" else None,
         )
         skipped = [
             item for item in report.get("changed_files", [])
@@ -829,7 +1093,24 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             f"{item.get('skipped')}: {item.get('file', 'unknown file')}" for item in skipped
         )
         fingerprint = str(report.get("world_fingerprint", ""))
-        scope_fingerprint = _scan_scope_fingerprint(data_dir)
+        def invalidate_report() -> None:
+            from mc_world_translator import write_text_atomic
+
+            report["status"] = "invalidated"
+            report.setdefault("errors", []).append({"code": "PLAN_INVALIDATED", "scope": "scan", "message": "Translation scope changed while scanning"})
+            public_report = {key: value for key, value in report.items() if not key.startswith("_")}
+            write_text_atomic(report_dir / "scan-report.json", json.dumps(public_report, ensure_ascii=False, indent=2))
+
+        try:
+            scope_fingerprint = _scan_scope_fingerprint(data_dir)
+        except ExternalPackUnavailable:
+            invalidate_report()
+            raise
+        if scope_fingerprint != scope_before:
+            invalidate_report()
+            emit({"v": 1, "id": request_id, "type": "response.error",
+                  "error": {"code": "PLAN_INVALIDATED", "message": "Translation scope changed while scanning. Run Scan again.", "recoverable": True}})
+            return
         scan_plan_id = _scan_plan_id(fingerprint, scope_fingerprint)
         records = list(report.pop("_candidate_records", []))
         if report.get("status") == "completed":
@@ -839,8 +1120,10 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 world_fingerprint=fingerprint,
                 scope_fingerprint=scope_fingerprint,
                 candidates=records,
+                external_pack_fingerprints={item["path"]: {"sha256": item["sha256"], "parentIdentity": item["parentIdentity"]} for item in pack_inputs if "sha256" in item},
             )
-        batch_size = int(_saved(data_dir).get("batch_size") or 40)
+        saved = _saved(data_dir)
+        estimate = _estimate(records, saved, data_dir)
         kind_counts: dict[str, int] = {}
         for record in records:
             kind_counts[record["kind"]] = kind_counts.get(record["kind"], 0) + 1
@@ -863,9 +1146,14 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                     "writeBlockers": blockers,
                     "errors": report.get("errors", []),
                     "warnings": report.get("warnings", []),
-                    "requestEstimate": _request_estimate(len(records), batch_size),
-                    "estimate": _estimate(records, _saved(data_dir), data_dir),
-                    "coverage": _coverage(world, bool(_saved(data_dir).get("resource_pack_enabled"))),
+                    "requestEstimate": estimate["requests"],
+                    "estimate": estimate,
+                    "coverage": _coverage(
+                        world,
+                        bool(_saved(data_dir).get("resource_pack_enabled")),
+                        _saved(data_dir).get("scan_options"),
+                        _saved(data_dir).get("external_resource_pack_paths", []),
+                    ),
                     "candidates": report.get("candidate_preview", []),
                 },
             }
@@ -875,17 +1163,35 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         plan = _load_scan_plan(data_dir, str(body.get("scanPlanId") or ""))
         if not plan:
             raise ValueError("Scan plan was not found")
+        saved = _saved(data_dir)
+        source_overrides = normalize_source_overrides(
+            saved.get("source_overrides", {}), field="saved source_overrides"
+        )
         skipped = {str(item) for item in body.get("excludedCandidateIds") or []}
         skipped.update(str(item) for item in body.get("overrideCandidateIds") or [])
+        skipped.update(
+            str(item.get("id"))
+            for item in plan.get("candidates", [])
+            if isinstance(item, dict)
+            and str(item.get("source") or "") in source_overrides
+        )
         included = [item for item in plan.get("candidates", []) if isinstance(item, dict) and item.get("id") not in skipped]
-        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _estimate(included, _saved(data_dir), data_dir)})
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _estimate(included, saved, data_dir)})
         return
     if kind == "candidates.page":
         scan_plan_id = str(body.get("scanPlanId") or "")
         plan = _load_scan_plan(data_dir, scan_plan_id)
         if not plan:
             raise ValueError("Scan plan was not found")
-        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _candidate_page(plan, body)})
+        saved = _saved(data_dir)
+        emit(
+            {
+                "v": 1,
+                "id": request_id,
+                "type": "response.ok",
+                "payload": _candidate_page(plan, body, saved.get("source_overrides", {})),
+            }
+        )
         return
     if kind in {"translate.start", "translate.resume"}:
         if kind == "translate.resume":
@@ -905,11 +1211,14 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 )
                 return
             body = {
-                **body,
                 "fingerprint": resumable["fingerprint"],
                 "scanPlanId": resumable["scanPlanId"],
                 "excludedCandidateIds": resumable["excludedCandidateIds"],
                 "candidateOverrides": resumable["candidateOverrides"],
+                # Older clients can omit review fields. Explicit current review choices
+                # (including empty lists/maps) must win over checkpoint defaults.
+                # The core fingerprint rejects a cached job when these choices changed.
+                **body,
             }
         fingerprint = str(body.get("fingerprint") or "")
         scan_plan_id = str(body.get("scanPlanId") or "")
@@ -976,9 +1285,18 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             if not cleaned or len(cleaned) > 32_000:
                 raise ValueError("A manual override is empty or too long")
             overrides_by_source[candidate_by_id[candidate_id]] = cleaned
+        saved = _saved(data_dir)
+        source_overrides = normalize_source_overrides(
+            saved.get("source_overrides", {}), field="saved source_overrides"
+        )
         included_ids = known_candidate_ids.difference(excluded)
-        overridden_ids = set(raw_overrides)
-        manual_only = bool(included_ids) and included_ids.issubset(overridden_ids)
+        uncovered_ids = {
+            candidate_id
+            for candidate_id in included_ids
+            if candidate_id not in raw_overrides
+            and candidate_by_id[candidate_id] not in source_overrides
+        }
+        manual_only = bool(included_ids) and not uncovered_ids
         report = _run_translator(
             world,
             dry_run=False,
@@ -996,7 +1314,9 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
             skip_provider_validation=manual_only,
             scan_plan_id=scan_plan_id,
             resume_from_checkpoint=kind == "translate.resume",
+            external_pack_fingerprints=stored_plan.get("externalPackFingerprints", {}),
             on_translation_failure=str(body.get("failurePolicy") or "stop"),
+            desktop_context=body if body.get("credentialOwner") == "rust" else None,
         )
         emit(
             {
@@ -1041,6 +1361,11 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 raise ValueError("There is no backup to restore")
             backup_id = listed[0]["backupSetId"]
         selected = BackupSet.find(world, backup_id, stores)
+        required = set(selected.external_targets())
+        # An unrelated offline pack must not prevent restoring a world-only backup.
+        allowed = [Path(path) for path in normalize_external_pack_paths(_saved(data_dir).get("external_resource_pack_paths", []))
+                   if Path(path).resolve(strict=False) in required]
+        selected = BackupSet.find(world, backup_id, stores, external_files=allowed)
         recovery_id = selected.restore(recovery_store=stores[0])
         emit(
             {
@@ -1079,6 +1404,9 @@ def serve(report_dir: Path, data_dir: Path, cancel_path: Path | None = None) -> 
             if message.get("v") != 1:
                 raise ValueError("Unsupported protocol version")
             handle(message, report_dir, data_dir, cancel_path)
+        except (ExternalPackUnavailable, ExternalTargetError):
+            emit({"v": 1, "id": message.get("id", ""), "type": "response.error",
+                  "error": {"code": "EXTERNAL_PACK_UNAVAILABLE", "message": "Selected external ZIP is unavailable or its parent directory changed. Select the original ZIP in Settings before scanning or restoring.", "recoverable": True}})
         except (json.JSONDecodeError, ValueError) as exc:
             emit(
                 {

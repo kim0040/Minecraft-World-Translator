@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import type { Candidate } from '../lib/api';
   import type { SortMode, StateFilter } from '../lib/candidates.svelte';
@@ -18,7 +19,15 @@
   $effect(() => {
     const media = matchMedia('(min-width: 1100px)');
     wide = media.matches;
-    const listener = () => { wide = media.matches; };
+    const listener = async () => {
+      const focus = document.activeElement;
+      const editing = focus instanceof HTMLElement && focus.id === 'manual-translation';
+      const inDetail = focus instanceof HTMLElement && !!focus.closest('.detail, dialog');
+      wide = media.matches;
+      await tick();
+      if (editing) document.getElementById('manual-translation')?.focus();
+      else if (inDetail && wide) document.querySelector<HTMLElement>('tr[aria-selected="true"]')?.focus();
+    };
     media.addEventListener('change', listener);
     return () => media.removeEventListener('change', listener);
   });
@@ -73,7 +82,6 @@
       busyBulk = false;
     }
   }
-  const from = $derived(source.total ? 1 : 0);
 </script>
 
 <div class="review">
@@ -135,7 +143,7 @@
 
   <footer class="foot">
     <div class="meta">
-      <span class="num muted">{t('review.rows', { from: from, to: Math.min(source.total, from + 199), total: formatNumber(source.total, app.locale) })}</span>
+      <span class="num muted">{t('review.rows', { total: formatNumber(source.total, app.locale) })}</span>
       {#if source.filtered}<button type="button" class="btn btn-quiet btn-sm" onclick={clearFilters}>{t('review.clearFilters')}</button>{/if}
       <button type="button" class="btn btn-secondary btn-sm" disabled={busyBulk || source.total === 0} onclick={() => bulk(false)}>{t('review.excludeVisible')}</button>
       <button type="button" class="btn btn-secondary btn-sm" disabled={busyBulk || source.total === 0} onclick={() => bulk(true)}>{t('review.includeVisible')}</button>
@@ -152,7 +160,7 @@
 
 {#if !wide && selected}
   <Dialog title={t('review.detail.title')} onClose={() => (selected = null)}>
-    <CandidateDetail candidate={selected} />
+    <CandidateDetail candidate={selected} showHeading={false} />
     {#snippet actions()}<button type="button" class="btn btn-primary" onclick={() => (selected = null)}>{t('common.close')}</button>{/snippet}
   </Dialog>
 {/if}
@@ -182,4 +190,8 @@
   .meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
   .next { display: flex; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
   @media (max-width: 1100px) { .hint { display: none; } }
+  @media (max-width: 640px), (max-height: 650px) {
+    .review { height: auto; min-height: 0; grid-template-rows: auto auto auto minmax(300px, 1fr) auto; }
+    .workarea { min-height: 300px; }
+  }
 </style>

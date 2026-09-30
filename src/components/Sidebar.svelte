@@ -16,8 +16,17 @@
       : app.busy === 'scan' ? t('status.scanning')
       : app.busy === 'translate' ? t('status.translating')
       : app.busy === 'restore' ? t('status.restoring')
+      : app.busy ? t('status.working')
       : t('status.ready')
   );
+  let now = $state(Date.now());
+  $effect(() => {
+    if (!app.isBusy) return;
+    now = Date.now();
+    const timer = setInterval(() => { now = Date.now(); }, 1000);
+    return () => clearInterval(timer);
+  });
+
   const percent = $derived(
     app.busy === 'translate' && app.progress.phase === 'translate' && app.progress.total > 0
       ? Math.round((app.progress.done / app.progress.total) * 100)
@@ -28,6 +37,7 @@
 <aside class="sidebar" class:rail={app.railCollapsed}>
   <div class="brand">
     <img class="wordmark" src="/images/wordmark.png" alt="PomiTranslate" width="176" />
+    <span class="dark-wordmark" role="img" aria-label="PomiTranslate">Pomi<span>Translate</span></span>
   </div>
 
   <nav aria-label={t('nav.main')}>
@@ -36,6 +46,8 @@
         type="button"
         class="nav"
         class:active={app.page === item.page}
+        disabled={app.busy === 'settings'}
+        aria-label={t(item.label)}
         aria-current={app.page === item.page ? 'page' : undefined}
         title={app.railCollapsed ? t(item.label) : undefined}
         onclick={() => app.goto(item.page)}
@@ -53,7 +65,7 @@
         <span class="dot" class:busy={app.isBusy} aria-hidden="true"></span>
         <span class="status-text">{status}{percent !== null ? ` ${percent}%` : ''}</span>
         {#if app.isBusy && app.progress.startedAt}
-          <span class="sub num">{formatDuration((Date.now() - app.progress.startedAt) / 1000, app.locale)}</span>
+          <span class="sub num">{formatDuration((now - app.progress.startedAt) / 1000, app.locale)}</span>
         {/if}
       </div>
     </div>
@@ -72,6 +84,11 @@
   .sidebar.rail { width: var(--sidebar-rail); padding-inline: var(--space-3); }
   .brand { padding-inline: var(--space-2); min-height: 56px; display: flex; align-items: center; }
   .wordmark { width: 156px; height: auto; margin-top: -6px; }
+  .dark-wordmark { display: none; font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.04em; color: var(--text); white-space: nowrap; }
+  .dark-wordmark span { color: var(--accent-text); }
+  :global([data-theme='dark']) .wordmark { display: none; }
+  :global([data-theme='dark']) .sidebar:not(.rail) .dark-wordmark { display: inline; }
+  @media (max-width: 1000px) { :global([data-theme='dark']) .sidebar:not(.rail) .dark-wordmark { display: none; } }
   .rail .brand { justify-content: center; padding: 0; }
   .rail .wordmark { display: none; }
   .rail .brand::before { content: ''; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; }

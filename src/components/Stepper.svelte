@@ -39,7 +39,7 @@
   li { display: flex; align-items: center; }
   li + li::before { content: ''; width: clamp(12px, 3vw, 36px); height: 2px; background: var(--border-strong); margin-inline: var(--space-1); border-radius: 2px; }
   li.done + li::before, li.current::before { background: var(--accent); }
-  .step { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-3) 0 var(--space-2); border: 0; background: transparent; border-radius: var(--radius-full); color: var(--text-secondary); font-weight: 600; font-size: var(--text-sm); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
+  .step { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; min-height: 40px; padding: 0 var(--space-3) 0 var(--space-2); border: 0; background: transparent; border-radius: var(--radius-full); color: var(--text-secondary); font-weight: 600; font-size: var(--text-sm); transition: background-color 120ms var(--ease), color 120ms var(--ease); }
   .step:disabled { cursor: default; opacity: 0.6; }
   .marker { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: var(--text-xs); font-weight: 700; border: 1.5px solid var(--border-control); color: var(--text-secondary); background: var(--bg-surface); font-variant-numeric: tabular-nums; }
   li.done .marker { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }

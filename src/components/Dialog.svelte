@@ -47,13 +47,12 @@
 
 <style>
   .dialog {
-    margin: auto; padding: var(--space-5); width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 32px);
+    position: fixed; inset: 0; margin: auto; padding: var(--space-5);
+    width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px);
     overflow: auto; overscroll-behavior: contain; color: var(--text); background: var(--bg-surface);
     border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop);
   }
   .dialog::backdrop { background: var(--scrim); }
-  .dialog[open] { animation: rise 180ms var(--ease); }
-  @keyframes rise { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
   h2 { font-size: var(--text-xl); }
   .close { margin: -4px -8px 0 0; }

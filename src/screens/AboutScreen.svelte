@@ -138,7 +138,7 @@
             <li><Icon name="alert-triangle" size={17} /> <span>{t(key)}</span></li>
           {/each}
         </ul>
-        <p class="hint">{t('result.unsupportedBody')}</p>
+        <p class="hint">{t('about.unsupportedHelp')}</p>
       </div>
 
       <a class="matrix-link" href={SUPPORT_MATRIX_URL} target="_blank" rel="noreferrer">
@@ -163,7 +163,7 @@
           </div>
           <Icon name="shield" size={24} />
         </div>
-        <p class="keychain-note">{t('settings.apiKey.help')}</p>
+        <p class="keychain-note">{t('settings.vault.help')}</p>
       </section>
 
       <section class="card card-pad" aria-labelledby="links-title">
@@ -177,6 +177,11 @@
           <a class="link-row" href={LICENSE_URL} target="_blank" rel="noreferrer">
             <Icon name="shield" size={19} />
             <span><strong>MIT License</strong><small>LICENSE</small></span>
+            <Icon name="chevron-right" size={17} />
+          </a>
+          <a class="link-row" href="mailto:mini0227kim@gmail.com">
+            <Icon name="info" size={19} />
+            <span><strong>{t('about.contact')}</strong><small>mini0227kim@gmail.com</small></span>
             <Icon name="chevron-right" size={17} />
           </a>
           <a class="link-row" href={EULA_URL} target="_blank" rel="noreferrer">

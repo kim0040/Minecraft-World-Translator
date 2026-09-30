@@ -37,6 +37,7 @@ from llm_backends import (
 
 from mwt import nbtio as nbt
 from mwt.extract import TextExtractionMixin, TextRef
+from mwt.safety import PlanInvalidated, file_sha256
 
 
 STYLE_PRESETS: dict[str, str] = {
@@ -170,6 +171,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_file_write_retries": 2,
         "expected_world_fingerprint": "",
         "backup_store": "",
+        "authorized_external_pack_paths": [],
+        "expected_external_pack_fingerprints": {},
         "translation_settings_fingerprint": "",
         "excluded_candidate_ids": [],
         "skip_provider_validation": False,
@@ -306,6 +309,7 @@ def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> dic
         result["backup"] = False
     if args.resource_pack_zip:
         result["resource_pack"]["zip_paths"] = args.resource_pack_zip
+        result["runtime"]["authorized_external_pack_paths"] = args.resource_pack_zip
         result["resource_pack"]["enabled"] = True
     if args.enable_resource_pack_translation:
         result["resource_pack"]["enabled"] = True
@@ -432,9 +436,16 @@ def normalize_config(config: dict[str, Any], config_path: Path | None) -> dict[s
     for zip_path in result["resource_pack"]["zip_paths"]:
         path_obj = Path(zip_path).expanduser()
         if not path_obj.is_absolute() and result["world_dir"]:
-            path_obj = (world_dir / path_obj).resolve()
+            path_obj = (world_dir / path_obj).absolute()
         zip_paths.append(str(path_obj))
     result["resource_pack"]["zip_paths"] = zip_paths
+    selected_paths = result["runtime"].get("authorized_external_pack_paths", [])
+    if not isinstance(selected_paths, list) or any(not isinstance(path, str) for path in selected_paths):
+        raise ValueError("External ZIP selections must be a list of paths")
+    result["runtime"]["authorized_external_pack_paths"] = [
+        str((world_dir / path).absolute()) if not Path(path).expanduser().is_absolute() and result["world_dir"]
+        else str(Path(path).expanduser().absolute()) for path in selected_paths
+    ]
 
     return result
 
@@ -691,6 +702,8 @@ class WorldTranslator(TextExtractionMixin):
         self.config = config
         self.scan_config = config["scan"]
         self.runtime_config = config["runtime"]
+        self.external_pack_inputs: dict[str, str] = {}
+        self.external_pack_parents: dict[str, str] = {}
         self.component_prefixes = tuple(self.scan_config["component_translate_key_prefixes"])
         self.skip_patterns = tuple(self.scan_config["skip_patterns"])
         self.progress_callback = progress_callback
@@ -833,7 +846,8 @@ class WorldTranslator(TextExtractionMixin):
             from mwt.safety import BackupSet
 
             self._run_backup = BackupSet.open_existing(
-                Path(self.config["world_dir"]), backup_set_id, self._backup_store()
+                Path(self.config["world_dir"]), backup_set_id, self._backup_store(),
+                external_files=self._external_backup_files(),
             )
         self.checkpoint_loaded = True
         self.emit(
@@ -885,6 +899,16 @@ class WorldTranslator(TextExtractionMixin):
             from mwt.locking import MinecraftSessionLocks, MinecraftWorldInUse, WorldWriteLock, WorldWriteLocked
             from mwt.safety import world_fingerprint
 
+            blockers = detect_write_blockers(world_dir)
+            self.report["write_blockers"] = blockers
+            if blockers:
+                self.report["status"] = "unsupported"
+                self.report["errors"].append({"scope": "layout", "message": ",".join(blockers)})
+                self.refresh_report_counts()
+                self.write_report()
+                self.release_write_lock()
+                return self.report
+
             if not self.config["dry_run"]:
                 self._write_lock = WorldWriteLock(world_dir)
                 try:
@@ -907,8 +931,6 @@ class WorldTranslator(TextExtractionMixin):
                     self.release_write_lock()
                     return self.report
 
-            blockers = detect_write_blockers(world_dir)
-            self.report["write_blockers"] = blockers
             fingerprint = world_fingerprint(world_dir)
             self.report["world_fingerprint"] = fingerprint
             expected = str(self.runtime_config.get("expected_world_fingerprint") or "")
@@ -919,13 +941,12 @@ class WorldTranslator(TextExtractionMixin):
                 self.write_report()
                 self.release_write_lock()
                 return self.report
-            if blockers:
-                self.report["status"] = "unsupported"
-                self.report["errors"].append({"scope": "layout", "message": ",".join(blockers)})
-                self.refresh_report_counts()
-                self.write_report()
-                self.release_write_lock()
-                return self.report
+            if (
+                not self.config["dry_run"]
+                and self.config["backup"]
+                and self.config["resource_pack"]["enabled"]
+            ):
+                self._preflight_resource_pack_backup_paths(world_dir)
             if (
                 not self.config["dry_run"]
                 and self.translator is not None
@@ -989,7 +1010,7 @@ class WorldTranslator(TextExtractionMixin):
                 )
 
             if dry_run:
-                return self._finish("completed")
+                return self._finish("partial" if self._left_untranslated() else "completed")
 
             ordered = list(self._candidate_order)
             batch_size = max(1, int(self.config["batch_size"]))
@@ -1010,6 +1031,7 @@ class WorldTranslator(TextExtractionMixin):
                 return self._stop_before_write(ordered, None)
             self.save_checkpoint()
 
+            self._verify_external_pack_inputs()
             self.emit("phase_start", phase="write", total=len(pending_files))
             if self.config["resource_pack"]["enabled"]:
                 self.write_resource_packs()
@@ -1039,8 +1061,13 @@ class WorldTranslator(TextExtractionMixin):
                 )
 
             return self._finish("partial" if self._left_untranslated() else "completed")
+        except PlanInvalidated as exc:
+            self.report["errors"].append({"scope": "plan", "message": str(exc)})
+            return self._finish("invalidated")
         except TranslationCancelled:
             self.report["status"] = "cancelled"
+            self.report["provider_requests"] = LLMProviderClient.request_count
+            self.report["usage"] = dict(LLMProviderClient.usage)
             self.refresh_report_counts()
             self.write_report()
             self.save_checkpoint()
@@ -1059,6 +1086,8 @@ class WorldTranslator(TextExtractionMixin):
             }
             self.report["status"] = "failed"
             self.report["errors"].append(error_entry)
+            self.report["provider_requests"] = LLMProviderClient.request_count
+            self.report["usage"] = dict(LLMProviderClient.usage)
             self.refresh_report_counts()
             self.write_report()
             self.save_checkpoint()
@@ -1092,6 +1121,8 @@ class WorldTranslator(TextExtractionMixin):
                 ):
                     continue
                 resolved_path = path.resolve()
+                if not resolved_path.is_relative_to(world_dir):
+                    raise ValueError("Region file source is outside the selected world")
                 if resolved_path not in seen:
                     seen.add(resolved_path)
                     files.append(resolved_path)
@@ -1148,14 +1179,73 @@ class WorldTranslator(TextExtractionMixin):
 
         world_dir = Path(self.config["world_dir"]).resolve()
         resolved = path.resolve()
-        if not resolved.is_relative_to(world_dir):
+        external_files = self._external_backup_files()
+        if not resolved.is_relative_to(world_dir) and resolved not in {path.resolve() for path in external_files}:
             raise ValueError("Backup source is outside the selected world")
         if self._run_backup is None:
-            self._run_backup = BackupSet.new(world_dir, store=self._backup_store())
+            self._run_backup = BackupSet.new(world_dir, store=self._backup_store(), external_files=external_files)
         self._run_backup.add(resolved)
         self._run_backup.verify()
         self._run_backup.publish_latest()
         self.report["backup_set_id"] = self._run_backup.backup_id
+
+    def _preflight_resource_pack_backup_paths(self, world_dir: Path) -> None:
+        """Only explicitly selected external ZIP targets may extend the world write scope."""
+        world_root = world_dir.resolve()
+        external_files = self._external_backup_files()
+        authorized = {path.resolve() for path in external_files}
+        expected = self.runtime_config.get("expected_external_pack_fingerprints", {})
+        if not isinstance(expected, dict):
+            raise ValueError("External resource-pack fingerprints must be an object")
+        # Validate target availability and parent identity before any provider request.
+        from mwt.safety import BackupSet
+        BackupSet(world_root, "preflight", self._backup_store(), external_files=external_files)
+        for configured_path in self.config["resource_pack"]["zip_paths"]:
+            try:
+                resolved = Path(configured_path).expanduser().resolve(strict=False)
+            except (OSError, RuntimeError) as exc:
+                raise ValueError(
+                    f"Could not safely resolve resource-pack backup source: {configured_path}"
+                ) from exc
+            if not resolved.is_relative_to(world_root) and resolved not in authorized:
+                raise ValueError(
+                    f"Resource-pack backup source is outside the selected world: {configured_path}"
+                )
+            if Path(configured_path).expanduser().is_symlink():
+                raise ValueError("Resource-pack symbolic links cannot be safely backed up and restored")
+            if resolved in authorized and (not os.access(resolved, os.W_OK) or not os.access(resolved.parent, os.W_OK)):
+                raise ValueError("External resource pack is not writable")
+            if resolved in authorized:
+                digest = file_sha256(resolved)
+                parent = resolved.parent.stat()
+                identity = f"{parent.st_dev}:{parent.st_ino}"
+                planned = expected.get(str(resolved))
+                expected_hash = planned.get("sha256") if isinstance(planned, dict) else planned
+                expected_parent = planned.get("parentIdentity") if isinstance(planned, dict) else None
+                if (expected_hash is not None and expected_hash != digest) or (expected_parent is not None and expected_parent != identity):
+                    raise PlanInvalidated("An external resource pack changed after scan")
+                self.external_pack_inputs[str(resolved)] = digest
+                self.external_pack_parents[str(resolved)] = identity
+
+    def _verify_external_pack_inputs(self) -> None:
+        for path, digest in self.external_pack_inputs.items():
+            target = Path(path)
+            parent = target.parent.stat() if target.parent.is_dir() else None
+            identity = f"{parent.st_dev}:{parent.st_ino}" if parent else None
+            if target.is_symlink() or not target.is_file() or identity != self.external_pack_parents[path] or file_sha256(target) != digest:
+                raise PlanInvalidated("An external resource pack changed during translation. Rescan before writing.")
+
+    def _external_backup_files(self) -> list[Path]:
+        if not self.config["resource_pack"]["enabled"]:
+            return []
+        selected = self.runtime_config.get("authorized_external_pack_paths", [])
+        if not isinstance(selected, list) or len(selected) > 16 or any(not isinstance(path, str) for path in selected):
+            raise ValueError("External resource-pack authorization must be a list of at most 16 ZIP paths")
+        configured = {Path(path).expanduser().resolve() for path in self.config["resource_pack"]["zip_paths"]}
+        paths = [Path(path).expanduser() for path in selected]
+        if any(not path.is_absolute() or path.resolve() not in configured for path in paths):
+            raise ValueError("External resource-pack authorization does not match the selected inputs")
+        return paths
 
     def _guard_translations(self, texts: list[str], translations: dict[str, str]) -> dict[str, str]:
         from mwt.tokens import preserve_tokens
@@ -1352,7 +1442,7 @@ class WorldTranslator(TextExtractionMixin):
         if changed_chunks > 0:
             world_dir = Path(self.config["world_dir"]).resolve()
             if self._run_backup is None:
-                self._run_backup = BackupSet.new(world_dir, store=self._backup_store())
+                self._run_backup = BackupSet.new(world_dir, store=self._backup_store(), external_files=self._external_backup_files())
             backup = self._run_backup
             backup.add(path)
             for chunk in region.chunks:
@@ -1490,6 +1580,7 @@ class WorldTranslator(TextExtractionMixin):
                     "error": str(exc),
                 }
                 self.report["errors"].append(result)
+                self.file_errors.append(result)
                 self.emit("file_error", file=str(zip_path), message=str(exc))
                 if not self.runtime_config["continue_on_file_error"]:
                     raise
@@ -1509,7 +1600,7 @@ class WorldTranslator(TextExtractionMixin):
             zip_path = Path(zip_path_str)
             try:
                 result = self.translate_resource_pack_zip(zip_path)
-            except TranslationCancelled:
+            except (TranslationCancelled, PlanInvalidated):
                 raise
             except Exception as exc:
                 result = {
@@ -1557,8 +1648,13 @@ class WorldTranslator(TextExtractionMixin):
         candidate_texts: dict[str, None] = {}
         source_files = 0
         with zipfile.ZipFile(zip_path, "r") as zf:
-            for source_path, _ in self.resource_pack_language_files(zf.namelist()):
+            names = zf.namelist()
+            target_name = self.config["resource_pack"]["target_lang_file"]
+            for source_path, source_name in self.resource_pack_language_files(names):
                 self.ensure_not_cancelled()
+                target_path = source_path[: -len(source_name)] + target_name
+                if self.config["resource_pack"]["skip_if_target_exists"] and target_path in names:
+                    continue
                 try:
                     payload = json.loads(zf.read(source_path).decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
@@ -1585,6 +1681,7 @@ class WorldTranslator(TextExtractionMixin):
         import zipfile
 
         self.ensure_not_cancelled()
+        self._verify_external_pack_inputs()
         if not zip_path.exists():
             return {"zip_path": str(zip_path), "translated_files": 0, "candidates": 0, "skipped": "missing"}
 
@@ -1651,7 +1748,11 @@ class WorldTranslator(TextExtractionMixin):
                 shutil.copymode(zip_path, tmp_path)
                 with tmp_path.open("rb") as tmp_file:
                     os.fsync(tmp_file.fileno())
+                new_digest = file_sha256(tmp_path)
+                self._verify_external_pack_inputs()
                 os.replace(tmp_path, zip_path)
+                if str(zip_path.resolve()) in self.external_pack_inputs:
+                    self.external_pack_inputs[str(zip_path.resolve())] = new_digest
                 if self._run_backup is not None:
                     self._run_backup.mark_written([zip_path])
             except Exception:
@@ -1814,7 +1915,8 @@ def main(argv: list[str] | None = None) -> None:
 
         world = Path(config["world_dir"])
         store = backup_store(world, data_dir)
-        source = BackupSet(world, "latest", store) if (store / "latest.json").is_file() else BackupSet(world, "latest")
+        external_files = [Path(path) for path in config["runtime"].get("authorized_external_pack_paths", [])]
+        source = BackupSet(world, "latest", store, external_files=external_files) if (store / "latest.json").is_file() else BackupSet(world, "latest", external_files=external_files)
         source.restore(recovery_store=store)
         print(json.dumps({"status": "restored", "world_dir": config["world_dir"]}, ensure_ascii=False))
         return

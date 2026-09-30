@@ -1,8 +1,16 @@
 # API credential 저장 계획 — 로컬 암호화 저장
 
 기준일: 2026-09-30\
-상태: 사용자 합의에 따른 계획, **미구현**\
+상태: 사용자 합의에 따른 계획, **작업 트리 구현 중 / 최종 gate 미완**\
 연결 문서: [전체 작업 인계](agent-handoff-2026-09-30.md)
+
+## 현재 구현 증거와 남은 범위
+
+`src-tauri/src/credentials/`에 SQLite와 ring AES-256-GCM, 별도 48-byte key 파일(256-bit master key + random key id), local/session/keychain mode, opt-in import가 있다. Rust 전체 23 tests가 Unix permission 및 변조/provider/재시작/동시 생성, metadata 실패와 OS credential 보상 복구, public settings snapshot 복구, local→session 및 과거 stale local row 회귀를 검증한다. 상태는 DB metadata로만 읽는다. 기존 keychain read는 사용/import/사용자 mode 전환 시에만 수행한다.
+
+저장 방식 전환은 앱의 local ciphertext와 mode metadata를 같은 transaction으로 바꾼다. Session/Keychain에서는 앱의 기존 local row를 남기지 않는다. 만료된 Session을 빈 키로 Local에 바꿔도 과거 버전의 dormant row가 다시 활성화되지 않는다. 명시적 import로 읽은 기존 OS keychain 원본은 자동 삭제하지 않는다. 최신 isolated macOS 앱의 합성 local→session→restart→local 회귀 PASS, 실제 OS keychain 모드/Windows native/actual provider는 미완이다. [최신 증거](phase2-validation-2026-10-01.md)를 따른다.
+
+Windows DACL/owner/handle/lock 구현과 Windows target typecheck는 완료했지만 Windows native 실행은 NOT RUN이다. macOS local/session의 실제 restart와 모드 전환은 검증했다. OS keychain import/permission과 Windows native migration gate는 미완이다. 이 계획 전체를 완료했다고 소개하지 않는다. [진행 기록](phase2-progress-2026-09-30.md) 참조.
 
 ## 결정과 이유
 
@@ -12,7 +20,7 @@
 
 API 키 평문을 DB·설정 JSON·로그·소스·환경설정 파일에 저장하지 않는 원칙은 유지한다. 서명 키나 updater 키를 이 저장소로 옮기지 않는다.
 
-## 현재 구현과의 차이
+## 도입 전 committed 기준과의 차이
 
 - `mwt/userdata.py`: 설정·최근 월드는 `settings.json`에 저장한다.
 - scan plan·checkpoint도 JSON이다. 통합 SQLite data layer는 아직 없다.

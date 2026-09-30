@@ -48,7 +48,7 @@
 
   function stateOf(candidate: Candidate): 'excluded' | 'manual' | 'included' {
     if (app.excluded.has(candidate.id)) return 'excluded';
-    return app.overrides[candidate.id]?.trim() ? 'manual' : 'included';
+    return app.manualTranslation(candidate).trim() ? 'manual' : 'included';
   }
 
   async function move(to: number, select = true): Promise<void> {
@@ -62,6 +62,8 @@
       else if (top + ROW > viewport.scrollTop + viewport.clientHeight - header) viewport.scrollTop = top + ROW - viewport.clientHeight + header;
     }
     const candidate = await source.row(next);
+    // Synchronize the virtual window before focusing an offscreen row.
+    scrollTop = viewport?.scrollTop ?? scrollTop;
     await tick();
     viewport?.querySelector<HTMLElement>(`[data-index="${next}"]`)?.focus();
     if (select && candidate) onSelect(candidate);
@@ -169,13 +171,19 @@
       {#if win.padBottom > 0}<tr aria-hidden="true" class="pad" style:height="{win.padBottom}px"><td colspan="5"></td></tr>{/if}
     </tbody>
   </table>
-  {#if source.total === 0 && !source.loading}
+  {#if source.total === 0 && !source.loading && !source.error}
     <div class="empty" role="status">
       <p class="strong">{t('review.empty')}</p>
       <p class="muted">{t('review.emptyHelp')}</p>
     </div>
   {/if}
-  {#if source.error}<div class="empty" role="alert"><p class="strong">{source.error}</p></div>{/if}
+  {#if source.error}
+    <div class="empty" role="alert">
+      <p class="strong">{t('review.loadError')}</p>
+      <p class="muted">{source.error}</p>
+      <button type="button" class="btn btn-secondary" onclick={() => source.reset()}>{t('common.retry')}</button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -205,4 +213,5 @@
   .strong { font-weight: 700; }
   @media (max-width: 1100px) { .c-where { width: 170px; } .c-kind { width: 120px; } }
   @media (max-width: 900px) { .c-where { display: none; } th.c-where { display: none; } .c-state { width: 96px; } }
+  @media (max-width: 520px) { .c-kind, .c-state { display: none; } .c-source { width: auto; } }
 </style>

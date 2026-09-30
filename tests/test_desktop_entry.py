@@ -249,6 +249,9 @@ def main() -> None:
                 )
                 assert resumable["payload"]["available"] is True
                 assert resumable["payload"]["scanPlanId"] == scan["payload"]["scanPlanId"]
+                assert resumable["payload"]["occurrenceCount"] == scan["payload"]["occurrenceCount"]
+                assert resumable["payload"]["kinds"] == scan["payload"]["kinds"]
+                assert resumable["payload"]["coverage"] == scan["payload"]["coverage"]
                 cancel_path.unlink()
                 resumed = exchange(
                     proc,

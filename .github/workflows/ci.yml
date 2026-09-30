@@ -46,6 +46,30 @@ jobs:
         run: python tests/test_desktop_entry.py
       - name: Providers and remembered settings
         run: python tests/test_providers.py
+      - name: Desktop credential routing boundary
+        run: python tests/test_desktop_provider.py
+      - name: Settings validation and recovery
+        run: python tests/test_settings_transaction.py
+      - name: Scan scope settings
+        run: python tests/test_scan_settings.py
+      - name: Provider usage and credential redaction
+        run: python tests/test_desktop_usage.py
+      - name: Desktop prompt enhancement
+        run: python tests/test_desktop_prompt.py
+      - name: Safe legacy settings preview
+        run: python tests/test_legacy_settings_import.py
+      - name: Desktop overrides and file write policy
+        run: python tests/test_desktop_parity.py
+      - name: Resource pack settings and safe preflight
+        run: |
+          python tests/test_resource_pack_settings.py
+          python tests/test_resource_pack_preflight.py
+      - name: World input path containment
+        run: python tests/test_world_path_boundary.py
+      - name: Explicit external ZIP scan and restore
+        run: python tests/test_desktop_external_packs.py
+      - name: Cancellation usage reporting
+        run: python tests/test_cancelled_usage.py
       - name: Failure reporting and retry
         run: python tests/test_reliability.py
       - name: Text extraction and NBT round trip

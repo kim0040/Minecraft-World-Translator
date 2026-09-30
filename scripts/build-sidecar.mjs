@@ -22,7 +22,8 @@ mkdirSync(specDir, { recursive: true });
 mkdirSync(cacheDir, { recursive: true });
 
 const built = spawnSync(python, [
-  '-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile',
+  '-m', 'PyInstaller', '--noconfirm', '--onefile',
+  ...(process.argv.includes('--clean') ? ['--clean'] : []),
   '--name', 'pomi-sidecar', '--paths', root,
   '--hidden-import', 'lz4.block',
   '--hidden-import', 'keyring', '--hidden-import', 'mwt.desktop_entry',

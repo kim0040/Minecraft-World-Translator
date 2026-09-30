@@ -1,8 +1,16 @@
 <script lang="ts">
   import Dialog from '../components/Dialog.svelte';
   import Icon from '../components/Icon.svelte';
-  import { app } from '../lib/app.svelte';
-  import { credentialStored, type Settings } from '../lib/api';
+  import ScanScopeSettings from '../components/ScanScopeSettings.svelte';
+  import ResourcePackSettings from '../components/ResourcePackSettings.svelte';
+  import ExternalResourcePacks from '../components/ExternalResourcePacks.svelte';
+  import { resourcePackOptions } from '../lib/resource-pack';
+  import SourceOverrides from '../components/SourceOverrides.svelte';
+  import { normalizedScanOptions, publicSettingsForExport } from '../lib/settings';
+  import { isValidCustomEndpoint, parseSettingsImport } from '../lib/settings-import';
+  import { exportDocument } from '../lib/document-export';
+  import { app, defaultSettings } from '../lib/app.svelte';
+  import { callBackend, credentialStatus, importCredential, type CredentialMode, type Settings, type ProviderUsage } from '../lib/api';
   import { t, type MessageKey } from '../lib/i18n/index.svelte';
   import type { ThemeChoice } from '../lib/theme';
 
@@ -11,6 +19,7 @@
     { value: 'gemini', label: 'Gemini' },
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'openrouter', label: 'OpenRouter' },
+    { value: 'comet', label: 'Comet API' },
     { value: 'custom', label: 'settings.provider.custom' as MessageKey }
   ];
 
@@ -33,7 +42,8 @@
     openai: { baseUrl: 'https://api.openai.com/v1', wireFormat: 'openai' },
     gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', wireFormat: 'gemini' },
     anthropic: { baseUrl: 'https://api.anthropic.com/v1', wireFormat: 'anthropic' },
-    openrouter: { baseUrl: 'https://openrouter.ai/api/v1', wireFormat: 'openai' }
+    openrouter: { baseUrl: 'https://openrouter.ai/api/v1', wireFormat: 'openai' },
+    comet: { baseUrl: 'https://api.cometapi.com/v1', wireFormat: 'openai' }
   };
 
   const copySettings = (value: Settings): Settings => ({
@@ -52,9 +62,15 @@
     rpm_limit: Number.isFinite(Number(value.rpm_limit)) ? Number(value.rpm_limit) : 0,
     tpm_limit: Number.isFinite(Number(value.tpm_limit)) ? Number(value.tpm_limit) : 0,
     max_batch_retries: Number.isFinite(Number(value.max_batch_retries)) ? Number(value.max_batch_retries) : 3,
+    max_file_write_retries: Number.isFinite(Number(value.max_file_write_retries)) ? Number(value.max_file_write_retries) : 2,
+    continue_on_file_error: value.continue_on_file_error !== false,
+    source_overrides: { ...value.source_overrides },
     concurrency: Number.isFinite(Number(value.concurrency)) ? Number(value.concurrency) : 4,
     resource_pack_enabled: !!value.resource_pack_enabled,
+    resource_pack_options: resourcePackOptions(value.resource_pack_options),
+    external_resource_pack_paths: [...(value.external_resource_pack_paths ?? [])],
     skip_target_language_text: value.skip_target_language_text !== false,
+    scan_options: normalizedScanOptions(value.scan_options),
     ui_language: value.ui_language || 'ko',
     last_world_dir: value.last_world_dir || ''
   });
@@ -67,6 +83,70 @@
   let credentialProvider = $state('');
   let credentialState = $state<boolean | null>(null);
   let credentialLoading = $state(false);
+  let credentialMode = $state<CredentialMode>(app.credentialMode);
+  let credentialError = $state('');
+  let importing = $state(false);
+  let styleBrief = $state('');
+  let showStyleConfirm = $state(false);
+  let styleError = $state('');
+  let importInput: HTMLInputElement;
+  let importingSettings = $state(false);
+  let overridesInvalid = $state(false);
+  let packInvalid = $state(false);
+  let usageSnapshots = $state<ProviderUsage[]>([]);
+  let usageError = $state('');
+
+  async function importDraft(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (app.busy) { input.value = ''; return; }
+    importingSettings = true;
+    app.busy = 'loading';
+    try {
+      if (file.size > 1024 * 1024) throw new Error('oversized');
+      const text = await file.text();
+      const contents = file.name.toLowerCase().endsWith('.py')
+        ? JSON.stringify((await callBackend<{ config: unknown }>('settings.import_legacy', { source: text })).config)
+        : text;
+      draft = copySettings(parseSettingsImport(contents, app.settings));
+      apiKey = '';
+      showApiKey = false;
+      await refreshCredential(draft.provider);
+      app.notify(t('settings.import.done'), 'info');
+    } catch { app.notify(t('settings.import.failed'), 'error'); }
+    finally { input.value = ''; importingSettings = false; app.busy = ''; }
+  }
+
+  async function checkUsage(): Promise<void> {
+    if (app.busy || draft.provider !== 'openrouter' || !stored || apiKey.trim()) return;
+    app.busy = 'usage';
+    usageError = '';
+    try {
+      const reply = await callBackend<ProviderUsage>('provider.usage', { provider: 'openrouter' });
+      usageSnapshots = [...usageSnapshots, reply].slice(-2);
+    } catch { usageError = t('settings.usage.failed'); }
+    finally { app.busy = ''; }
+  }
+
+  async function enhanceStyle(): Promise<void> {
+    showStyleConfirm = false;
+    if (app.busy || !styleBrief.trim() || apiKey.trim()) return;
+    app.busy = 'prompt';
+    styleError = '';
+    try {
+      const reply = await callBackend<{ enhancedPrompt: string }>('prompt.enhance', {
+        provider: draft.provider, model: draft.model,
+        ...(draft.provider === 'custom' ? { baseUrl: draft.base_url } : {}), wireFormat: draft.wire_format,
+        brief: styleBrief.trim(), targetLanguage: draft.target_language, stylePreset: draft.style_preset,
+        stylePrompt: draft.style_prompt ?? '', customSystemPrompt: draft.custom_system_prompt ?? ''
+      });
+      if (!reply.enhancedPrompt?.trim()) throw new Error(t('settings.styleAssist.empty'));
+      draft.style_prompt = [draft.style_prompt?.trim(), reply.enhancedPrompt.trim()].filter(Boolean).join('\n\n');
+      app.notify(t('settings.styleAssist.done'), 'success');
+    } catch (cause) { styleError = app.describe(cause); }
+    finally { app.busy = ''; }
+  }
 
   // AppState is bootstrapped asynchronously. Capture the comparison copy only after that
   // happens, so the first save compares against persisted settings rather than defaults.
@@ -76,18 +156,12 @@
     snapshot = copySettings(app.settings);
     credentialProvider = app.settings.provider;
     credentialState = app.apiKeyStored;
+    credentialMode = app.credentialMode;
     void refreshCredential(app.settings.provider);
   });
 
   const isCustom = $derived(draft.provider === 'custom');
-  const validBaseUrl = (value: string): boolean => {
-    try {
-      const parsed = new URL(value.trim());
-      return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !!parsed.host;
-    } catch {
-      return false;
-    }
-  };
+  const validBaseUrl = isValidCustomEndpoint;
   const baseUrlInvalid = $derived(isCustom && !validBaseUrl(draft.base_url));
   const rangeInvalid = $derived.by(() => ({
     temperature: !inRange(draft.temperature, 0, 2),
@@ -96,10 +170,11 @@
     rpm: !inRange(draft.rpm_limit, 0, 10000),
     tpm: !inRange(draft.tpm_limit, 0, 10000000),
     retries: !inRange(draft.max_batch_retries, 0, 10),
+    writeRetries: !inRange(draft.max_file_write_retries, 1, 10) || !Number.isInteger(draft.max_file_write_retries),
     concurrency: !inRange(draft.concurrency, 1, 8)
   }));
   const hasRangeError = $derived(Object.values(rangeInvalid).some(Boolean));
-  const hasBlockingError = $derived(hasRangeError || (isCustom && !validBaseUrl(draft.base_url)));
+  const hasBlockingError = $derived(hasRangeError || overridesInvalid || (draft.resource_pack_enabled && packInvalid) || (isCustom && !validBaseUrl(draft.base_url)));
   const stored = $derived(credentialProvider === draft.provider ? credentialState : null);
   const providerName = (provider: string): string => {
     const item = providers.find((choice) => choice.value === provider);
@@ -116,15 +191,17 @@
     credentialProvider = provider;
     credentialState = null;
     credentialLoading = true;
+    credentialError = '';
     try {
-      const value = await credentialStored(provider);
+      const status = await credentialStatus(provider);
       if (credentialProvider === provider) {
-        credentialState = value;
+        credentialState = status.stored;
+        credentialMode = status.mode;
         // This is only a boolean status. The key itself is never read from the store.
-        app.apiKeyStored = value;
+        if (app.settings.provider === provider) app.apiKeyStored = status.stored;
       }
-    } catch {
-      if (credentialProvider === provider) credentialState = false;
+    } catch (cause) {
+      if (credentialProvider === provider) credentialError = app.describe(cause);
     } finally {
       if (credentialProvider === provider) credentialLoading = false;
     }
@@ -145,6 +222,8 @@
     apiKey = '';
     showApiKey = false;
     app.models = [];
+    usageSnapshots = [];
+    usageError = '';
     void refreshCredential(draft.provider);
   }
 
@@ -153,13 +232,17 @@
   }
 
   async function saveSettings(): Promise<boolean> {
-    if (!snapshot || hasBlockingError) return false;
+    if (!snapshot || hasBlockingError || app.busy) return false;
 
     const previous = copySettings(snapshot);
+    const previousMode = app.credentialMode;
     applyDraft();
-    const saved = await app.saveSettings(previous, apiKey);
+    app.credentialMode = credentialMode;
+    const saved = await app.saveSettings(previous, apiKey, previousMode);
     if (!saved) {
-      app.settings = previous;
+      // AppState restores verified preferences or reloads an uncertain write. Keep the
+      // user's unsaved draft/key for retry, without replacing the authoritative state.
+      snapshot = copySettings(app.settings);
       return false;
     }
 
@@ -197,18 +280,49 @@
     showDeleteConfirm = false;
     // The singleton method intentionally receives only the provider. It never returns or
     // exposes the stored credential value.
-    app.settings = copySettings(draft);
-    await app.deleteApiKey();
-    if (!app.apiKeyStored) {
+    if (await app.deleteApiKey(draft.provider)) {
       credentialProvider = draft.provider;
       credentialState = false;
+      credentialMode = 'local';
       apiKey = '';
       showApiKey = false;
     }
   }
 
+  async function importExisting(): Promise<void> {
+    importing = true;
+    credentialError = '';
+    try {
+      const status = await importCredential(draft.provider);
+      app.credentialRecovery.delete(draft.provider);
+      credentialMode = status.mode;
+      credentialState = status.stored;
+      if (app.settings.provider === draft.provider) {
+        app.credentialMode = status.mode;
+        app.apiKeyStored = status.stored;
+      }
+      app.notify(t('settings.vault.imported'), 'success');
+    } catch (cause) {
+      credentialError = app.describe(cause);
+    } finally { importing = false; }
+  }
+
   function setTheme(event: Event): void {
     app.setTheme((event.currentTarget as HTMLSelectElement).value as ThemeChoice);
+  }
+
+  function resetDraft(): void {
+    draft = copySettings({ ...defaultSettings(), ui_language: app.locale, last_world_dir: app.worldDir });
+    apiKey = '';
+    showApiKey = false;
+    void refreshCredential(draft.provider);
+    app.notify(t('settings.resetDraftDone'), 'info');
+  }
+
+  async function exportDraft(): Promise<void> {
+    try {
+      if (await exportDocument('settings', { schema: 1, settings: publicSettingsForExport(draft) })) app.notify(t('export.saved'), 'success');
+    } catch (cause) { app.fail(cause); }
   }
 
   function rangeText(label: MessageKey, minimum: string, maximum: string): string {
@@ -224,6 +338,7 @@
   </header>
 
   <form class="settings-form" onsubmit={submit} novalidate>
+    <fieldset disabled={!!app.busy} aria-busy={app.busy === 'settings'}>
     <section class="card settings-section" aria-labelledby="translation-title">
       <div class="section-head">
         <div class="section-icon" aria-hidden="true"><Icon name="language" size={20} /></div>
@@ -245,6 +360,14 @@
           <label class="label" for="style-prompt">{t('settings.style.extra')} <span class="optional">{t('common.optional')}</span></label>
           <textarea id="style-prompt" class="textarea" rows="3" bind:value={draft.style_prompt} placeholder={t('settings.style.extraPlaceholder')}></textarea>
         </div>
+        <details class="field full">
+          <summary>{t('settings.styleAssist.title')}</summary>
+          <label class="label" for="style-brief">{t('settings.styleAssist.brief')}</label>
+          <textarea id="style-brief" class="textarea" rows="2" maxlength="4000" bind:value={styleBrief}></textarea>
+          <p class="hint">{t('settings.styleAssist.help')}</p>
+          {#if styleError}<p class="field-error" role="alert">{styleError}</p>{/if}
+          <button type="button" class="btn btn-secondary" disabled={!!app.busy || !styleBrief.trim() || !draft.model.trim() || !!apiKey.trim() || !credentialState || hasBlockingError} onclick={() => (showStyleConfirm = true)}>{t('settings.styleAssist.action')}</button>
+        </details>
         {#if draft.style_preset === 'custom'}
           <div class="field full">
             <label class="label" for="custom-prompt">{t('settings.style.system')}</label>
@@ -257,7 +380,7 @@
     <section class="card settings-section" aria-labelledby="provider-title">
       <div class="section-head">
         <div class="section-icon" aria-hidden="true"><Icon name="shield" size={20} /></div>
-        <div><h2 id="provider-title">{t('settings.provider.title')}</h2><p>{t('settings.apiKey.help')}</p></div>
+        <div><h2 id="provider-title">{t('settings.provider.title')}</h2><p>{t('settings.provider.help')}</p></div>
       </div>
       <div class="fields two">
         <div class="field">
@@ -294,7 +417,7 @@
               aria-invalid={baseUrlInvalid}
               aria-describedby={baseUrlInvalid ? 'base-url-error' : undefined}
             />
-            {#if baseUrlInvalid}<span id="base-url-error" class="field-error" role="alert">{t('settings.baseUrl.label')}: https://example.com/v1</span>{/if}
+            {#if baseUrlInvalid}<span id="base-url-error" class="field-error" role="alert">{t('settings.baseUrl.invalid')}</span>{/if}
           </div>
           <div class="field">
             <label class="label" for="wire-format">{t('settings.wire.label')}</label>
@@ -304,6 +427,15 @@
             </select>
           </div>
         {/if}
+        <div class="field full">
+          <label class="label" for="credential-mode">{t('settings.vault.mode')}</label>
+          <select id="credential-mode" class="select" bind:value={credentialMode}>
+            <option value="local">{t('settings.vault.local')}</option>
+            <option value="session">{t('settings.vault.session')}</option>
+            <option value="keychain">{t('settings.vault.keychain')}</option>
+          </select>
+          <span class="hint">{t('settings.vault.help')}</span>
+        </div>
         <div class="field full credential-field">
           <div class="label-row">
             <label class="label" for="api-key">{t('settings.apiKey.label')}</label>
@@ -318,8 +450,23 @@
             </button>
           </div>
           <span class="hint">{t('settings.apiKey.help')}</span>
+          {#if credentialError}<p class="field-error" role="alert">{credentialError}</p>{/if}
+          <button type="button" class="btn btn-secondary" disabled={importing || !!app.busy} onclick={importExisting}>{importing ? t('common.loading') : t('settings.vault.import')}</button>
+          <span class="hint">{t('settings.vault.importHelp')}</span>
         </div>
       </div>
+      {#if draft.provider === 'openrouter'}
+        <div class="usage-panel">
+          <button type="button" class="btn btn-secondary" disabled={!!app.busy || !stored || !!apiKey.trim()} onclick={checkUsage}>{app.busy === 'usage' ? t('common.loading') : t('settings.usage.check')}</button>
+          <p class="hint">{t('settings.usage.help')}</p>
+          {#if usageError}<p class="field-error" role="alert">{usageError}</p>{/if}
+          <div role="status" aria-live="polite">
+            {#each usageSnapshots as usage}
+              <p class="hint">{new Date(usage.checkedAt).toLocaleString()} · {t('settings.usage.total')}: {usage.usage.toFixed(6)}{usage.byokUsage !== null ? ` · BYOK: ${usage.byokUsage.toFixed(6)}` : ''}</p>
+            {/each}
+          </div>
+        </div>
+      {/if}
       <div class="section-actions">
         <button type="button" class="btn btn-secondary" disabled={!!app.busy || hasBlockingError} onclick={loadModels}>
           <Icon name="refresh" size={17} /> {app.busy === 'models' ? t('settings.model.listing') : t('settings.model.list')}
@@ -328,10 +475,15 @@
     </section>
 
     <section class="card settings-section" aria-labelledby="scope-title">
-      <div class="section-head">
-        <div class="section-icon" aria-hidden="true"><Icon name="search" size={20} /></div>
-        <div><h2 id="scope-title">{t('settings.scope.title')}</h2><p>{t('coverage.lead')}</p></div>
-      </div>
+      <details class="advanced" id="scope-settings">
+      <summary>
+        <span class="section-head compact">
+          <span class="section-icon" aria-hidden="true"><Icon name="search" size={20} /></span>
+          <span><strong id="scope-title">{t('settings.scope.title')}</strong><small>{t('settings.scope.categoriesHelp')}</small></span>
+        </span>
+        <Icon name="chevron-down" size={18} />
+      </summary>
+      <div class="scope-body">
       <div class="checks">
         <label class="check">
           <input type="checkbox" bind:checked={draft.resource_pack_enabled} />
@@ -342,10 +494,18 @@
           <span><strong>{t('settings.scope.skipTarget')}</strong><small>{t('settings.scope.skipTargetHelp')}</small></span>
         </label>
       </div>
+      {#if draft.resource_pack_enabled}
+        <ResourcePackSettings bind:options={draft.resource_pack_options} bind:invalid={packInvalid} />
+        <ExternalResourcePacks bind:paths={draft.external_resource_pack_paths} />
+      {/if}
+      <ScanScopeSettings bind:options={draft.scan_options} />
+      <SourceOverrides bind:overrides={draft.source_overrides} bind:invalid={overridesInvalid} />
+      </div>
+      </details>
     </section>
 
     <section class="card settings-section" aria-labelledby="performance-title">
-        <details class="advanced">
+        <details class="advanced" open={hasRangeError}>
         <summary>
           <span class="section-head compact">
             <span class="section-icon" aria-hidden="true"><Icon name="sliders" size={20} /></span>
@@ -381,6 +541,13 @@
             {#if rangeInvalid.retries}<span id="retries-error" class="field-error" role="alert">{rangeText('settings.speed.retries', '0', '10')}</span>{/if}
           </div>
           <div class="field">
+            <label class="label" for="write-retries">{t('settings.speed.writeRetries')}</label>
+            <input id="write-retries" class="input" type="number" min="1" max="10" step="1" bind:value={draft.max_file_write_retries} aria-invalid={rangeInvalid.writeRetries} aria-describedby="write-retries-help" />
+            <span id="write-retries-help" class="hint">{t('settings.speed.writeRetriesHelp')}</span>
+            {#if rangeInvalid.writeRetries}<span class="field-error" role="alert">{rangeText('settings.speed.writeRetries', '1', '10')}</span>{/if}
+          </div>
+          <label class="check field full"><input type="checkbox" bind:checked={draft.continue_on_file_error} /><span>{t('settings.speed.continueFiles')}</span></label>
+          <div class="field">
             <label class="label" for="rpm">{t('settings.speed.rpm')}</label>
             <input id="rpm" class="input" class:invalid={rangeInvalid.rpm} type="number" min="0" max="10000" step="1" bind:value={draft.rpm_limit} aria-invalid={rangeInvalid.rpm} aria-describedby={rangeInvalid.rpm ? 'rpm-error' : 'rpm-help'} />
             <span id="rpm-help" class="hint">{t('settings.speed.limitHelp')}</span>
@@ -397,10 +564,14 @@
     </section>
 
     <section class="card settings-section" aria-labelledby="app-title">
-      <div class="section-head">
-        <div class="section-icon" aria-hidden="true"><Icon name="sliders" size={20} /></div>
-        <div><h2 id="app-title">{t('settings.app.title')}</h2><p>{t('settings.app.theme')}</p></div>
-      </div>
+      <details class="advanced" id="application-settings">
+      <summary>
+        <span class="section-head compact">
+          <span class="section-icon" aria-hidden="true"><Icon name="sliders" size={20} /></span>
+          <span><strong id="app-title">{t('settings.app.title')}</strong><small>{t('settings.app.theme')}</small></span>
+        </span>
+        <Icon name="chevron-down" size={18} />
+      </summary>
       <div class="fields two">
         <div class="field">
           <label class="label" for="ui-language">{t('settings.app.language')}</label>
@@ -417,19 +588,37 @@
           </select>
         </div>
       </div>
+      </details>
     </section>
 
     <footer class="actions">
+      <input type="file" accept="application/json,.json,.py" bind:this={importInput} onchange={importDraft} hidden />
+      <button type="button" class="btn btn-secondary" disabled={!!app.busy || importingSettings} onclick={() => importInput.click()}>{t('settings.import.action')}</button>
+      <button type="button" class="btn btn-secondary" disabled={!!app.busy} onclick={exportDraft}>{t('settings.export')}</button>
+      <button type="button" class="btn btn-quiet" disabled={!!app.busy} onclick={resetDraft}>{t('settings.resetDraft')}</button>
       {#if stored === true}
         <button type="button" class="btn btn-danger" disabled={!!app.busy} onclick={() => (showDeleteConfirm = true)}><Icon name="trash" size={17} /> {t('settings.apiKey.delete')}</button>
       {/if}
       <span class="spacer"></span>
       <button type="submit" class="btn btn-primary btn-lg" disabled={!!app.busy || hasBlockingError}>
-        <Icon name="check" size={18} /> {t('common.save')}
+        <Icon name="check" size={18} /> {t(app.busy === 'settings' ? 'settings.saving' : 'common.save')}
       </button>
     </footer>
+    <p class="hint">{t('settings.import.help')}</p>
+    </fieldset>
   </form>
 </div>
+
+{#if showStyleConfirm}
+  <Dialog title={t('settings.styleAssist.title')} onClose={() => (showStyleConfirm = false)}>
+    <p>{t('settings.styleAssist.confirm')}</p>
+    <p><strong>{providerName(draft.provider)} · {draft.model}</strong></p>
+    {#snippet actions()}
+      <button type="button" class="btn btn-secondary" onclick={() => (showStyleConfirm = false)}>{t('common.cancel')}</button>
+      <button type="button" class="btn btn-primary" onclick={enhanceStyle}>{t('settings.styleAssist.action')}</button>
+    {/snippet}
+  </Dialog>
+{/if}
 
 {#if showDeleteConfirm}
   <Dialog title={t('settings.apiKey.deleteTitle', { provider: providerName(draft.provider) })} onClose={() => (showDeleteConfirm = false)}>
@@ -444,6 +633,8 @@
 <style>
   .settings { max-width: 920px; }
   .settings-form { display: grid; gap: var(--space-4); }
+  .settings-form > fieldset { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: 0; border: 0; }
+  .scope-body { display: grid; gap: var(--space-5); }
   .settings-section { padding: var(--space-5); display: grid; gap: var(--space-5); }
   .section-head { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
   .section-head h2 { font-size: var(--text-lg); }
@@ -495,8 +686,8 @@
     .actions .btn-danger, .actions .btn-primary { width: 100%; }
   }
   @media (min-width: 1500px) {
-    .settings-form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-    .settings-form > .settings-section:first-child, .settings-form > .settings-section:nth-child(2) { grid-column: span 1; }
-    .settings-form > .settings-section:nth-child(3), .settings-form > .settings-section:nth-child(4), .settings-form > .settings-section:nth-child(5), .settings-form > .actions { grid-column: 1 / -1; }
+    .settings-form > fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .settings-form > fieldset > .settings-section:first-child, .settings-form > fieldset > .settings-section:nth-child(2) { grid-column: span 1; }
+    .settings-form > fieldset > .settings-section:nth-child(3), .settings-form > fieldset > .settings-section:nth-child(4), .settings-form > fieldset > .settings-section:nth-child(5), .settings-form > fieldset > .actions, .settings-form > fieldset > .hint { grid-column: 1 / -1; }
   }
 </style>

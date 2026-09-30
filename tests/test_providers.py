@@ -125,7 +125,7 @@ def last_post() -> tuple:
 
 
 def test_public_providers() -> None:
-    assert public_provider_choices() == ["openai", "gemini", "anthropic", "openrouter", "custom"]
+    assert public_provider_choices() == ["openai", "gemini", "anthropic", "openrouter", "comet", "custom"]
     print("PASS providers.public")
 
 

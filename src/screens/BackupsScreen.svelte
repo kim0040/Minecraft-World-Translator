@@ -81,7 +81,7 @@
       <div class="context-icon" aria-hidden="true"><Icon name="folder" size={24} /></div>
       <div class="context-copy">
         <p class="eyebrow">{t('world.selected')}</p>
-        <h2 id="backup-world-title">{t('backups.world', { name: worldName })}</h2>
+        <h2 id="backup-world-title">{worldName}</h2>
         <p class="path mono" title={app.worldDir}>{middleEllipsis(app.worldDir, 96)}</p>
       </div>
       <span class="pill pill-accent num">{t('world.backupsCount', { count: formatNumber(backups.length, app.locale) })}</span>
@@ -134,6 +134,7 @@
                 </div>
 
                 <ul class="backup-facts">
+                  {#if backup.externalTargets?.length}<li>{t('backups.externalCount', { count: backup.externalTargets.length })}</li>{/if}
                   <li class="num">{t('backups.files', { count: formatNumber(backup.fileCount, app.locale) })}</li>
                   {#if backup.sizeBytes !== undefined}
                     <li class="num">{t('backups.size', { size: formatBytes(backup.sizeBytes, app.locale) })}</li>
@@ -167,6 +168,10 @@
       <li><span>{t('backups.files', { count: formatNumber(selectedBackup.fileCount, app.locale) })}</span></li>
       <li><span>{t('backups.verified')}</span><strong>{selectedBackup.verified ? t('backups.verified') : t('backups.unverified')}</strong></li>
     </ul>
+    {#if selectedBackup.externalTargets?.length}
+      <p class="muted">{t('backups.externalHelp')}</p>
+      <ul class="external-targets">{#each selectedBackup.externalTargets as path}<li class="mono">{path}</li>{/each}</ul>
+    {/if}
     {#snippet actions()}
       <button type="button" class="btn btn-secondary" data-autofocus onclick={closeRestore}>{t('common.cancel')}</button>
       <button type="button" class="btn btn-danger-solid" onclick={restoreSelected}>
@@ -177,6 +182,7 @@
 {/if}
 
 <style>
+  .external-targets { overflow-wrap: anywhere; padding-inline-start: 1em; }
   .empty-state {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;

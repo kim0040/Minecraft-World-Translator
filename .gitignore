@@ -38,3 +38,18 @@ ehthumbs.db
 [Dd]esktop.ini
 .AppleDouble
 .LSOverride
+
+# Local verification evidence contains paths/toolchain metadata; never publish it.
+output/verification/
+
+# Credentials and runtime databases/backups are never source artifacts.
+.env.*
+!.env.example
+*.db
+*.sqlite*
+*.key
+*.pem
+*.p12
+*.pfx
+.pomi-backups/
+.pomi-translate/

@@ -5,6 +5,13 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
+  import { exportDocument } from '../lib/document-export';
+
+  async function exportReport(): Promise<void> {
+    try {
+      if (await exportDocument('scan_report', app.scan)) app.notify(t('export.saved'), 'success');
+    } catch (cause) { app.fail(cause); }
+  }
 
   let now = $state(Date.now());
   $effect(() => {
@@ -34,12 +41,13 @@
     return file ? t('scan.blockedFile', { file: fileLabel(file) }) : (knownBlockers.includes(kind) ? t(`world.blocked.${kind}` as MessageKey) : t('world.blocked.unknown'));
   };
   const knownBlockers = ['bedrock', 'mcr', 'linear', 'world_in_use', 'not_writable', 'not_readable', 'missing'];
-  const stale = $derived(!scan && !!app.resume === false && false);
+  const requestEstimate = $derived(app.estimate?.requests ?? scan?.estimate?.requests ?? scan?.requestEstimate);
 </script>
 
 <div class="page">
   <header class="page-head">
     <h1>{t('scan.title')}</h1>
+    {#if app.scan && !app.busy}<div><button type="button" class="btn btn-secondary" onclick={exportReport}>{t('export.scan')}</button><p class="hint">{t('export.reportHelp')}</p></div>{/if}
     <p class="lead">{t('scan.lead')}</p>
   </header>
 
@@ -87,7 +95,7 @@
         <section class="summary" aria-label={t('scan.found', { count: formatNumber(scan.candidateCount, app.locale) })}>
           <div class="stat card"><span class="v num">{formatNumber(scan.candidateCount, app.locale)}</span><span class="l">{t('scan.summary.texts')}</span></div>
           <div class="stat card"><span class="v num">{formatNumber(scan.occurrenceCount ?? scan.candidateCount, app.locale)}</span><span class="l">{t('scan.summary.places')}</span></div>
-          <div class="stat card"><span class="v num">{formatNumber(scan.estimate?.requests ?? scan.requestEstimate ?? 0, app.locale)}</span><span class="l">{t('scan.summary.requests')}</span></div>
+          <div class="stat card"><span class="v num">{requestEstimate === undefined ? t('common.unknown') : formatNumber(requestEstimate, app.locale)}</span><span class="l">{t('scan.summary.requests')}</span></div>
         </section>
         <p class="muted note">{t('scan.summary.repeats')}</p>
 
@@ -131,8 +139,10 @@
               {#each notScanned as item (item.id)}
                 <li>
                   {t(`coverage.${item.id}` as MessageKey)}
-                  {#if item.present}<span class="tag num">{t('coverage.count', { count: item.count ?? 0 })}</span>
-                  {:else}<span class="tag absent">{t('coverage.absent')}</span>{/if}
+                  {#if item.scopeOption}<span class="tag">{t('coverage.disabled')}</span>
+                  {:else if item.present && item.count !== undefined}<span class="tag num">{t(item.id === 'datapacks' ? 'coverage.packCount' : 'common.files', { count: item.count })}</span>
+                  {:else if item.present}<span class="tag">{t('coverage.detected')}</span>
+                  {:else}<span class="tag absent">{t(item.id === 'external_resource_pack' ? 'settings.pack.externalEmpty' : 'coverage.absent')}</span>{/if}
                   {#if item.id === 'resource_pack' && item.present}<span class="tag">{t('coverage.enablePack')}</span>{/if}
                 </li>
               {/each}

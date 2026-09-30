@@ -1,7 +1,8 @@
-import { callBackend, type Candidate, type CandidatePage } from './api';
+import { BackendError, callBackend, type Candidate, type CandidatePage } from './api';
 import { pagesFor } from './virtual';
 
 export const PAGE_SIZE = 200;
+export const MAX_CACHED_PAGES = 12;
 export type StateFilter = 'all' | 'included' | 'excluded' | 'manual';
 export type SortMode = 'order' | 'source' | 'count' | 'kind';
 
@@ -43,6 +44,7 @@ export class CandidateSource {
     this.pages.clear();
     this.inflight.clear();
     this.error = '';
+    this.kinds = {};
     if (seed && !this.filtered && this.sort === 'order') {
       this.pages.set(0, seed.slice(0, PAGE_SIZE));
       this.total = seedTotal ?? seed.length;
@@ -50,7 +52,8 @@ export class CandidateSource {
     } else {
       this.total = 0;
     }
-    this.ensure(0, Math.min(PAGE_SIZE, Math.max(this.total, 1)));
+    // Preview rows do not contain authoritative kind totals. Refresh page zero once.
+    this.ensure(0, Math.min(PAGE_SIZE, Math.max(this.total, 1)), !!seed);
   }
 
   /** Re-run the query after a short pause, so typing does not send a request per key. */
@@ -61,7 +64,13 @@ export class CandidateSource {
 
   rowAt(index: number): Candidate | undefined {
     void this.version;
-    return this.pages.get(Math.floor(index / PAGE_SIZE))?.[index % PAGE_SIZE];
+    const page = Math.floor(index / PAGE_SIZE);
+    const rows = this.pages.get(page);
+    if (rows) {
+      this.pages.delete(page);
+      this.pages.set(page, rows); // most recently used, without creating reactive row copies
+    }
+    return rows?.[index % PAGE_SIZE];
   }
 
   /** Return a row after its page has loaded. Used by keyboard navigation across page boundaries. */
@@ -75,10 +84,10 @@ export class CandidateSource {
   }
 
   /** Load whichever pages cover rows start..end that are not here yet. */
-  ensure(start: number, end: number): void {
+  ensure(start: number, end: number, refresh = false): void {
     if (!this.scanPlanId) return;
     for (const page of pagesFor(start, Math.max(end, start + 1), PAGE_SIZE)) {
-      if (!this.pages.has(page) && !this.inflight.has(page)) {
+      if ((refresh || !this.pages.has(page)) && !this.inflight.has(page)) {
         let request: Promise<void>;
         request = this.load(page).finally(() => {
           if (this.inflight.get(page) === request) this.inflight.delete(page);
@@ -106,7 +115,9 @@ export class CandidateSource {
         overrideCandidateIds: this.state === 'manual' ? manual : []
       });
       if (token !== this.token) return; // the filters changed while this was in flight
+      this.pages.delete(page);
       this.pages.set(page, response.candidates);
+      while (this.pages.size > MAX_CACHED_PAGES) this.pages.delete(this.pages.keys().next().value!);
       this.total = response.total;
       this.kinds = response.kinds;
       this.version += 1;
@@ -117,20 +128,22 @@ export class CandidateSource {
 
   /** Every id matching the current filters, to include or exclude them all at once. */
   async allIds(): Promise<string[]> {
+    const token = this.token;
     const { excluded, manual } = this.ids();
+    const filter = {
+      scanPlanId: this.scanPlanId, query: this.query, kind: this.kind, state: this.state,
+      excludedCandidateIds: this.state === 'all' ? [] : excluded,
+      overrideCandidateIds: this.state === 'manual' ? manual : []
+    };
     const ids: string[] = [];
     for (let offset = 0; ; offset += 500) {
       const response = await callBackend<CandidatePage>('candidates.page', {
-        scanPlanId: this.scanPlanId,
+        ...filter,
         offset,
         limit: 500,
-        query: this.query,
-        kind: this.kind,
-        state: this.state,
-        sort: 'order',
-        excludedCandidateIds: this.state === 'all' ? [] : excluded,
-        overrideCandidateIds: this.state === 'manual' ? manual : []
+        sort: 'order'
       });
+      if (token !== this.token) throw new BackendError('The filters changed during this operation.', 'CANDIDATE_QUERY_CHANGED');
       ids.push(...response.candidates.map((candidate) => candidate.id));
       if (!response.hasMore) return ids;
     }

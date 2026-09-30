@@ -12,6 +12,16 @@
     { id: 'tellraw', source: 'You are not ready yet.', kind: 'command', kinds: { command: 1 }, occurrences: 1, locations: [{ holder: 'minecraft:command_block', pos: [-4, 58, 42], chunk: [-1, 2], detail: 'base' }] },
     { id: 'merchant', source: 'Merchant of the Northern Gate', kind: 'entity_name', kinds: { entity_name: 2 }, occurrences: 2, locations: [{ holder: 'minecraft:villager', pos: [101, 67, -33], chunk: [6, -3], detail: 'custom' }] }
   ];
+  // Generated data remains in the test backend; only requested pages reach the UI.
+  const requestedCount = Number(new URLSearchParams(location.search).get('count') || 0);
+  if (requestedCount > 0) {
+    const template = [...candidates];
+    candidates.length = 0;
+    for (let i = 0; i < Math.min(requestedCount, 100000); i++) {
+      const base = template[i % template.length];
+      candidates.push({ ...base, id: `candidate-${i}`, source: `${base.source} ${i}` });
+    }
+  }
   const worldDir = '/private/tmp/pomi-eval/Roguefire — a deliberately long translated world folder name';
   const inspection = {
     validJavaWorld: true,
@@ -26,6 +36,7 @@
     { backupSetId: '2026-09-29T16-24-18Z-translation', createdAt: '2026-09-29T16:24:18+09:00', fileCount: 69, verified: true, kind: 'translation', sizeBytes: 1843200, inWorldFolder: false },
     { backupSetId: 'legacy-2026-09-28T12-10-00', createdAt: '2026-09-28T12:10:00+09:00', fileCount: 12, verified: false, kind: 'recovery', sizeBytes: 512000, inWorldFolder: true }
   ];
+  const credentialModes = new Map();
   const settings = {
     provider: 'openrouter', model: 'xiaomi/mimo-v2.6-flash', base_url: '', wire_format: 'openai',
     target_language: '한국어', style_preset: 'neutral', style_prompt: '', custom_system_prompt: '',
@@ -39,15 +50,15 @@
     cost: { low: 0.000252, high: 0.000504 }
   };
   const scan = {
-    status: 'completed', candidateCount: candidates.length, occurrenceCount: 17,
-    kinds: { sign: 1, text_display: 1, book_page: 1, item_lore: 1, command: 1, entity_name: 1 },
+    status: 'completed', candidateCount: candidates.length, occurrenceCount: candidates.reduce((sum, item) => sum + item.occurrences, 0),
+    kinds: candidates.reduce((counts, item) => { counts[item.kind] = (counts[item.kind] || 0) + 1; return counts; }, {}),
     providerRequests: 0, fingerprint: 'fixture-world-fingerprint', scanPlanId: 'fixture-scan-plan', dryRun: true,
-    writeBlockers: [], errors: [], warnings: [], requestEstimate: 1, estimate, candidates,
+    writeBlockers: [], errors: [], warnings: [], requestEstimate: 1, estimate, candidates: candidates.slice(0, 200),
     coverage: [
       { id: 'regions', scanned: true, present: true, count: 6 },
       { id: 'entities', scanned: true, present: true, count: 2 },
-      { id: 'resource_pack', scanned: false, present: true, count: 84 },
-      { id: 'datapacks', scanned: false, present: true, count: 427 },
+      { id: 'resource_pack', scanned: false, present: true, count: 1 },
+      { id: 'datapacks', scanned: false, present: true, count: 4 },
       { id: 'command_storage', scanned: false, present: true, count: 31 },
       { id: 'playerdata', scanned: false, present: true, count: 4 }
     ]
@@ -67,7 +78,7 @@
   function resumePayload() {
     return {
       available: true, scanPlanId: scan.scanPlanId, fingerprint: scan.fingerprint,
-      candidateCount: candidates.length, candidates, excludedCandidateIds: ['tellraw'],
+      candidateCount: candidates.length, occurrenceCount: scan.occurrenceCount, kinds: scan.kinds, coverage: scan.coverage, candidates: candidates.slice(0, 200), excludedCandidateIds: ['tellraw'],
       candidateOverrides: { shop: '잃어버린 열쇠 상점' }, savedAt: 1790672400,
       status: 'needs_retry', translatedCount: 2
     };
@@ -79,6 +90,7 @@
     if (body.kind) rows = rows.filter((item) => item.kind === body.kind);
     const excluded = new Set(body.excludedCandidateIds || []);
     const manual = new Set(body.overrideCandidateIds || []);
+    for (const row of rows) if (settings.source_overrides?.[row.source]) manual.add(row.id);
     if (body.state === 'included') rows = rows.filter((item) => !excluded.has(item.id));
     if (body.state === 'excluded') rows = rows.filter((item) => excluded.has(item.id));
     if (body.state === 'manual') rows = rows.filter((item) => manual.has(item.id));
@@ -89,16 +101,37 @@
     const limit = Number(body.limit || 200);
     return { candidates: rows.slice(offset, offset + limit), offset, total: rows.length, hasMore: offset + limit < rows.length, kinds: scan.kinds };
   }
-  function resultPayload(failed) {
-    return failed ? {
-      status: 'needs_retry', candidateCount: candidates.length, changedFileCount: 0, providerRequests: 3,
+  function resultPayload(status) {
+    if (status === 'partial') return {
+      status, candidateCount: candidates.length, changedFileCount: 4, providerRequests: 2,
       backupSetId: backups[0].backupSetId,
-      errors: [{ code: 'PROVIDER_OUTAGE', message: 'Provider requests failed repeatedly.' }],
-      translation: { unique: 6, translated: 2, failed: 4, kept_original: 4, unchanged: 0 },
+      translation: { unique: 6, translated: 4, failed: 2, kept_original: 0, unchanged: 0 },
+      translationSamples: [{ source: 'The Lost Key Shop', translated: '잃어버린 열쇠 상점' }],
       translationFailures: [{ source: 'Welcome to Roguefire', reason: 'Provider unavailable' }],
-      keptOriginalSamples: ['Welcome to Roguefire'],
-      usage: { prompt_tokens: 680, completion_tokens: 118, cost: 0.0002, cost_reported: true }
-    } : {
+      usage: { prompt_tokens: 540, completion_tokens: 180, cost: 0.00018, cost_reported: true }
+    };
+    if (status === 'failed' || status === 'needs_retry') return {
+      status, candidateCount: candidates.length, changedFileCount: 0, providerRequests: 3,
+      errors: [{ code: 'PROVIDER_ERROR', message: 'Provider requests failed repeatedly.' }],
+      translation: { unique: 6, translated: 0, failed: 6, kept_original: 0, unchanged: 0 },
+      translationFailures: [{ source: 'Welcome to Roguefire', reason: 'Provider unavailable' }],
+      usage: { prompt_tokens: 680, completion_tokens: 0, cost: 0.0002, cost_reported: true }
+    };
+    if (status === 'cancelled') return {
+      status, candidateCount: candidates.length, changedFileCount: 2, providerRequests: 1,
+      backupSetId: backups[0].backupSetId,
+      translation: { unique: 6, translated: 2, failed: 0, kept_original: 0, unchanged: 0 },
+      usage: { prompt_tokens: 280, completion_tokens: 80, cost: 0.00008, cost_reported: true }
+    };
+    if (status === 'invalidated') return {
+      status, candidateCount: candidates.length, changedFileCount: 0, providerRequests: 0,
+      translation: { unique: 6, translated: 0, failed: 0, kept_original: 0, unchanged: 0 }
+    };
+    if (status === 'unsupported') return {
+      status, candidateCount: candidates.length, changedFileCount: 0, providerRequests: 0,
+      translation: { unique: 0, translated: 0, failed: 0, kept_original: 0, unchanged: 0 }
+    };
+    return {
       status: 'completed', candidateCount: candidates.length, changedFileCount: 8, providerRequests: 1,
       backupSetId: backups[0].backupSetId,
       translation: { unique: 6, translated: 5, failed: 0, kept_original: 0, unchanged: 1 },
@@ -117,22 +150,42 @@
     if (type === 'app.bootstrap') {
       const empty = current === 'empty';
       const resumed = ['scanned', 'review', 'run', 'run-progress', 'result-success', 'result-failed', 'dark-review'].includes(current);
+      const resultScenarios = ['result-partial', 'result-failed', 'result-needs_retry', 'result-cancelled', 'result-invalidated', 'result-unsupported'];
       return ok(request, {
         notices: { firstLaunch: '', about: '', backupWarning: '', apiWarning: '' }, settings: { ...settings, last_world_dir: empty ? '' : worldDir },
-        apiKeyStored: true, worlds: empty ? [] : [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }],
+        apiKeyStored: true, credentialMode: 'local', worlds: empty ? [] : [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }],
         worldInspection: empty ? null : inspection, backups: empty ? [] : backups,
-        resume: resumed ? resumePayload() : { available: false }
+        resume: resumed || resultScenarios.includes(current) ? resumePayload() : { available: false }
       });
     }
-    if (type === 'settings.set') return ok(request, { settings: { ...settings, ...body }, apiKeyStored: true });
+    // This fixture tests draft wiring only; the real AST parser has Python regressions.
+    if (type === 'settings.import_legacy') {
+      if (body.source === 'invalid Python import') return { v: 1, id: request.id, type: 'response.error', error: { code: 'INVALID_REQUEST', message: 'Invalid public legacy settings' } };
+      return ok(request, { config: { api: { provider: 'custom', base_url: 'https://legacy.example/v1', wire_format: 'openai', model: 'literal-model' }, prompt: { custom_system_prompt: 'Preserve formatting' } } });
+    }
+    if (type === 'settings.set') {
+      if (new URLSearchParams(location.search).get('slowSettings') === '1') await new Promise((resolve) => setTimeout(resolve, 1500));
+      const aliases = { externalResourcePackPaths: 'external_resource_pack_paths', resourcePackOptions: 'resource_pack_options', sourceOverrides: 'source_overrides', continueOnFileError: 'continue_on_file_error', maxFileWriteRetries: 'max_file_write_retries', targetLanguage: 'target_language', uiLanguage: 'ui_language', baseUrl: 'base_url', wireFormat: 'wire_format', resourcePackEnabled: 'resource_pack_enabled', skipTargetLanguageText: 'skip_target_language_text', scanOptions: 'scan_options' };
+      for (const [key, value] of Object.entries(body)) {
+        if (key !== 'apiKey' && key !== 'credentialMode') settings[aliases[key] || key] = value;
+      }
+      credentialModes.set(body.provider, body.credentialMode || 'local');
+      return ok(request, { settings: { ...settings }, apiKeyStored: true, credentialMode: body.credentialMode || 'local' });
+    }
     if (type === 'world.inspect') return ok(request, inspection);
     if (type === 'worlds.remember') return ok(request, { worlds: [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }] });
     if (type === 'worlds.forget') return ok(request, { worlds: [] });
-    if (type === 'resume.status') return ok(request, { available: false });
+    if (type === 'resume.status') return ok(request, ['result-cancelled', 'result-needs_retry'].includes(current) ? { ...resumePayload(), status: current.slice(7) } : { available: false });
     if (type === 'backups.list') return ok(request, { backups });
-    if (type === 'estimate.get') return ok(request, estimate);
+    if (type === 'estimate.get') {
+      const excluded = new Set([...(body.excludedCandidateIds || []), ...(body.overrideCandidateIds || [])]);
+      const count = candidates.filter((row) => !excluded.has(row.id) && !settings.source_overrides?.[row.source]).length;
+      return ok(request, { ...estimate, candidateCount: count, requests: Math.ceil(count / 40) });
+    }
     if (type === 'candidates.page') return ok(request, filteredPage(body));
+    if (type === 'provider.usage') return ok(request, { provider: 'openrouter', checkedAt: '2026-10-01T00:00:00Z', usage: 0.123456, byokUsage: 0, limit: null, limitRemaining: null });
     if (type === 'models.list') return ok(request, { models: [{ id: 'xiaomi/mimo-v2.6-flash', display_name: 'MiMo V2.6 Flash' }] });
+    if (type === 'prompt.enhance') return ok(request, { enhancedPrompt: '중세 판타지 분위기에 맞추어 짧고 자연스럽게 번역하세요.' });
     if (type === 'scan.start') {
       if (current === 'scan-running') {
         setTimeout(() => emit('pomi-progress', { v: 1, id: request.id, type: 'scan.progress', payload: { event: 'scan_start', total_files: 96 } }), 50);
@@ -145,15 +198,16 @@
       if (current === 'run-progress') {
         setTimeout(() => emit('pomi-progress', { v: 1, id: request.id, type: 'translate.progress', payload: { event: 'phase_start', phase: 'translate', total: 6, requests_estimate: 1 } }), 50);
         setTimeout(() => emit('pomi-progress', { v: 1, id: request.id, type: 'translate.progress', payload: { event: 'translation_progress', completed: 4, total: 6, failed: 0, batch: 1, batches: 2, requests: 1 } }), 120);
-        return new Promise((resolve) => setTimeout(() => resolve(ok(request, resultPayload(false))), 60000));
+        return new Promise((resolve) => setTimeout(() => resolve(ok(request, resultPayload('completed'))), 60000));
       }
-      return ok(request, resultPayload(current === 'result-failed'));
+      return ok(request, resultPayload(current.startsWith('result-') ? current.slice('result-'.length) : 'completed'));
     }
-    if (type === 'restore.start') return ok(request, { status: 'completed', recoverySetId: 'recovery-before-restore' });
+    if (type === 'restore.start') return ok(request, { status: 'restored', recoverySetId: 'recovery-before-restore' });
     if (type === 'credentials.delete') return ok(request, { deleted: true });
     return ok(request, {});
   }
 
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener(event, id) { listeners.delete(id); } };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
     plugins: { path: { sep: '/', delimiter: ':' } },
@@ -162,10 +216,18 @@
     runCallback(id, data) { callbacks.get(id)?.(data); },
     convertFileSrc(path) { return path; },
     async invoke(command, args = {}) {
+      if (command === 'export_document') {
+        const filename = args.kind === 'settings' ? 'pomi-settings.json' : args.kind === 'scan_report' ? 'scan-report.json' : 'translate-report.json';
+        const url = URL.createObjectURL(new Blob([JSON.stringify(args.document, null, 2)], { type: 'application/json' }));
+        const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return true;
+      }
       if (command === 'plugin:event|listen') { const id = ++eventId; listeners.set(id, { id, event: args.event, handler: args.handler }); return id; }
       if (command === 'plugin:event|unlisten') { listeners.delete(args.eventId); return null; }
-      if (command === 'plugin:dialog|open') return null;
-      if (command === 'credential_status') return true;
+      if (command === 'plugin:dialog|open') return window.__pomiDialogFiles ?? null;
+      if (command === 'credential_status') return { stored: true, mode: credentialModes.get(args.provider) || 'local' };
+      if (command === 'credential_import') return { stored: true, mode: 'local' };
       if (command === 'operation_active') return false;
       if (command === 'cancel_active') return true;
       if (command === 'sidecar_request') return sidecar(args.request);

@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 SCHEMA = 1
@@ -50,17 +51,63 @@ def load_user_settings(root: Path | None = None) -> dict:
 
 def remember_user_settings(updates: dict, root: Path | None = None) -> dict:
     """Merge public preferences. Unknown keys already on disk are kept."""
-    current = load_user_settings(root)
-    for key, value in updates.items():
-        if str(key).lower() in SECRET_FIELDS:
-            continue
-        current[key] = value
-    current["schema"] = SCHEMA
+    with _settings_lock(root):
+        current = load_user_settings(root)
+        for key, value in updates.items():
+            if str(key).lower() in SECRET_FIELDS:
+                continue
+            current[key] = value
+        current["schema"] = SCHEMA
+        _write_user_settings(current, root)
+        return current
+
+
+@contextmanager
+def _settings_lock(root: Path | None):
+    """Serialize app/CLI read-modify-replace and compare-and-restore operations."""
+    with (user_data_dir(root) / "settings.lock").open("a+b") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            if handle.seek(0, os.SEEK_END) == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if sys.platform == "win32":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _write_user_settings(current: dict, root: Path | None) -> None:
     path = settings_path(root)
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(temporary, path)
-    return current
+
+
+def restore_user_settings(previous: dict, expected: dict, root: Path | None = None) -> dict:
+    """Undo a desktop save only while the saved snapshot is still current.
+
+    Replacing rather than merging removes preferences introduced by a failed first save.
+    An external CLI change must never be overwritten by the desktop rollback.
+    """
+    if any(str(key).lower() in SECRET_FIELDS for key in previous):
+        raise ValueError("Credential fields are not public settings")
+    with _settings_lock(root):
+        if load_user_settings(root) != expected:
+            raise ValueError("Settings changed before recovery; reload the current preferences")
+        _write_user_settings(previous, root)
+        return load_user_settings(root)
 
 
 def list_recent_worlds(root: Path | None = None) -> list[dict]:
@@ -139,8 +186,27 @@ def load_model_catalog(provider: str, root: Path | None = None) -> list[dict]:
 
 
 def public_settings_from_config(config: dict) -> dict:
+    from mwt.desktop_settings import (
+        DEFAULT_CONTINUE_ON_FILE_ERROR,
+        DEFAULT_MAX_FILE_WRITE_RETRIES,
+        normalize_continue_on_file_error,
+        normalize_max_file_write_retries,
+        normalize_resource_pack_options,
+        normalize_source_overrides,
+        normalized_options_from_core_scan,
+    )
+
     api = config.get("api") or {}
+    from mwt.desktop_resource_packs import normalize_external_pack_paths
     prompt = config.get("prompt") or {}
+    scan = config.get("scan") or {}
+    runtime = config.get("runtime") or {}
+    resource_pack = config.get("resource_pack") or {}
+    resource_pack_option_fields = (
+        "source_lang_files",
+        "target_lang_file",
+        "skip_if_target_exists",
+    )
     return {
         "provider": api.get("provider", ""),
         "model": api.get("model", ""),
@@ -155,9 +221,25 @@ def public_settings_from_config(config: dict) -> dict:
         "request_timeout": api.get("request_timeout", ""),
         "rpm_limit": api.get("rpm_limit", ""),
         "tpm_limit": api.get("tpm_limit", ""),
-        "max_batch_retries": (config.get("runtime") or {}).get("max_batch_retries", ""),
-        "concurrency": (config.get("runtime") or {}).get("concurrency", ""),
-        "resource_pack_enabled": (config.get("resource_pack") or {}).get("enabled", False),
-        "skip_target_language_text": (config.get("scan") or {}).get("skip_target_language_text", True),
+        "max_batch_retries": runtime.get("max_batch_retries", ""),
+        "concurrency": runtime.get("concurrency", ""),
+        "continue_on_file_error": normalize_continue_on_file_error(
+            runtime.get("continue_on_file_error", DEFAULT_CONTINUE_ON_FILE_ERROR),
+            field="runtime.continue_on_file_error",
+        ),
+        "max_file_write_retries": normalize_max_file_write_retries(
+            runtime.get("max_file_write_retries", DEFAULT_MAX_FILE_WRITE_RETRIES),
+            field="runtime.max_file_write_retries",
+        ),
+        "resource_pack_enabled": resource_pack.get("enabled", False),
+        "external_resource_pack_paths": normalize_external_pack_paths(resource_pack.get("external_zip_paths") or []),
+        "resource_pack_options": normalize_resource_pack_options(
+            {key: resource_pack[key] for key in resource_pack_option_fields if key in resource_pack}
+        ),
+        "skip_target_language_text": scan.get("skip_target_language_text", True),
+        "scan_options": normalized_options_from_core_scan(scan),
+        "source_overrides": normalize_source_overrides(
+            scan.get("overrides", {}), field="scan.overrides"
+        ),
         "last_world_dir": config.get("world_dir", ""),
     }

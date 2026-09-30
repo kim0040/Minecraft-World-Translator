@@ -1,34 +1,39 @@
-# PomiTranslate 남은 작업 — 2026-09-30
+# PomiTranslate 남은 작업 — 2026-10-01
 
-기준 관측: `main` / `e70d27a`, 문서 갱신 전 clean. local feature ref도 같은 commit. 기존 `4c50a6e` 기반 목록은 아래 최신 인계로 대체한다.
+> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
 
-이 문서는 요약이고, **실행 순서·검증 기록·안전 경계·명령은 [전체 인계](agent-handoff-2026-09-30.md)**가 기준이다. credential 변경은 [상세 저장 계획](credential-storage-plan.md)을 따른다.
+> **2026-10-01 중단 갱신:** [최신 중단·인계](phase2-pause-2026-10-01.md)가 아래 진행 기록보다 우선한다. 외부 ZIP/사용량 조회 후속 구현과 검증 시점, 재개 순서는 해당 문서를 따른다. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)도 기록했다. Phase2 미완/Phase3 미시작, commit/push 없음.
 
-## Phase 2 — 구현 존재, 완료 gate 미통과
+현재 `main` / `865b51d`에 모든 WIP를 보존했다. **Phase 2 미완 / Phase 3 미시작**, 완료 commit/push 없음. [최신 검증·인계](phase2-validation-2026-10-01.md)가 과거 진행/중단 기록보다 우선한다.
 
-검증 순서: **웹 fixture UI/기능 → 실제 Python/JSONL 코어 → frontend build → 마지막 Tauri/native E2E**. 반복 UI 수정을 위해 앱을 매번 빌드하지 않는다. 상세: [웹 우선 검증·유동 화면 계획](browser-first-testing-plan.md).
+## 내일 첫 작업 — 검증 최적화 후속
 
-- [ ] Rust 로컬 encrypted credential DB + 설치별 master key + 플랫폼 permission.
-- [ ] local 기본 / session-only / opt-in keychain, 기존 키 가져오기·rollback, CLI 호환.
-- [ ] keychain 상태 확인을 실제 secret read에서 metadata 조회로 변경.
-- [ ] public provider/Custom endpoint 최종 Rust boundary 및 POMI_* 환경변수의 UI 설정 덮어쓰기 차단/계약 회귀.
-- [ ] restore 후 result step이 남는 state/화면 문제 해결.
-- [ ] 같은 제품 Svelte UI의 browser harness/Playwright 유지, 모든 페이지 기능·i18n·theme·responsive·keyboard 선검증.
-- [ ] candidate 10k/100k 실제 virtual DOM·memory·latency. virtual range unit test와 구분.
-- [ ] legacy Web UI 기능 parity 표와 gap 해소. 확인 전 삭제 금지.
-- [ ] frontend/Python/Rust/sidecar/Tauri build 전체 gate.
-- [ ] 14 screenshot inspection, 1440/1180/1024/840/320, 200%, dark. 16:9/ultrawide/세로형/짧은 창/연속 resize에서 layout·draft·focus·action 접근 유지.
-- [ ] 실제 Tauri workflow, 최소 실제 provider 호출·usage/비용, backup/restore byte-identical.
-- [ ] 문서/diff review 후 Phase 2 완료 commit → push.
+- [x] 빠른/최종/계획 명령, 성공 증거 재사용, incremental/clean sidecar 분리, 중복 screenshot/result-failed 통합, AGENTS/정책 갱신.
+- [x] 문법·계획 출력·diff/link 확인. 실제 runner/Eval 앱/개발 포트 종료.
+- [ ] 새 executor cache/invalidation/failed/interrupted/lock 및 화면 artifact mapping의 targeted runtime 검증. 오늘 테스트는 중단했으므로 NOT RUN.
+- [ ] 이후 기존 Phase2 gate만 계속 진행. 도구 변경 때문에 unrelated 전체 검사를 반복하지 않는다.
 
-이전 frontend/Python/Rust/build, browser 접근성·화면 검사, 실제 Tauri mock 번역/복원 기록은 있다. 최종 endpoint 수정 후 실제 provider 실행은 완료하지 않았다. 후속 paid API 추가 비용 기록은 $0이며 Phase 1 과거 비용과 구분한다. 이번 문서 작업에서는 테스트를 재실행하지 않았다.
+## Phase 2 gate
 
-현재 virtual table은 구현돼 있다. paging 200개와 bounded row DOM을 사용하는 코드가 있으나 100k 실제 성능 완료를 뜻하지 않는다. UI locale는 ko/en/ja이고 중국어 README와 중국어 UI는 별개다.
+- [x] compile/check/production build, Python 전체17 suites, frontend48, Rust23, sidecar package, unsigned isolated Tauri debug app.
+- [x] 기본 local encrypted vault/session/opt-in keychain, atomic stale-key 제거·rollback·endpoint validation, 실제 합성 Local→Session→restart→Local 검증.
+- [x] 브라우저 전체64 PASS/56.7초, 대표14 screenshot inspection, 모든 페이지·100k bounded DOM/cache·filter counts·keyboard·resize·dark·840/320/a11y.
+- [x] isolated native mock scan/run/progress/cancel/backup/restore 및 원본4파일 byte-identical, public setting persistence와 native literal Python chooser preview.
+- [x] 실제 native 200% 확대, 상세 입력/Tab/하단 닫기/ESC·복원 확인·설정 하단 actions. 대화상자 애니메이션 렌더링 결함 수정 후 재검증.
+- [x] 재개 시 최신 검토 덮어쓰기 결함 수정. Python RED/GREEN, 최신 native 제외2/manual1/request0/changed1 및 원본4파일 복원 PASS.
+- [x] 월드 외부 symlink 입력을 provider/읽기 전에 차단, 대형 데이터 스트리밍 해시, 자동 회귀6개.
+- [ ] 실제 provider 최종 E2E 및 usage 전후/실제 cost/restore. 실제 API key는 사용자가 eval 앱에서 직접 입력·저장해야 함. 예산≤$1, 이번 추가비용$0.
+- [x] Legacy arbitrary external ZIP 선택/scan/translate/verified backup/restore 구현과 Python/browser 검증.
+- [ ] 최신 external ZIP native gate 및 app-managed backup/checkpoint 대체 차이 확인. Folder/merge는 Phase3 확장.
+- [x] 최신 native 정상 종료→cold restart→Loading→Ready/최근 월드 경로 유지 확인.
+- [ ] 이전 한 번의 지속 blank 원인과 clean-machine startup 안정성. 최신 재빌드 restart PASS를 전체 플랫폼 성능 gate로 확대 해석 금지.
+- [ ] 최종 docs/diff/secret-artifact review → Phase2 완료 commit → push.
+- [ ] 위 gate 이후에만 Phase3 구현 착수. legacy 제거/launcher 전환은 parity 충족 뒤.
 
 ## Phase 3 — 미시작
 
 - [ ] datapack visible text / command storage / scoreboard 조사, opt-in 지원과 detected/unsupported/preserved coverage.
-- [ ] external pack ZIP/folder, source/target locale, overwrite/skip/fill/merge, collision·path 안전성.
+- [ ] external folder pack/fill/merge, collision·path 안전성. ZIP/source·target locale/overwrite·skip는 Phase2 구현, 최신 native gate가 남음.
 - [ ] occurrence별 include/exclude와 전체 위치 lazy query.
 - [ ] scan/override/checkpoint/resume schema migration.
 - [ ] candidate/occurrence/glossary/TM/job history SQLite 범위·indexes·migration/rollback.
@@ -53,4 +58,4 @@
 
 유료 최종 E2E는 기존 명시 허용 범위인 추가 총 $1 이하, 목표 $0.01–$0.10. mock 먼저, 마지막 최소 호출, 실제 endpoint·usage·비용 확인. 공개 release·서명 자격·사용자 월드 업로드는 별도 승인 없이 수행하지 않는다.
 
-현재 release-ready가 아니다. Phase 2 최종 통합 검증, 새 credential 저장, Phase 3 및 플랫폼/서명 gate가 남아 있다.
+현재 release-ready가 아니다. Phase2 actual provider·범위 계약·최종 검증과 Phase3·플랫폼/서명 gate가 남아 있다.

@@ -19,19 +19,31 @@ class BackupError(RuntimeError):
     pass
 
 
+class ExternalTargetError(BackupError):
+    pass
+
+
 class PlanInvalidated(RuntimeError):
     pass
 
 
 def iter_data_files(world_dir: Path) -> list[Path]:
+    from mwt.layout import world_data_roots
+
+    root = world_dir.resolve()
     files: list[Path] = []
-    for path in world_dir.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIR_NAMES for part in path.relative_to(world_dir).parts):
-            continue
-        if path.suffix.lower() in DATA_SUFFIXES or path.name in {"level.dat", "resources.zip"}:
-            files.append(path)
+    for data_root in world_data_roots(root):
+        if not data_root.resolve().is_relative_to(root):
+            raise ValueError("World data source is outside the selected world")
+        for path in data_root.rglob("*"):
+            if any(part in SKIP_DIR_NAMES for part in path.relative_to(root).parts):
+                continue
+            if path.suffix.lower() not in DATA_SUFFIXES and path.name not in {"level.dat", "resources.zip"}:
+                continue
+            if not path.resolve().is_relative_to(root):
+                raise ValueError("World data source is outside the selected world")
+            if path.is_file():
+                files.append(path)
     return sorted(files)
 
 
@@ -42,13 +54,16 @@ def world_fingerprint(world_dir: Path) -> str:
         relative = path.relative_to(root).as_posix().encode("utf-8")
         digest.update(relative)
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
         digest.update(b"\0")
     return digest.hexdigest()
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def legacy_backup_store(world_dir: Path) -> Path:
@@ -71,8 +86,19 @@ def backup_store(world_dir: Path, data_dir: Path) -> Path:
 class BackupSet:
     """Copy world files, verify the copies, and only then allow a write."""
 
-    def __init__(self, world_dir: Path, backup_id: str = "latest", store: Path | None = None) -> None:
+    def __init__(self, world_dir: Path, backup_id: str = "latest", store: Path | None = None, *, external_files: list[Path] | None = None) -> None:
         self.world_dir = world_dir.resolve()
+        # Only explicitly selected ZIP files may become external write targets.
+        # A manifest cannot grant itself permission to overwrite an arbitrary path.
+        self.external_files: dict[str, str] = {}
+        for path in external_files or []:
+            selected = Path(path).expanduser()
+            if selected.is_symlink() or not selected.is_file() or selected.suffix.lower() != ".zip":
+                raise ExternalTargetError("External resource pack must be an existing regular ZIP file")
+            resolved = selected.resolve(strict=True)
+            if resolved.is_relative_to(self.world_dir):
+                continue
+            self.external_files[str(resolved)] = self._parent_identity(resolved)
         self.store = Path(store) if store is not None else legacy_backup_store(self.world_dir)
         if backup_id == "latest":
             pointer = self.store / "latest.json"
@@ -87,29 +113,32 @@ class BackupSet:
         self._written: set[str] = set()
 
     @classmethod
-    def new(cls, world_dir: Path, *, kind: str = "translation", store: Path | None = None) -> "BackupSet":
+    def new(cls, world_dir: Path, *, kind: str = "translation", store: Path | None = None, external_files: list[Path] | None = None) -> "BackupSet":
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         backup_id = f"{stamp}-{uuid.uuid4().hex[:12]}-{kind}"
-        return cls(world_dir, backup_id, store)
+        return cls(world_dir, backup_id, store, external_files=external_files)
 
     @classmethod
-    def find(cls, world_dir: Path, backup_id: str, stores: list[Path]) -> "BackupSet":
+    def find(cls, world_dir: Path, backup_id: str, stores: list[Path], *, external_files: list[Path] | None = None) -> "BackupSet":
         """Open a backup by id from the first store that has it."""
         for store in stores:
-            candidate = cls(world_dir, backup_id, store)
+            candidate = cls(world_dir, backup_id, store, external_files=external_files)
             if candidate.manifest_path.is_file():
                 return candidate
         raise BackupError("Backup set was not found")
 
     @classmethod
-    def open_existing(cls, world_dir: Path, backup_id: str, store: Path | None = None) -> "BackupSet":
-        backup = cls(world_dir, backup_id, store)
+    def open_existing(cls, world_dir: Path, backup_id: str, store: Path | None = None, *, external_files: list[Path] | None = None) -> "BackupSet":
+        backup = cls(world_dir, backup_id, store, external_files=external_files)
         if not backup.manifest_path.is_file():
             raise BackupError("Backup set for resume was not found")
         payload = json.loads(backup.manifest_path.read_text(encoding="utf-8"))
         if payload.get("verified") is not True:
             raise BackupError("Backup set for resume is not verified")
         backup.entries = backup._validated_manifest_entries(payload)
+        for entry in backup.entries:
+            if "externalTarget" in entry:
+                backup._target(entry)
         backup._written = {entry["path"] for entry in backup.entries}
         backup.verify()
         return backup
@@ -122,13 +151,29 @@ class BackupSet:
         temporary.write_text(json.dumps({"backupSetId": self.backup_id}), encoding="utf-8")
         os.replace(temporary, pointer)
 
+    def external_targets(self) -> list[Path]:
+        payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        return [Path(entry["externalTarget"]) for entry in self._validated_manifest_entries(payload) if "externalTarget" in entry]
+
     def add(self, path: Path) -> None:
+        if path.is_symlink():
+            raise BackupError("Symbolic links cannot be backed up as writable targets")
         path = path.resolve()
         if not path.is_file():
             return
-        relative = path.relative_to(self.world_dir).as_posix()
-        if any(entry["path"] == relative for entry in self.entries):
-            return
+        external = not path.is_relative_to(self.world_dir)
+        if external:
+            relative = self._external_archive_path(path)
+            target = {"externalTarget": str(path), "externalParentId": self._parent_identity(path)}
+            self._target({"path": relative, **target})
+        else:
+            relative = path.relative_to(self.world_dir).as_posix()
+            target = {}
+        for entry in self.entries:
+            if entry["path"] == relative:
+                if entry.get("externalTarget") != target.get("externalTarget"):
+                    raise BackupError("Backup target collides with an existing entry")
+                return
         destination = self.root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, destination)
@@ -136,7 +181,7 @@ class BackupSet:
         copied = file_sha256(destination)
         if original != copied:
             raise BackupError(f"Backup hash mismatch for {relative}")
-        self.entries.append({"path": relative, "sha256": original, "size": str(path.stat().st_size)})
+        self.entries.append({"path": relative, "sha256": original, "size": str(path.stat().st_size), **target})
         self._write_manifest()
 
     def verify(self) -> None:
@@ -151,14 +196,15 @@ class BackupSet:
                 raise BackupError(f"Backup verification failed for {entry['path']}")
             if entry["path"] in self._written:
                 continue
-            source = self.world_dir / entry["path"]
+            source = self._target(entry)
             if file_sha256(source) != entry["sha256"]:
                 raise BackupError(f"Backup verification failed for {entry['path']}")
 
     def mark_written(self, paths: list[Path]) -> None:
         """Remember files this run has already replaced so later verifies do not expect the pre-write bytes."""
         for path in paths:
-            self._written.add(path.resolve().relative_to(self.world_dir).as_posix())
+            resolved = path.resolve()
+            self._written.add(resolved.relative_to(self.world_dir).as_posix() if resolved.is_relative_to(self.world_dir) else self._external_archive_path(resolved))
 
     def restore(self, recovery_store: Path | None = None) -> str:
         """Put the backed-up files back. The files they replace are kept as a recovery set first."""
@@ -168,20 +214,22 @@ class BackupSet:
             raise BackupError("Refusing to restore an unverified backup set")
         for entry in entries:
             source = self.root / entry["path"]
-            destination = self.world_dir / entry["path"]
+            # Validate every destination before creating recovery files or replacing any file.
+            self._target(entry)
             if not source.is_file() or file_sha256(source) != entry["sha256"]:
                 raise BackupError(f"Refusing to restore an unverified backup of {entry['path']}")
 
-        recovery = BackupSet.new(self.world_dir, kind="recovery", store=recovery_store or self.store)
+        recovery = BackupSet.new(self.world_dir, kind="recovery", store=recovery_store or self.store,
+                                 external_files=[Path(path) for path in self.external_files])
         for entry in entries:
-            current = self.world_dir / entry["path"]
+            current = self._target(entry)
             if current.is_file():
                 recovery.add(current)
         if recovery.entries:
             recovery.publish_latest()
         for entry in entries:
             source = self.root / entry["path"]
-            destination = self.world_dir / entry["path"]
+            destination = self._target(entry)
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination.with_name(f".{destination.name}.pomi-restore-{uuid.uuid4().hex}.tmp")
             try:
@@ -192,6 +240,27 @@ class BackupSet:
             if file_sha256(destination) != entry["sha256"]:
                 raise BackupError(f"Restore hash mismatch for {entry['path']}")
         return recovery.backup_id if recovery.entries else ""
+
+    @staticmethod
+    def _parent_identity(path: Path) -> str:
+        info = path.parent.stat()
+        return f"{info.st_dev}:{info.st_ino}"
+
+    @staticmethod
+    def _external_archive_path(path: Path) -> str:
+        return "__external_packs__/" + hashlib.sha256(str(path).encode("utf-8")).hexdigest() + "/pack.zip"
+
+    def _target(self, entry: dict[str, str]) -> Path:
+        selected = entry.get("externalTarget")
+        if selected is None:
+            return self.world_dir / entry["path"]
+        path = Path(selected)
+        if (selected not in self.external_files or path.is_symlink() or not path.is_file()
+                or str(path.resolve(strict=True)) != selected
+                or self._parent_identity(path) != entry.get("externalParentId")
+                or self.external_files[selected] != entry.get("externalParentId")):
+            raise ExternalTargetError("External resource pack is unavailable or not explicitly selected for restore")
+        return path
 
     def _validated_manifest_entries(self, payload: dict) -> list[dict[str, str]]:
         files = payload.get("files")
@@ -221,16 +290,31 @@ class BackupSet:
             ):
                 raise BackupError("Backup manifest path or hash is invalid")
             backup_path = (self.root / Path(*relative.parts)).resolve()
+            external_target = raw.get("externalTarget")
+            external_parent = raw.get("externalParentId")
+            if external_target is not None:
+                if (not isinstance(external_target, str) or not Path(external_target).is_absolute()
+                        or Path(external_target).suffix.lower() != ".zip"
+                        or Path(external_target).is_relative_to(world_root)
+                        or relative_text != self._external_archive_path(Path(external_target))
+                        or not isinstance(external_parent, str) or not re.fullmatch(r"\d+:\d+", external_parent)):
+                    raise BackupError("External backup target is invalid")
+            elif external_parent is not None:
+                raise BackupError("External backup target is invalid")
             world_path = (self.world_dir / Path(*relative.parts)).resolve()
-            if not backup_path.is_relative_to(backup_root) or not world_path.is_relative_to(world_root):
+            if not backup_path.is_relative_to(backup_root) or (external_target is None and not world_path.is_relative_to(world_root)):
                 raise BackupError("Backup manifest path escapes its allowed root")
             seen.add(relative_text)
-            entries.append({"path": relative_text, "sha256": digest, "size": size})
+            entry = {"path": relative_text, "sha256": digest, "size": size}
+            if external_target is not None:
+                entry.update(externalTarget=external_target, externalParentId=external_parent)
+            entries.append(entry)
         return entries
 
     def _write_manifest(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         document = {
+            "schemaVersion": 2,
             "backupSetId": self.backup_id,
             "createdAt": datetime.now(timezone.utc).isoformat(),
             "verified": True,
@@ -265,6 +349,7 @@ def list_backup_sets(world_dir: Path, stores: list[Path] | None = None) -> list[
                     "kind": "recovery" if backup_id.endswith("-recovery") else "translation",
                     "sizeBytes": sum(int(item.get("size", 0)) for item in files if str(item.get("size", "")).isdigit()),
                     "inWorldFolder": store.resolve() == legacy_backup_store(world_dir),
+                    "externalTargets": [item["externalTarget"] for item in files if isinstance(item, dict) and isinstance(item.get("externalTarget"), str)],
                 })
             except (OSError, ValueError, TypeError):
                 continue

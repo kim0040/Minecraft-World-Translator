@@ -16,10 +16,22 @@ STANDARD_REGION_DIRS = (
 
 def _is_relative_inside(root: Path, path: Path) -> bool:
     try:
-        path.relative_to(root)
-    except ValueError:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, RuntimeError, ValueError):
         return False
     return True
+
+
+def world_data_roots(world_dir: Path) -> list[Path]:
+    """Fingerprint Java worlds, not unrelated plugin/cache files in a server root."""
+    root = world_dir.resolve()
+    if (root / "level.dat").is_file():
+        return [root]
+    children = sorted(
+        child for child in root.iterdir()
+        if child.is_dir() and (child / "level.dat").is_file()
+    )
+    return children or [root]
 
 
 def discover_region_dirs(world_dir: Path) -> list[str]:
@@ -35,21 +47,21 @@ def discover_region_dirs(world_dir: Path) -> list[str]:
         add(relative)
 
     dimensions = root / "dimensions"
-    if dimensions.is_dir():
-        for namespace in sorted(path for path in dimensions.iterdir() if path.is_dir()):
-            for dimension in sorted(path for path in namespace.iterdir() if path.is_dir()):
+    if _is_relative_inside(root, dimensions) and dimensions.is_dir():
+        for namespace in sorted(path for path in dimensions.iterdir() if _is_relative_inside(root, path) and path.is_dir()):
+            for dimension in sorted(path for path in namespace.iterdir() if _is_relative_inside(root, path) and path.is_dir()):
                 for kind in ("region", "entities"):
                     add(f"dimensions/{namespace.name}/{dimension.name}/{kind}")
 
     for child in sorted(path for path in root.iterdir() if path.is_dir()):
-        if child.name.startswith(".") or not (child / "level.dat").is_file():
+        if child.name.startswith(".") or not _is_relative_inside(root, child) or not (child / "level.dat").is_file():
             continue
         for relative in STANDARD_REGION_DIRS:
             add(f"{child.name}/{relative}")
         nested = child / "dimensions"
-        if nested.is_dir():
-            for namespace in sorted(path for path in nested.iterdir() if path.is_dir()):
-                for dimension in sorted(path for path in namespace.iterdir() if path.is_dir()):
+        if _is_relative_inside(root, nested) and nested.is_dir():
+            for namespace in sorted(path for path in nested.iterdir() if _is_relative_inside(root, path) and path.is_dir()):
+                for dimension in sorted(path for path in namespace.iterdir() if _is_relative_inside(root, path) and path.is_dir()):
                     for kind in ("region", "entities"):
                         add(f"{child.name}/dimensions/{namespace.name}/{dimension.name}/{kind}")
     return found
@@ -62,14 +74,35 @@ def detect_write_blockers(world_dir: Path, *, recursive: bool = True) -> list[st
     if database.is_dir() and ((database / "CURRENT").is_file() or any(database.glob("MANIFEST*"))):
         reasons.append("bedrock")
     level = root / "level.dat"
-    if level.is_file():
-        header = level.read_bytes()[:2]
+    if not _is_relative_inside(root, level):
+        reasons.append("unsafe_path")
+    elif level.is_file():
+        with level.open("rb") as stream:
+            header = stream.read(2)
         if header != b"\x1f\x8b" and database.is_dir():
             if "bedrock" not in reasons:
                 reasons.append("bedrock")
+    data_roots = world_data_roots(root)
+    for data_root in data_roots:
+        if not _is_relative_inside(root, data_root):
+            if "unsafe_path" not in reasons:
+                reasons.append("unsafe_path")
+            continue
+        for path in ([data_root / "level.dat", data_root / "resources.zip"] if not recursive else data_root.rglob("*")):
+            if any(part.startswith(".pomi-") for part in path.relative_to(root).parts):
+                continue
+            relevant_file = path.suffix.lower() in {".dat", ".mca", ".mcc", ".mcr", ".linear"} or path.name == "resources.zip"
+            relevant_directory = path.name in {"region", "entities", "dimensions", "DIM-1", "DIM1"} or "dimensions" in path.relative_to(data_root).parts
+            if (relevant_file or relevant_directory) and not _is_relative_inside(root, path):
+                if "unsafe_path" not in reasons:
+                    reasons.append("unsafe_path")
+                continue
+            if path.name == "resources.zip" and path.is_symlink():
+                if "unsafe_path" not in reasons:
+                    reasons.append("unsafe_path")
     if not recursive:
         return reasons
-    for path in root.rglob("*"):
+    for path in (path for data_root in data_roots if _is_relative_inside(root, data_root) for path in data_root.rglob("*")):
         if not path.is_file():
             continue
         if any(part.startswith(".pomi-") for part in path.parts):

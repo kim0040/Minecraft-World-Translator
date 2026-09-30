@@ -1,8 +1,18 @@
+mod credentials;
+mod document_export;
+mod provider_boundary;
+mod settings_transaction;
+mod sidecar_paths;
+mod zoom_menu;
+
 use std::{fs, path::PathBuf, sync::Mutex};
 
 use serde_json::Value;
 use tauri::{Emitter, Manager, State, WindowEvent};
-use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
+};
 
 struct ActiveProcess {
     child: CommandChild,
@@ -10,12 +20,16 @@ struct ActiveProcess {
 }
 
 #[derive(Default)]
-struct ActiveSidecar(Mutex<Option<ActiveProcess>>);
+struct ActiveSidecar {
+    process: Mutex<Option<ActiveProcess>>,
+    request_gate: tauri::async_runtime::Mutex<()>,
+}
 
 const ALLOWED_REQUESTS: &[&str] = &[
     "app.bootstrap",
     "notices.get",
     "settings.get",
+    "settings.import_legacy",
     "settings.set",
     "credentials.delete",
     "worlds.list",
@@ -24,6 +38,8 @@ const ALLOWED_REQUESTS: &[&str] = &[
     "world.inspect",
     "resume.status",
     "models.list",
+    "prompt.enhance",
+    "provider.usage",
     "scan.start",
     "candidates.page",
     "estimate.get",
@@ -33,20 +49,27 @@ const ALLOWED_REQUESTS: &[&str] = &[
     "restore.start",
 ];
 
-const KEYRING_SERVICE: &str = "PomiTranslate";
-
 /// Requests whose payload gets `credentialOwner: rust`, so the sidecar never touches the keychain.
 const CREDENTIAL_OWNER_REQUESTS: &[&str] = &[
     "app.bootstrap",
     "settings.get",
     "settings.set",
     "models.list",
+    "prompt.enhance",
+    "provider.usage",
+    "scan.start",
     "translate.start",
     "translate.resume",
 ];
 
 /// Requests that need the stored API key, which Rust reads and puts in the payload.
-const KEY_INJECTED_REQUESTS: &[&str] = &["models.list", "translate.start", "translate.resume"];
+const KEY_INJECTED_REQUESTS: &[&str] = &[
+    "models.list",
+    "prompt.enhance",
+    "provider.usage",
+    "translate.start",
+    "translate.resume",
+];
 
 fn is_allowed_request(kind: &str) -> bool {
     ALLOWED_REQUESTS.contains(&kind)
@@ -68,37 +91,35 @@ fn drain_complete_lines(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
     lines
 }
 
-fn keyring_entry(provider: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, provider).map_err(|_| "OS credential store is unavailable".into())
-}
-
-fn read_key(provider: &str) -> Result<Option<String>, String> {
-    match keyring_entry(provider)?.get_password() {
-        Ok(secret) => Ok(Some(secret)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(_) => Err("Could not read the API key from the OS credential store".into()),
-    }
-}
-
-fn delete_key(provider: &str) -> Result<(), String> {
-    match keyring_entry(provider)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(_) => Err("Could not delete the API key from the OS credential store".into()),
-    }
+fn credential_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|_| "Application data directory is unavailable".into())
 }
 
 #[tauri::command]
-fn credential_status(provider: String) -> Result<bool, String> {
-    if provider.is_empty() {
-        return Ok(false);
-    }
-    Ok(read_key(&provider)?.is_some())
+fn credential_status(
+    app: tauri::AppHandle,
+    state: State<'_, credentials::Credentials>,
+    provider: String,
+) -> Result<credentials::Status, String> {
+    state.status(&credential_root(&app)?, &provider)
+}
+
+#[tauri::command]
+fn credential_import(
+    app: tauri::AppHandle,
+    state: State<'_, credentials::Credentials>,
+    provider: String,
+) -> Result<credentials::Status, String> {
+    state.import_keychain(&credential_root(&app)?, &provider)
 }
 
 #[tauri::command]
 async fn sidecar_request(
     app: tauri::AppHandle,
     state: State<'_, ActiveSidecar>,
+    credentials: State<'_, credentials::Credentials>,
     mut request: Value,
 ) -> Result<Value, String> {
     let kind = request
@@ -118,6 +139,11 @@ async fn sidecar_request(
         return Err("Unsupported protocol version".into());
     }
 
+    let _request_guard = state
+        .request_gate
+        .try_lock()
+        .map_err(|_| "Another PomiTranslate operation is still running")?;
+
     let provider = request
         .get("payload")
         .and_then(|payload| payload.get("provider"))
@@ -128,7 +154,7 @@ async fn sidecar_request(
         if provider.is_empty() {
             return Err("Missing credential provider".into());
         }
-        delete_key(&provider)?;
+        credentials.delete(&credential_root(&app)?, &provider)?;
         return Ok(serde_json::json!({
             "v": 1,
             "id": id,
@@ -141,60 +167,147 @@ async fn sidecar_request(
             payload.insert("credentialOwner".into(), Value::String("rust".into()));
         }
     }
+    let mut pending_credential = None;
     if kind == "settings.set" {
-        let supplied_key = request
-            .get("payload")
-            .and_then(|payload| payload.get("apiKey"))
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        if !supplied_key.is_empty() {
-            keyring_entry(&provider)?
-                .set_password(&supplied_key)
-                .map_err(|_| "Could not save the API key in the OS credential store")?;
-        }
-        if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
-            payload.remove("apiKey");
-        }
-    } else if KEY_INJECTED_REQUESTS.contains(&kind.as_str()) && !provider.is_empty() {
-        if let Some(secret) = read_key(&provider)? {
-            if let Some(payload) = request.get_mut("payload").and_then(Value::as_object_mut) {
-                payload.insert("apiKey".into(), Value::String(secret));
+        let payload = request
+            .get_mut("payload")
+            .and_then(Value::as_object_mut)
+            .ok_or("Invalid settings payload")?;
+        provider_boundary::validate(payload)?;
+        let supplied = zeroize::Zeroizing::new(match payload.remove("apiKey") {
+            Some(Value::String(value)) => value,
+            None | Some(Value::Null) => String::new(),
+            _ => return Err("API key must be text".into()),
+        });
+        let mode: credentials::Mode = if let Some(value) = payload.remove("credentialMode") {
+            serde_json::from_value(value).map_err(|_| "Unknown credential storage mode")?
+        } else {
+            credentials.status(&credential_root(&app)?, &provider)?.mode
+        };
+        pending_credential = Some((mode, supplied));
+    } else if KEY_INJECTED_REQUESTS.contains(&kind.as_str()) {
+        let payload = request
+            .get_mut("payload")
+            .and_then(Value::as_object_mut)
+            .ok_or("Invalid provider payload")?;
+        provider_boundary::validate(payload)?;
+        // Frontend cannot bypass the selected store with an arbitrary supplied key.
+        payload.remove("apiKey");
+        // The core independently checks that all included sources have manual values.
+        // A false claim receives no key and cannot enable an authenticated API call.
+        let manual_only = matches!(kind.as_str(), "translate.start" | "translate.resume")
+            && payload.get("manualOnly").and_then(Value::as_bool) == Some(true);
+        if !manual_only {
+            if let Some(secret) = credentials.read(&credential_root(&app)?, &provider)? {
+                payload.insert("apiKey".into(), Value::String(secret.to_string()));
             }
         }
     }
 
-    let report_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| "Application data directory is unavailable")?
-        .join("reports");
+    let (mut response, committed_status) = if let Some((mode, supplied)) = pending_credential {
+        let root = credential_root(&app)?;
+        settings_transaction::save(
+            request,
+            |request| exchange_sidecar(&app, &state, request),
+            || {
+                credentials
+                    .save(&root, &provider, mode, &supplied)
+                    .map_err(|error| settings_transaction::CommitError {
+                        uncertain: error.uncertain,
+                    })
+            },
+        )
+        .await?
+    } else {
+        (exchange_sidecar(&app, &state, request).await?, None)
+    };
+    if response.get("type").and_then(Value::as_str) == Some("response.ok")
+        && matches!(
+            kind.as_str(),
+            "app.bootstrap" | "settings.get" | "settings.set"
+        )
+    {
+        let response_provider = if provider.is_empty() {
+            response
+                .get("payload")
+                .and_then(|p| p.get("settings"))
+                .and_then(|s| s.get("provider"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string()
+        } else {
+            provider.clone()
+        };
+        let status = if let Some(status) = committed_status {
+            status
+        } else {
+            credentials.status(&credential_root(&app)?, &response_provider)?
+        };
+        if let Some(payload) = response.get_mut("payload").and_then(Value::as_object_mut) {
+            payload.insert("apiKeyStored".into(), Value::Bool(status.stored));
+            payload.insert(
+                "credentialMode".into(),
+                serde_json::to_value(status.mode).map_err(|_| "Invalid credential mode")?,
+            );
+        }
+    }
+
+    Ok(response)
+}
+
+/// Raw exchange: the outer request gate stays locked across multi-step settings recovery.
+async fn exchange_sidecar(
+    app: &tauri::AppHandle,
+    state: &ActiveSidecar,
+    mut request: Value,
+) -> Result<Value, String> {
+    let id = request
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or("Missing request id")?
+        .to_owned();
+    let app_data = credential_root(app)?;
+    let data_dir = sidecar_paths::core_data_dir(&app_data, &app.config().identifier)?;
+    let report_dir = app_data.join("reports");
     fs::create_dir_all(&report_dir).map_err(|_| "Cannot create the report directory")?;
     let cancel_path = report_dir.join("active-operation.cancel");
-    let _ = fs::remove_file(&cancel_path);
-
     let mut receiver = {
-        let mut active = state.0.lock().map_err(|_| "Sidecar state is unavailable")?;
+        let mut active = state
+            .process
+            .lock()
+            .map_err(|_| "Sidecar state is unavailable")?;
         if active.is_some() {
             return Err("Another PomiTranslate operation is still running".into());
         }
+        let _ = fs::remove_file(&cancel_path);
         let command = app
             .shell()
             .sidecar("pomi-sidecar")
             .map_err(|_| "Packaged translation core is unavailable")?
-            .args([
-                "--jsonl".to_string(),
-                "--report-dir".to_string(),
-                report_dir.to_string_lossy().into_owned(),
-                "--cancel-file".to_string(),
-                cancel_path.to_string_lossy().into_owned(),
-            ]);
+            .args(sidecar_paths::arguments(
+                &data_dir,
+                &report_dir,
+                &cancel_path,
+            ));
         let (receiver, mut child) = command
             .spawn()
             .map_err(|_| "Could not start the translation core")?;
-        let mut line = serde_json::to_vec(&request).map_err(|_| "Invalid request")?;
+        let mut line =
+            zeroize::Zeroizing::new(serde_json::to_vec(&request).map_err(|_| "Invalid request")?);
+        if let Some(secret) = request
+            .get_mut("payload")
+            .and_then(Value::as_object_mut)
+            .and_then(|p| p.get_mut("apiKey"))
+        {
+            if let Value::String(value) = secret {
+                zeroize::Zeroize::zeroize(value);
+            }
+        }
         line.push(b'\n');
-        child.write(&line).map_err(|_| "Could not send the request to the translation core")?;
+        if child.write(&line).is_err() {
+            let _ = child.kill();
+            return Err("Could not send the request to the translation core".into());
+        }
         *active = Some(ActiveProcess {
             child,
             cancel_path: cancel_path.clone(),
@@ -213,7 +326,9 @@ async fn sidecar_request(
                 }
                 for line in drain_complete_lines(&mut stdout_buffer) {
                     let Ok(message) = serde_json::from_slice::<Value>(&line) else {
-                        break 'events Err("Translation core returned an invalid JSONL message".into());
+                        break 'events Err(
+                            "Translation core returned an invalid JSONL message".into()
+                        );
                     };
                     if message.get("type").and_then(Value::as_str) == Some("system.hello") {
                         let version = message
@@ -221,7 +336,9 @@ async fn sidecar_request(
                             .and_then(|value| value.get("protocolVersion"))
                             .and_then(Value::as_u64);
                         if version != Some(1) {
-                            break 'events Err("Translation core protocol version does not match".into());
+                            break 'events Err(
+                                "Translation core protocol version does not match".into()
+                            );
                         }
                         saw_hello = true;
                         continue;
@@ -230,7 +347,10 @@ async fn sidecar_request(
                         break 'events Err("Translation core did not complete its handshake".into());
                     }
                     if message.get("id").and_then(Value::as_str) == Some(id.as_str())
-                        && message.get("type").and_then(Value::as_str).is_some_and(|kind| kind.ends_with(".progress"))
+                        && message
+                            .get("type")
+                            .and_then(Value::as_str)
+                            .is_some_and(|kind| kind.ends_with(".progress"))
                     {
                         let _ = app.emit("pomi-progress", &message);
                         continue;
@@ -250,40 +370,26 @@ async fn sidecar_request(
         }
     };
 
-    if let Ok(mut active) = state.0.lock() {
+    if let Ok(mut active) = state.process.lock() {
         if let Some(process) = active.take() {
             let _ = process.child.kill();
             let _ = fs::remove_file(process.cancel_path);
         }
     }
-    let mut response = result?;
-    if matches!(kind.as_str(), "settings.get" | "settings.set") {
-        let response_provider = if provider.is_empty() {
-            response
-                .get("payload")
-                .and_then(|payload| payload.get("settings"))
-                .and_then(|settings| settings.get("provider"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-        } else {
-            provider.as_str()
-        };
-        let stored = !response_provider.is_empty() && read_key(response_provider)?.is_some();
-        if let Some(payload) = response.get_mut("payload").and_then(Value::as_object_mut) {
-            payload.insert("apiKeyStored".into(), Value::Bool(stored));
-        }
-    }
-    Ok(response)
+    result
 }
 
 #[tauri::command]
 fn operation_active(state: State<'_, ActiveSidecar>) -> bool {
-    state.0.lock().map(|active| active.is_some()).unwrap_or(false)
+    state.request_gate.try_lock().is_err()
 }
 
 #[tauri::command]
 fn cancel_active(state: State<'_, ActiveSidecar>) -> Result<bool, String> {
-    let active = state.0.lock().map_err(|_| "Sidecar state is unavailable")?;
+    let active = state
+        .process
+        .lock()
+        .map_err(|_| "Sidecar state is unavailable")?;
     let Some(process) = active.as_ref() else {
         return Ok(false);
     };
@@ -295,25 +401,52 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
                 let _ = window.set_focus();
             }
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(ActiveSidecar::default())
-        .invoke_handler(tauri::generate_handler![sidecar_request, cancel_active, credential_status, operation_active])
+        .manage(credentials::Credentials::default())
+        .setup(|app| {
+            zoom_menu::install(app)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| zoom_menu::select(app, event.id().as_ref()))
+        .invoke_handler(tauri::generate_handler![
+            sidecar_request,
+            cancel_active,
+            credential_status,
+            credential_import,
+            operation_active,
+            document_export::export_document
+        ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let active = window.state::<ActiveSidecar>();
-                if active.0.lock().map(|child| child.is_some()).unwrap_or(false) {
+                if active.request_gate.try_lock().is_err() {
                     api.prevent_close();
                     // Tell the window why it did not close, instead of ignoring the click.
                     let _ = window.emit("pomi-close-blocked", true);
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run PomiTranslate");
+        .build(tauri::generate_context!())
+        .expect("failed to build PomiTranslate")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
 
 #[cfg(test)]
@@ -323,12 +456,27 @@ mod tests {
     #[test]
     fn only_known_requests_reach_the_sidecar() {
         for kind in [
-            "app.bootstrap", "settings.set", "scan.start", "candidates.page", "estimate.get",
-            "translate.start", "translate.resume", "backups.list", "restore.start", "models.list",
+            "app.bootstrap",
+            "settings.set",
+            "scan.start",
+            "candidates.page",
+            "estimate.get",
+            "translate.start",
+            "translate.resume",
+            "backups.list",
+            "restore.start",
+            "models.list",
         ] {
             assert!(is_allowed_request(kind), "{kind} must be allowed");
         }
-        for kind in ["", "shell.exec", "scan.start ", "SCAN.START", "settings.set/../x", "translate"] {
+        for kind in [
+            "",
+            "shell.exec",
+            "scan.start ",
+            "SCAN.START",
+            "settings.set/../x",
+            "translate",
+        ] {
             assert!(!is_allowed_request(kind), "{kind:?} must be refused");
         }
     }
@@ -336,15 +484,31 @@ mod tests {
     #[test]
     fn requests_that_carry_a_key_also_hand_credential_ownership_to_rust() {
         for kind in KEY_INJECTED_REQUESTS {
-            assert!(CREDENTIAL_OWNER_REQUESTS.contains(kind), "{kind} is given a key but not told Rust owns it");
+            assert!(
+                CREDENTIAL_OWNER_REQUESTS.contains(kind),
+                "{kind} is given a key but not told Rust owns it"
+            );
             assert!(is_allowed_request(kind));
         }
-        for kind in CREDENTIAL_OWNER_REQUESTS.iter().chain(KEY_INJECTED_REQUESTS) {
+        for kind in CREDENTIAL_OWNER_REQUESTS
+            .iter()
+            .chain(KEY_INJECTED_REQUESTS)
+        {
             assert!(is_allowed_request(kind), "{kind} is listed but not allowed");
         }
-        // Reading a world or a plan never needs the key.
-        for kind in ["scan.start", "candidates.page", "estimate.get", "restore.start", "backups.list"] {
-            assert!(!KEY_INJECTED_REQUESTS.contains(&kind), "{kind} must not receive the API key");
+        // Reading a world, plan or settings preview never needs the key.
+        for kind in [
+            "settings.import_legacy",
+            "scan.start",
+            "candidates.page",
+            "estimate.get",
+            "restore.start",
+            "backups.list",
+        ] {
+            assert!(
+                !KEY_INJECTED_REQUESTS.contains(&kind),
+                "{kind} must not receive the API key"
+            );
         }
     }
 
@@ -352,10 +516,20 @@ mod tests {
     fn a_message_split_across_chunks_is_reassembled() {
         let mut buffer = Vec::new();
         buffer.extend_from_slice(b"{\"a\":1}\n{\"b\":");
-        assert_eq!(drain_complete_lines(&mut buffer), vec![b"{\"a\":1}".to_vec()]);
-        assert_eq!(buffer, b"{\"b\":".to_vec(), "the partial line waits for its end");
+        assert_eq!(
+            drain_complete_lines(&mut buffer),
+            vec![b"{\"a\":1}".to_vec()]
+        );
+        assert_eq!(
+            buffer,
+            b"{\"b\":".to_vec(),
+            "the partial line waits for its end"
+        );
         buffer.extend_from_slice(b"2}\r\n\n  \n");
-        assert_eq!(drain_complete_lines(&mut buffer), vec![b"{\"b\":2}".to_vec()]);
+        assert_eq!(
+            drain_complete_lines(&mut buffer),
+            vec![b"{\"b\":2}".to_vec()]
+        );
         assert!(buffer.is_empty());
     }
 

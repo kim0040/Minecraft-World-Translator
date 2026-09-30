@@ -14,8 +14,14 @@
     "build": "pnpm check && vite build",
     "sidecar:build": "node scripts/build-sidecar.mjs",
     "desktop:dev": "pnpm sidecar:build && tauri dev",
-    "desktop:build": "pnpm sidecar:build && tauri build",
-    "tauri": "tauri"
+    "desktop:build": "pnpm sidecar:build:clean && tauri build",
+    "tauri": "tauri",
+    "test:browser": "playwright test",
+    "verify:plan": "node scripts/verify.mjs check frontend browser-smoke",
+    "verify:ui": "node scripts/verify.mjs check frontend browser-smoke --run",
+    "verify:final": "node scripts/verify.mjs check frontend python-final rust-final browser-final --run",
+    "sidecar:build:clean": "node scripts/build-sidecar.mjs --clean",
+    "desktop:dev:ui": "tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

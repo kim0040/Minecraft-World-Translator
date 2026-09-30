@@ -88,7 +88,7 @@ PROMPT_ENHANCER_SYSTEM_PROMPT = """
 """.strip()
 
 
-PUBLIC_PROVIDERS = ("openai", "gemini", "anthropic", "openrouter", "custom")
+PUBLIC_PROVIDERS = ("openai", "gemini", "anthropic", "openrouter", "comet", "custom")
 
 
 def provider_choices() -> list[str]:

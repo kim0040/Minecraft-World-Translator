@@ -1,50 +1,54 @@
-# 현재 상태
+# 현재 상태 — 2026-10-01
 
-2026-09-30 문서 갱신 직전 제품 코드는 `main` / `e70d27a`였고 clean 상태였다. 로컬 `feat/pomitranslate-desktop-app`도 같은 commit이며 원격 ref는 fetch하지 않은 관측이다. 후속 시작 시 다시 확인한다. 보이는 이름은 PomiTranslate이고 저장소 이름은 그대로다.
+> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
 
-최신 실행 계약은 [전체 에이전트 인계](agent-handoff-2026-09-30.md)다. **Phase 2 미완, Phase 3 미시작**이며 코드 존재를 완료 검증으로 취급하지 않는다. 이번 요청은 문서 갱신과 문서 전용 commit/push다. 테스트/API/제품 구현은 수행하지 않았으며 이 commit은 Phase 완료를 뜻하지 않는다.
+> **2026-10-01 중단 갱신:** [최신 중단·인계](phase2-pause-2026-10-01.md)가 아래 진행 기록보다 우선한다. 외부 ZIP/사용량 조회 후속 구현과 검증 시점, 재개 순서는 해당 문서를 따른다. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)도 기록했다. Phase2 미완/Phase3 미시작, commit/push 없음.
 
-## 들어 있는 것
+## 판정
 
-- Tauri 2 + Svelte 5 데스크톱 앱. 패키지된 Python JSONL sidecar가 번역 코어를 실행하고 localhost 서버는 열지 않는다.
-- CLI `mc_world_translator.py`, `python -m mwt.desktop_entry`, 데스크톱 앱이 같은 `WorldTranslator`를 쓴다.
-- 텍스트 추출은 `mwt/extract.py`, NBT 읽기·쓰기는 `mwt/nbtio.py`다. NBT 리더는 원본 바이트를 보존하고 수정한 문자열만 그 자리에서 바꿔 쓴다. 수정하지 않은 청크는 바이트까지 같고, Java modified UTF-8(이모지, NUL)을 읽는다.
-- 표지판(앞·뒤), 책 제목·페이지, 아이템 이름·설명(`extra`, `with`, `fallback`, hover/click 포함), 컨테이너 안 아이템, 블록·엔티티 이름, `text_display`, 명령 블록의 `tellraw`/`title`(`execute ... run` 포함)을 찾는다.
-- 후보는 종류·위치(블록/엔티티 id, 좌표, 청크)·발생 횟수를 가진다. 이미 대상 언어로 된 문자열은 후보에서 뺀다(설정으로 끌 수 있다).
-- scan plan은 월드 지문과 대상 언어·리소스팩 범위·이미 대상 언어인 문자열 건너뛰기·extractor version의 scope 지문에 묶인다. 모델·제공사·배치 크기를 바꿔도 검토한 스캔은 유지된다.
-- 백업은 앱 데이터 디렉터리의 월드별 폴더에 둔다. 예전 릴리스가 월드 안 `.pomi-backups`에 만든 백업도 목록에 나오고 복원된다.
-- 번역 요청은 기본 4개까지 동시에 보낸다(1–8). 한도 제한과 서킷 브레이커는 동시 요청에서도 그대로 적용된다.
-- 번역은 세 단계다. 월드 전체에서 텍스트를 모으고, 고유 문자열을 전역 배치로 번역하고, 그 뒤에 월드에 쓴다. 번역이 끝나기 전에는 월드를 쓰지 않는다.
-- 제공사 실패는 성공으로 보고하지 않는다. 한도 초과·연결 실패가 이어지면 요청을 멈추고, 인증·잔액·모델 오류는 즉시 멈춘다. stop 정책의 번역 실패는 쓰기 전에 중단되며 번역한 문자열은 체크포인트에 남아 재시도할 수 있다. skip 정책/파일 오류의 partial 결과와 구분해야 한다.
-- 결과 상태는 `completed`, `partial`, `needs_retry`, `failed`, `cancelled`이다. 읽지 못한 청크와 쓸 수 없는 파일은 경고로 보고한다.
-- `§` 서식 기호와 `%s`, `{name}` 자리표시자가 번역에서 사라지면 그 문자열은 원문을 유지하고 개수를 보고한다.
-- 한 번의 번역은 검증된 백업 세트 하나를 만든다. 복원은 그 실행이 바꾼 파일을 되돌리고, 복원 직전 상태도 recovery 백업으로 남긴다.
-- 리전 압축은 gzip, zlib, 무압축, Minecraft `LZ4Block`이다. `.mcc`는 압축된 바이트만 담는다.
-- 공급자는 OpenAI, Gemini, Anthropic, OpenRouter, Custom이다. **현재 구현**은 Rust가 OS 키체인 서비스 `PomiTranslate`에 API 키를 보관한다.
-- **새 합의·미구현**: [credential 저장 계획](credential-storage-plan.md)에 따라 로컬 암호화 DB + 별도 설치별 master key를 기본으로 하고 키체인/세션 모드를 선택 기능으로 둔다. DB와 키 파일 모두에 접근 가능한 같은 사용자 프로세스까지 차단하는 설계는 아니다.
-- 일반 설정·최근 월드·scan plan은 JSON이다. 통합 SQLite data layer는 미구현이며 작은 SQLite public-settings helper만 있다.
-- Phase 2 화면 분리, candidate virtual window/keyboard, System/Light/Dark, ko/en/ja UI와 frontend tests가 코드에 있다. 100k 실제 성능과 최종 integration은 별도 gate다.
-- 지원 표는 `docs/support-matrix.md`이고, 픽스처를 통과한 형식만 지원이다.
-- GitHub Actions는 테스트, 패키지, 릴리스를 정의한다. 서명 자격이 없으면 서명되지 않은 초안에서 멈춘다.
+**Phase 2 진행 중 / Phase 3 미시작 / release-ready 아님.** 현재 체크아웃은 `main`, HEAD `865b51d`이며 모든 기존 및 후속 미커밋 작업을 보존한다. Phase 완료 commit/push는 아직 없다.
 
-## 범위
+최신 실행 증거와 정확한 다음 단계는 [2026-10-01 검증·인계](phase2-validation-2026-10-01.md), 전체 backlog는 [남은 작업](remaining-work.md)이다. 9월 30일의 중단·진행 문서는 당시 이력이며 현재 상태를 덮어쓰지 않는다.
 
-- 스캔하는 곳: 각 차원의 `region`, `entities`, 켜 둔 경우 월드 안 `resources.zip`.
-- 스캔하지 않는 곳: 데이터팩, `data/*.dat`(command storage, scoreboard), `level.dat`, 플레이어 데이터. 외부 리소스팩 선택/merge는 현재 desktop UI에서 제공하지 않는다. backend/CLI 기능과 desktop parity를 구분한다.
+## 구현한 제품
 
-## 새 검증 절차 — 미완
+- Tauri 2 / Rust shell / Svelte 5 / TypeScript / Vite, 패키지된 Python JSONL sidecar. 기존 CLI와 같은 코어를 사용하며 desktop은 localhost 서버를 열지 않는다.
+- World → Scan → Review → Run → Result, Backups / Settings / About 분리와 공통 shell·dialog·toasts.
+- 고유 후보·발생 횟수·종류·좌표/청크, 검색·종류/포함/제외/직접 번역 필터·정렬·서버 paging·bulk·virtual table. 100k fixture에서 DOM과 페이지 캐시가 제한됨을 브라우저로 검증했다. 실제 100k 월드 전체 처리 성능은 별도다.
+- model/provider/성능 변경은 scan 유지; 번역 범위/대상 언어 변경은 invalidation. 결과 상태·진행 event는 사용자 문구로 표시한다.
+- 재개 요청의 최신 후보 제외·직접 번역을 우선 적용하며, 이전 클라이언트가 생략한 필드만 checkpoint로 보충한다. Native 회귀에서 변경 파일1/요청0/최신 번역문을 확인하고 대상4파일 byte-identical 복원했다.
+- Collect → Translate → Write, provider fail-fast/circuit breaker, checkpoint·retry·cancel, 사용량·실패·경고 보고. 취소 뒤 늦게 도착한 응답 사용량도 최종 보고에 합산한다.
+- NBT 원본 바이트 보존, Java modified UTF-8(NUL/CESU-8 emoji), nested component·extra/with/fallback/hover/click/container/text_display/command text 추출.
+- 앱 데이터의 검증된 백업, legacy `.pomi-backups` 발견/복원, 복원 직전 recovery snapshot.
+- 기본 credential은 Rust SQLite/AES-256-GCM + 별도 설치별 key 파일. Session과 opt-in OS keychain; 자동 keychain 읽기/import 없음. 저장된 키 전체는 UI에 반환하지 않는다. Local→Session 전환 시 stale local ciphertext 제거를 atomic metadata transaction으로 처리한다.
+- 같은 계정으로 DB와 key 파일을 모두 읽는 프로세스까지 막는 설계는 아니다. Windows permission 코드는 target typecheck만 통과했으며 native 검증 전이다.
+- OpenAI/Gemini/Anthropic/OpenRouter/Comet/Custom, provider endpoint 고정과 Custom wire format·URL 검증. CLI 환경변수 호환과 Rust-owned sidecar 환경변수 차단을 구분한다.
+- 설정 그룹/disclosure, 종류별 scope 및 curated presets, 파일/key 규칙, global source overrides, performance/file retry/error 정책, 공개 JSON import/export/reset, literal `translate.py` 읽기 전용 preview, 명시적 확인 후 style helper.
+- System/Light/Dark 및 ko/en/ja semantic i18n. 중국어 UI는 현재 제공하지 않는다.
+- native View 메뉴의 75–200% 실제 WebView 확대. Cmd/Ctrl+0은 100%, Cmd/Ctrl+2는 200%. Dialog는 명시적 fixed 위치·동적 viewport 높이를 사용하고, native에서 보이지 않던 등장 애니메이션을 제거했다.
+- alternate app identifier는 명시적인 sidecar data root로 격리한다. 테스트 설정·DB·키·월드가 production root로 흘러가지 않는다.
+- 선택한 월드 밖으로 연결된 level/region/entity/resource pack은 읽기·API 전에 차단한다. resources.zip symlink는 내부 대상이어도 restore 경로 보존을 위해 차단한다. 큰 파일 지문/백업 해시는 스트리밍한다.
 
-[웹 우선 검증 계획](browser-first-testing-plan.md)에 따라 같은 제품 Svelte UI를 Vite/test fixture로 먼저 검사한다. UI/기능·반응형 수정마다 앱을 패키지하지 않고 실제 Python/JSONL 계약을 선검증한 뒤 마지막에 Tauri/native E2E를 수행한다. 현재 fixture injection은 있지만 모든 기능이 순수 browser에 연결된 상태나 새 matrix 검증 완료를 뜻하지 않는다.
+## 현재 검증
 
-고정 비율 없이 width/height/zoom 변화, ultrawide·세로형·짧은 높이·320px·연속 resize를 처리하고 editor/action/detail 접근과 상태/focus를 유지하는 것이 새 완료 기준이다.
+| 영역 | 최신 증거 | 범위 |
+| --- | --- | --- |
+| Python | 전체 17 suites PASS | core, fixtures, reliability, extraction, desktop, 경로 차단 |
+| Frontend | 9 files / 48 tests PASS | formatter/virtual/state/settings/candidates |
+| Browser | 전체 64 tests PASS (56.7초) | 동일 제품 UI fixture, responsive/keyboard/100k/filter/a11y |
+| Type/build | check 0 errors/0 warnings, production build PASS | test entry와 production entry 구분 |
+| Rust | 23 tests PASS | vault/rollback/routing/export/data root |
+| Packaging | sidecar + unsigned debug eval app PASS (59.17 MiB) | macOS Apple Silicon local development build |
+| Native | mock run/cancel/restore, 최신 검토 resume, credential mode/restart, literal chooser PASS | 합성·격리 데이터, 실제 provider 검증 아님 |
+| Zoom | 실제 native 200% 상세 입력·Tab·닫기·ESC·복원 확인·설정 actions 확인 | CSS zoom/DPR 대체 아님 |
+| Real API | NOT RUN, 추가 비용 $0 | eval의 실제 key 직접 등록 필요 |
 
-## 이전 검증 기록
+브라우저의 14개 대표 screenshot을 생성하고 직접 점검했다. 1440×900/1180×800/1024×768/840×620/320px, ultrawide/세로/짧은 높이/연속 resize, dark와 keyboard 검사가 포함된다. Native의 정확한 실행/복원 기록은 최신 검증 문서를 따른다.
 
-이전 세션에서 frontend/Python/Rust/build, 대표 screenshot·responsive·dark·keyboard, 실제 Tauri local mock 번역/복원과 117파일 byte-identical 복원을 기록했다. 실제 provider라고 생각한 후속 실행은 stale localhost endpoint를 호출했으므로 mock 검증으로만 인정한다. endpoint 수정 코드는 있지만 최종 실제 provider gate는 남았다. 이번 문서 작업은 이 결과를 재실행하지 않았고 새 HEAD의 완료 증거로 단정하지 않는다. 상세 결과·한계·산출물은 인계 문서에 있다.
+## 지원 경계와 남은 gate
 
-## 아직 아닌 것
+스캔은 각 차원의 `region`/`entities`, 선택 시 월드 안의 일반 파일 `resources.zip`과 명시적으로 선택한 외부 ZIP이다. datapack, command storage, scoreboard, playerdata, level.dat visible text, folder pack/merge는 아직 스캔·번역 지원하지 않는다. 명시 선택 외부 ZIP은 구현 및 Python/browser 검증을 마쳤으며 최신 native gate는 남아 있다. [fixture 지원 표](support-matrix.md)의 supported는 해당 합성 형식을 통과했다는 뜻이며 모든 Java 버전/모든 실제 월드 지원은 아니다.
 
-- Bedrock, `.mcr`, `.linear`, 알 수 없는 압축은 발견만 하고 쓰지 않는다.
-- macOS Intel, Windows x64, Linux x64는 clean-machine 검증 전이라 지원 플랫폼으로 적지 않는다.
-- 배포 서명, notarization, 공개 릴리스는 하지 않았다.
-- 나머지 작업은 `docs/remaining-work.md`에 있다.
+Legacy UI/launcher는 유지한다. [기능 비교](legacy-ui-parity.md)의 외부 팩·앱 관리 backup/checkpoint 대체 범위는 최종 Phase 계약 확인 전이며 기능 parity 완료로 표시하지 않는다.
+
+실제 provider/usage/cost/restore, 남은 범위 결정과 최종 diff review 후에만 Phase 2 commit → push한다. Phase 3 및 Windows/Linux clean-machine, signing/notarization/updater/release는 남아 있다. [CI 정책](ci-policy.md)은 main의 관련 Python 변경/PR만 자동 core 검사, installer manual/tag, 수동 기본 Linux다. 이번 작업은 CI를 dispatch하지 않았다.

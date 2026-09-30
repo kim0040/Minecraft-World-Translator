@@ -5,6 +5,13 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import { resultPresentation } from '../lib/workflow';
+  import { exportDocument } from '../lib/document-export';
+
+  async function exportReport(): Promise<void> {
+    try {
+      if (await exportDocument('translation_report', result)) app.notify(t('export.saved'), 'success');
+    } catch (cause) { app.fail(cause); }
+  }
 
   const result = $derived(app.result);
   const status = $derived(result?.status ?? 'failed');
@@ -16,7 +23,8 @@
   const stats = $derived(result?.translation ?? {});
   const firstError = $derived(result?.errors?.[0]);
   const reason = $derived.by(() => {
-    if (!firstError?.code) return '';
+    if (!firstError) return '';
+    if (!firstError.code) return firstError.message ?? '';
     const key = `result.errorCode.${firstError.code}`;
     return hasMessage(key) ? t(key as MessageKey) : firstError.message ?? '';
   });
@@ -24,7 +32,7 @@
   const resumable = $derived(!!app.resume && app.isResumeStatus(status));
   const usage = $derived(result?.usage);
   const cards = $derived([
-    { label: t('result.stat.translated'), value: stats.translated ?? 0, tone: 'ok' },
+    { label: t(status === 'completed' ? 'result.stat.translated' : 'result.stat.prepared'), value: stats.translated ?? 0, tone: status === 'completed' ? 'ok' : '' },
     { label: t('result.stat.unchanged'), value: stats.unchanged ?? 0, tone: '' },
     { label: t('result.stat.failed'), value: stats.failed ?? 0, tone: (stats.failed ?? 0) > 0 ? 'bad' : '' },
     { label: t('result.stat.kept'), value: stats.kept_original ?? 0, tone: (stats.kept_original ?? 0) > 0 ? 'warn' : '' },
@@ -37,6 +45,7 @@
 <div class="page">
   <header class="page-head">
     <h1>{t('result.title')}</h1>
+    <div><button type="button" class="btn btn-secondary" disabled={!!app.busy} onclick={exportReport}>{t('export.report')}</button><p class="hint">{t('export.reportHelp')}</p></div>
   </header>
 
   {#if result}

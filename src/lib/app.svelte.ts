@@ -4,8 +4,9 @@ import {
   BackendError,
   callBackend,
   cancelBackend,
-  credentialStored,
+  type CredentialMode,
   onCloseBlocked,
+  onZoomFailed,
   onProgress,
   type BackupSummary,
   type BootstrapPayload,
@@ -19,23 +20,26 @@ import {
   type TranslationResult,
   type WorldInspection
 } from './api';
+import { resourcePackOptions } from './resource-pack';
 import { CandidateSource } from './candidates.svelte';
 import { hasMessage, setLocale, t, type Locale, type MessageKey } from './i18n/index.svelte';
 import { applyTheme, type ThemeChoice } from './theme';
 import { emptyProgress, reduceProgress, type JobProgress } from './workflow';
+import { normalizedScanOptions, scanOptionsSignature } from './settings';
 
 export type Page = 'workspace' | 'backups' | 'settings' | 'about';
 export type Step = 'world' | 'scan' | 'review' | 'run' | 'result';
-export type Busy = '' | 'loading' | 'scan' | 'translate' | 'restore' | 'models';
+export type Busy = '' | 'loading' | 'scan' | 'translate' | 'restore' | 'models' | 'prompt' | 'settings' | 'usage';
 export type Tone = 'info' | 'success' | 'error';
 
 export const STEPS: Step[] = ['world', 'scan', 'review', 'run', 'result'];
 
-const defaultSettings = (): Settings => ({
+export const defaultSettings = (): Settings => ({
   provider: 'openai', model: '', base_url: '', wire_format: 'openai', target_language: '한국어', style_preset: 'neutral',
   style_prompt: '', custom_system_prompt: '', temperature: 0.3, batch_size: 40, request_timeout: 120, rpm_limit: 0,
-  tpm_limit: 0, max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false, skip_target_language_text: true,
-  ui_language: 'ko', last_world_dir: ''
+  tpm_limit: 0, max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false, resource_pack_options: resourcePackOptions(), external_resource_pack_paths: [], skip_target_language_text: true,
+  max_file_write_retries: 2, continue_on_file_error: true, source_overrides: {},
+  ui_language: 'ko', last_world_dir: '', scan_options: normalizedScanOptions()
 });
 
 const NOTICE_KEY = 'pomi.notice.v1';
@@ -63,6 +67,10 @@ export class AppState {
 
   settings = $state<Settings>(defaultSettings());
   apiKeyStored = $state(false);
+  credentialMode = $state<CredentialMode>('local');
+  settingsRecoveryRequired = $state(false);
+  credentialRecovery = new SvelteSet<string>();
+  private settingsRecoveryRevision = 0;
   models = $state<ModelInfo[]>([]);
 
   worldDir = $state('');
@@ -83,10 +91,10 @@ export class AppState {
   progress = $state<JobProgress>(emptyProgress());
   result = $state<TranslationResult | null>(null);
   resume = $state<ResumeStatus | null>(null);
-  closeBlocked = $state(false);
   lastRestoreId = $state('');
 
   private toastSerial = 0;
+  private estimateRevision = 0;
   private unsubscribe: (() => void)[] = [];
 
   // --- derived numbers used across screens ---------------------------------------------------
@@ -100,7 +108,13 @@ export class AppState {
   }
 
   get manualCount(): number {
+    if (this.estimate && Object.keys(this.settings.source_overrides ?? {}).length) return Math.max(0, this.includedCount - this.estimate.candidateCount);
     return Object.entries(this.overrides).filter(([id, value]) => value.trim() && !this.excluded.has(id)).length;
+  }
+
+  manualTranslation(candidate: import('./api').Candidate): string {
+    const saved = this.settings.source_overrides ?? {};
+    return this.overrides[candidate.id] ?? (Object.hasOwn(saved, candidate.source) ? saved[candidate.source] : '');
   }
 
   get includedCount(): number {
@@ -122,7 +136,8 @@ export class AppState {
 
   get canRun(): boolean {
     return !!this.scan && this.scan.status === 'completed' && !this.scan.writeBlockers?.length &&
-      this.includedCount > 0 && (this.hasModel || this.manualOnly) && !this.busy;
+      this.includedCount > 0 && (this.hasModel || this.manualOnly) && (this.apiKeyStored || this.manualOnly) && !this.busy &&
+      !this.settingsRecoveryRequired && !this.credentialRecovery.has(this.settings.provider);
   }
 
   get stepReached(): Record<Step, boolean> {
@@ -173,7 +188,8 @@ export class AppState {
     this.busy = 'loading';
     try {
       this.unsubscribe.push(await onProgress((event) => this.handleProgress(event)));
-      this.unsubscribe.push(await onCloseBlocked(() => { this.closeBlocked = true; }));
+      this.unsubscribe.push(await onCloseBlocked(() => { this.notify(t('app.closeBlocked'), 'info', 10000); }));
+      this.unsubscribe.push(await onZoomFailed(() => { this.notify(t('app.zoomFailed'), 'error'); }));
     } catch {
       // Outside the desktop shell there are no events. The app still works without live progress.
     }
@@ -190,8 +206,10 @@ export class AppState {
       this.settings.concurrency = numberOr(boot.settings.concurrency, 4);
       this.settings.skip_target_language_text = boot.settings.skip_target_language_text !== false;
       this.settings.resource_pack_enabled = !!boot.settings.resource_pack_enabled;
+      this.settings.scan_options = normalizedScanOptions(boot.settings.scan_options);
       setLocale(this.locale);
       this.apiKeyStored = boot.apiKeyStored;
+      this.credentialMode = boot.credentialMode ?? 'local';
       this.recent = boot.worlds;
       this.worldDir = boot.settings.last_world_dir || '';
       this.inspection = boot.worldInspection;
@@ -199,7 +217,7 @@ export class AppState {
       this.showNotice = localStorage.getItem(NOTICE_KEY) !== 'accepted';
       if (this.worldDir && this.inspection?.validJavaWorld) this.step = 'scan';
       this.applyResume(boot.resume);
-      void credentialStored(this.settings.provider).then((stored) => { this.apiKeyStored = stored; }).catch(() => {});
+
     } catch (cause) {
       this.fail(cause);
     } finally {
@@ -226,6 +244,7 @@ export class AppState {
   // --- navigation --------------------------------------------------------------------------
 
   goto(page: Page): void {
+    if (this.busy === 'settings') return;
     this.page = page;
   }
 
@@ -238,6 +257,7 @@ export class AppState {
   // --- worlds ------------------------------------------------------------------------------
 
   private resetJob(): void {
+    this.estimateRevision++;
     this.scan = null;
     this.candidates.reset('');
     this.excluded.clear();
@@ -313,6 +333,9 @@ export class AppState {
     this.scan = {
       status: 'completed',
       candidateCount: resumable.candidateCount || 0,
+      occurrenceCount: resumable.occurrenceCount,
+      kinds: resumable.kinds,
+      coverage: resumable.coverage,
       providerRequests: 0,
       fingerprint: resumable.fingerprint,
       scanPlanId: resumable.scanPlanId,
@@ -350,23 +373,35 @@ export class AppState {
 
   async loadEstimate(): Promise<void> {
     if (!this.scan) return;
+    const revision = ++this.estimateRevision;
+    const planId = this.scan.scanPlanId;
+    const signature = this.estimateSignature();
+    this.estimate = null;
     try {
-      this.estimate = await callBackend<Estimate>('estimate.get', {
-        scanPlanId: this.scan.scanPlanId,
+      const estimate = await callBackend<Estimate>('estimate.get', {
+        scanPlanId: planId,
         excludedCandidateIds: [...this.excluded],
         overrideCandidateIds: Object.entries(this.overrides).filter(([, value]) => value.trim()).map(([id]) => id)
       });
+      if (revision === this.estimateRevision && signature === this.estimateSignature()) this.estimate = estimate;
     } catch {
-      // The estimate is a convenience. A failure leaves the last known one in place.
+      // An unavailable estimate stays unknown; stale costs must not describe new choices.
     }
   }
 
+  private estimateSignature(): string {
+    return JSON.stringify([this.scan?.scanPlanId, this.settings, [...this.excluded].sort(),
+      Object.entries(this.overrides).filter(([, value]) => value.trim()).map(([id]) => id).sort()]);
+  }
+
   setIncluded(id: string, included: boolean): void {
+    this.estimate = null;
     if (included) this.excluded.delete(id);
     else this.excluded.add(id);
   }
 
   setOverride(id: string, value: string): void {
+    this.estimate = null;
     const next = { ...this.overrides };
     if (value) next[id] = value;
     else delete next[id];
@@ -380,7 +415,7 @@ export class AppState {
   }
 
   async startTranslate(options: { resume?: boolean } = {}): Promise<void> {
-    if (!this.scan || this.isBusy) return;
+    if (!this.scan || this.isBusy || this.settingsRecoveryRequired || this.credentialRecovery.has(this.settings.provider)) return;
     this.busy = 'translate';
     this.cancelling = false;
     this.banner = null;
@@ -396,7 +431,11 @@ export class AppState {
         scanPlanId: this.scan.scanPlanId,
         excludedCandidateIds: [...this.excluded],
         candidateOverrides: this.overrides,
+        manualOnly: this.manualOnly,
         provider: this.settings.provider,
+        model: this.settings.model,
+        ...(this.settings.provider === 'custom' ? { baseUrl: this.settings.base_url } : {}),
+        wireFormat: this.settings.wire_format,
         failurePolicy: this.failurePolicy
       });
       this.result = outcome;
@@ -438,8 +477,12 @@ export class AppState {
         worldDir: this.worldDir,
         backupSetId
       });
+      if (restored.status !== 'restored' || !restored.recoverySetId) {
+        throw new Error(t('backups.restoreUnconfirmed'));
+      }
       this.lastRestoreId = restored.recoverySetId;
       this.resetJob();
+      this.step = 'scan';
       await this.loadBackups();
       this.notify(t('backups.restoreDone', { id: restored.recoverySetId || backupSetId }), 'success', 9000);
       return true;
@@ -456,49 +499,101 @@ export class AppState {
   /** Write the current settings, and a new API key when one was typed. Never keeps the key. */
   async persistSettings(apiKey = ''): Promise<void> {
     const s = this.settings;
-    const saved = await callBackend<{ settings: Settings; apiKeyStored: boolean }>('settings.set', {
-      worldDir: this.worldDir,
-      provider: s.provider,
-      model: s.model,
-      // Public providers use their canonical endpoint. Only Custom exposes and persists a URL.
-      ...(s.provider === 'custom' ? { baseUrl: s.base_url } : {}),
-      wireFormat: s.wire_format,
-      targetLanguage: s.target_language,
-      stylePreset: s.style_preset,
-      stylePrompt: s.style_prompt,
-      customSystemPrompt: s.custom_system_prompt,
-      uiLanguage: s.ui_language,
-      temperature: s.temperature,
-      batchSize: s.batch_size,
-      requestTimeout: s.request_timeout,
-      rpmLimit: s.rpm_limit,
-      tpmLimit: s.tpm_limit,
-      maxBatchRetries: s.max_batch_retries,
-      concurrency: s.concurrency,
-      resourcePackEnabled: s.resource_pack_enabled,
-      skipTargetLanguageText: s.skip_target_language_text,
-      ...(apiKey ? { apiKey } : {})
-    });
+    if (this.credentialRecovery.has(s.provider) && !apiKey) throw new BackendError('', 'CREDENTIAL_SAVE_UNCERTAIN');
+    let saved: { settings: Settings; apiKeyStored: boolean; credentialMode: CredentialMode };
+    try {
+      saved = await callBackend('settings.set', {
+        worldDir: this.worldDir,
+        provider: s.provider,
+        credentialMode: this.credentialMode,
+        model: s.model,
+        // Public providers use their canonical endpoint. Only Custom exposes and persists a URL.
+        ...(s.provider === 'custom' ? { baseUrl: s.base_url } : {}),
+        wireFormat: s.wire_format,
+        targetLanguage: s.target_language,
+        stylePreset: s.style_preset,
+        stylePrompt: s.style_prompt,
+        customSystemPrompt: s.custom_system_prompt,
+        uiLanguage: s.ui_language,
+        temperature: s.temperature,
+        batchSize: s.batch_size,
+        requestTimeout: s.request_timeout,
+        rpmLimit: s.rpm_limit,
+        tpmLimit: s.tpm_limit,
+        maxBatchRetries: s.max_batch_retries,
+        maxFileWriteRetries: s.max_file_write_retries,
+        continueOnFileError: s.continue_on_file_error,
+        sourceOverrides: s.source_overrides ?? {},
+        concurrency: s.concurrency,
+        resourcePackEnabled: s.resource_pack_enabled,
+        resourcePackOptions: resourcePackOptions(s.resource_pack_options),
+        externalResourcePackPaths: s.external_resource_pack_paths ?? [],
+        skipTargetLanguageText: s.skip_target_language_text,
+        scanOptions: normalizedScanOptions(s.scan_options),
+        ...(apiKey ? { apiKey } : {})
+      });
+    } catch (cause) {
+      if (cause instanceof BackendError && cause.code === 'CREDENTIAL_SAVE_UNCERTAIN') this.credentialRecovery.add(s.provider);
+      if (cause instanceof BackendError && ['SETTINGS_RECONCILIATION_REQUIRED', 'CREDENTIAL_SAVE_UNCERTAIN'].includes(cause.code)) await this.recoverSettings();
+      throw cause;
+    }
+    this.settings = { ...defaultSettings(), ...saved.settings };
+    this.settings.scan_options = normalizedScanOptions(saved.settings.scan_options);
     this.apiKeyStored = saved.apiKeyStored;
+    this.credentialMode = saved.credentialMode ?? this.credentialMode;
+    this.settingsRecoveryRequired = false;
+    this.credentialRecovery.delete(s.provider);
+  }
+
+  /** Reload authoritative preferences after a write whose rollback could not be verified. */
+  private async recoverSettings(): Promise<void> {
+    this.settingsRecoveryRequired = true;
+    this.settingsRecoveryRevision += 1;
+    this.resetJob();
+    if (this.worldDir) this.step = 'scan';
+    try {
+      const saved = await callBackend<{ settings: Settings; apiKeyStored: boolean; credentialMode: CredentialMode }>('settings.get');
+      this.settings = { ...defaultSettings(), ...saved.settings };
+      this.settings.scan_options = normalizedScanOptions(saved.settings.scan_options);
+      this.apiKeyStored = saved.apiKeyStored;
+      this.credentialMode = saved.credentialMode ?? 'local';
+      setLocale(this.locale);
+      this.settingsRecoveryRequired = false;
+    } catch {
+      // Unknown state remains blocked until a subsequent successful settings save/reload.
+    }
   }
 
   /** Save from the settings screen. A change that alters what a scan finds makes the scan stale. */
-  async saveSettings(before: Settings, apiKey = ''): Promise<boolean> {
+  async saveSettings(before: Settings, apiKey = '', beforeMode: CredentialMode = this.credentialMode): Promise<boolean> {
+    if (this.busy) return false;
+    this.busy = 'settings';
+    const recoveryRevision = this.settingsRecoveryRevision;
     try {
       await this.persistSettings(apiKey);
-      const scopeChanged = SCOPE_KEYS.some((key) => before[key] !== this.settings[key]);
+      const scopeChanged = SCOPE_KEYS.some((key) => before[key] !== this.settings[key]) ||
+        JSON.stringify(before.external_resource_pack_paths ?? []) !== JSON.stringify(this.settings.external_resource_pack_paths ?? []) ||
+        scanOptionsSignature(before.scan_options) !== scanOptionsSignature(this.settings.scan_options) ||
+        JSON.stringify(resourcePackOptions(before.resource_pack_options)) !== JSON.stringify(resourcePackOptions(this.settings.resource_pack_options));
       if (scopeChanged && this.scan) {
         this.resetJob();
         if (this.step !== 'world') this.step = 'scan';
         this.notify(t('settings.changedScan'), 'info', 8000);
       }
       if (before.ui_language !== this.settings.ui_language) setLocale(this.locale);
+      if (JSON.stringify(before.source_overrides) !== JSON.stringify(this.settings.source_overrides)) this.candidates.refetchSoon(0);
       if (this.scan) void this.loadEstimate();
       this.notify(t('settings.saved'), 'success', 2600);
       return true;
     } catch (cause) {
+      if (this.settingsRecoveryRevision === recoveryRevision) {
+        this.settings = { ...before };
+        this.credentialMode = beforeMode;
+      }
       this.banner = { tone: 'error', message: `${t('settings.saveError')}: ${this.describe(cause)}` };
       return false;
+    } finally {
+      this.busy = '';
     }
   }
 
@@ -508,7 +603,9 @@ export class AppState {
       await this.persistSettings();
       const listed = await callBackend<{ models: ModelInfo[] }>('models.list', {
         provider: this.settings.provider,
-        baseUrl: this.settings.base_url
+        ...(this.settings.provider === 'custom' ? { baseUrl: this.settings.base_url } : {}),
+        model: this.settings.model,
+        wireFormat: this.settings.wire_format
       });
       this.models = listed.models;
       return listed.models.length;
@@ -517,13 +614,19 @@ export class AppState {
     }
   }
 
-  async deleteApiKey(): Promise<void> {
+  async deleteApiKey(provider = this.settings.provider): Promise<boolean> {
     try {
-      await callBackend<{ deleted: boolean }>('credentials.delete', { provider: this.settings.provider });
-      this.apiKeyStored = false;
+      await callBackend<{ deleted: boolean }>('credentials.delete', { provider });
+      if (provider === this.settings.provider) {
+        this.apiKeyStored = false;
+        this.credentialMode = 'local';
+      }
+      this.credentialRecovery.delete(provider);
       this.notify(t('settings.apiKey.deleted'), 'success');
+      return true;
     } catch (cause) {
       this.fail(cause);
+      return false;
     }
   }
 

@@ -6,7 +6,7 @@
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
 
-  const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', custom: 'Custom' };
+  const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', comet: 'Comet API', custom: 'Custom' };
   const running = $derived(app.busy === 'translate');
   const estimate = $derived(app.estimate);
   const modelText = $derived(
@@ -42,7 +42,8 @@
           : t('common.loading')
   );
   const costText = $derived.by(() => {
-    if (!estimate || estimate.requests === 0) return t('run.cost.free');
+    if (app.manualOnly || estimate?.requests === 0) return t('run.cost.free');
+    if (!estimate) return t('run.cost.unknown');
     if (!estimate.cost) return t('run.cost.unknown');
     return t('run.cost.band', { low: formatUsd(estimate.cost.low, app.locale), high: formatUsd(estimate.cost.high, app.locale) });
   });
@@ -86,15 +87,12 @@
       <dl class="facts">
         {#if p.phase === 'translate'}
           <div><dt>{t('run.summary.requests')}</dt><dd class="num">{t('run.progress.requests', { done: p.requests, total: p.requestsEstimate || estimate?.requests || 0 })}</dd></div>
-          <div><dt>{t('run.progress.failed', { count: '' }).trim()}</dt><dd class="num" class:bad={p.failed > 0}>{p.failed}</dd></div>
+          <div><dt>{t('result.stat.failed')}</dt><dd class="num" class:bad={p.failed > 0}>{p.failed}</dd></div>
         {/if}
       </dl>
 
       {#if p.retry}
         <Callout tone="warning" title={t('run.progress.retry', { attempt: p.retry.attempt, max: p.retry.max })} role="status" />
-      {/if}
-      {#if app.closeBlocked}
-        <Callout tone="info" title={t('run.closeBlocked')} role="status" />
       {/if}
 
       <div>
@@ -123,6 +121,13 @@
       </Callout>
     {/if}
 
+    {#if !app.apiKeyStored && !app.manualOnly}
+      <Callout tone="warning" title={t('run.noKey')} role="alert">
+        {t('run.noKeyHelp')}
+        {#snippet actions()}<button type="button" class="btn btn-secondary btn-sm" onclick={() => app.goto('settings')}>{t('run.goSettings')}</button>{/snippet}
+      </Callout>
+    {/if}
+
     <section class="card summary" aria-labelledby="summary-title">
       <h2 id="summary-title" class="sr-only">{t('run.title')}</h2>
       <dl class="grid">
@@ -131,7 +136,7 @@
         <div><dt>{t('run.summary.model')}</dt><dd class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
         <div><dt>{t('run.summary.texts')}</dt><dd class="num">{formatNumber(app.outgoingCount, app.locale)}</dd></div>
         <div><dt>{t('run.summary.manual')}</dt><dd class="num">{formatNumber(app.manualCount, app.locale)}</dd></div>
-        <div><dt>{t('run.summary.requests')}</dt><dd class="num">{formatNumber(estimate?.requests ?? 0, app.locale)}</dd></div>
+        <div><dt>{t('run.summary.requests')}</dt><dd class="num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : t('common.unknown')}</dd></div>
         <div class="wide">
           <dt>{t('run.summary.cost')}</dt>
           <dd class="num">{costText}
@@ -142,6 +147,9 @@
           </dd>
         </div>
         <div class="wide"><dt>{t('run.summary.backup')}</dt><dd><Icon name="shield" size={16} /> {t('run.summary.backupValue')}</dd></div>
+        {#if app.settings.resource_pack_enabled && app.settings.external_resource_pack_paths?.length}
+          <div class="wide"><dt>{t('settings.pack.externalTitle')}</dt><dd><ul class="external-paths">{#each app.settings.external_resource_pack_paths as path}<li class="mono">{path}</li>{/each}</ul><span class="sub">{t('settings.pack.externalHelp')}</span></dd></div>
+        {/if}
       </dl>
     </section>
 
@@ -165,6 +173,7 @@
 </div>
 
 <style>
+  .external-paths { padding-inline-start: 1em; margin: 0; overflow-wrap: anywhere; }
   .live { padding: var(--space-5); display: grid; gap: var(--space-5); }
   .phases { display: flex; gap: var(--space-5); margin: 0; padding: 0; list-style: none; flex-wrap: wrap; }
   .phases li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-weight: 600; }

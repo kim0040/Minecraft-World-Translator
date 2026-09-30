@@ -1,8 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-export type Provider = 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'custom';
+export type CredentialMode = 'local' | 'session' | 'keychain';
+export type CredentialStatus = { mode: CredentialMode; stored: boolean };
+
+export type Provider = 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'comet' | 'custom';
 export type Locale = 'ko' | 'en' | 'ja';
+
+export type ScanFlag = 'translate_signs' | 'translate_books' | 'translate_custom_names' | 'translate_item_names' |
+  'translate_lore' | 'translate_titles' | 'translate_filtered_titles' | 'translate_command_output' |
+  'translate_text_displays' | 'skip_command_like_text';
+export type ScanOptions = Record<ScanFlag, boolean> & {
+  region_dirs: string[];
+  skip_patterns: string[];
+  component_translate_key_prefixes: string[];
+};
+export type ResourcePackOptions = { source_lang_files: string[]; target_lang_file: string; skip_if_target_exists: boolean };
 
 export type Settings = {
   provider: Provider | string;
@@ -19,9 +32,15 @@ export type Settings = {
   rpm_limit?: number;
   tpm_limit?: number;
   max_batch_retries?: number;
+  max_file_write_retries?: number;
+  continue_on_file_error?: boolean;
+  source_overrides?: Record<string, string>;
   concurrency?: number;
   resource_pack_enabled?: boolean;
+  resource_pack_options?: ResourcePackOptions;
+  external_resource_pack_paths?: string[];
   skip_target_language_text?: boolean;
+  scan_options?: ScanOptions;
   ui_language?: Locale;
   last_world_dir: string;
 };
@@ -41,6 +60,7 @@ export type WorldInspection = {
 };
 
 export type BackupSummary = {
+  externalTargets?: string[];
   backupSetId: string;
   createdAt: string;
   fileCount: number;
@@ -69,7 +89,7 @@ export type Candidate = {
   location?: string;
 };
 
-export type CoverageItem = { id: string; scanned: boolean; present: boolean; count?: number };
+export type CoverageItem = { id: string; scanned: boolean; present?: boolean; count?: number; scopeOption?: boolean };
 
 export type Estimate = {
   candidateCount: number;
@@ -143,6 +163,9 @@ export type ResumeStatus = {
   scanPlanId?: string;
   fingerprint?: string;
   candidateCount?: number;
+  occurrenceCount?: number;
+  kinds?: Record<string, number>;
+  coverage?: CoverageItem[];
   candidates?: Candidate[];
   excludedCandidateIds?: string[];
   candidateOverrides?: Record<string, string>;
@@ -157,10 +180,16 @@ export type BootstrapPayload = {
   notices: Notices;
   settings: Settings;
   apiKeyStored: boolean;
+  credentialMode?: CredentialMode;
   worlds: RecentWorld[];
   worldInspection: WorldInspection | null;
   backups: BackupSummary[];
   resume: ResumeStatus;
+};
+
+export type ProviderUsage = {
+  provider: 'openrouter'; checkedAt: string; usage: number;
+  byokUsage: number | null; limit: number | null; limitRemaining: number | null;
 };
 
 export type ModelInfo = {
@@ -247,8 +276,12 @@ export async function cancelBackend(): Promise<boolean> {
   return invoke<boolean>('cancel_active');
 }
 
-export async function credentialStored(provider: string): Promise<boolean> {
-  return invoke<boolean>('credential_status', { provider });
+export async function credentialStatus(provider: string): Promise<CredentialStatus> {
+  return invoke<CredentialStatus>('credential_status', { provider });
+}
+
+export async function importCredential(provider: string): Promise<CredentialStatus> {
+  return invoke<CredentialStatus>('credential_import', { provider });
 }
 
 export async function operationActive(): Promise<boolean> {
@@ -267,4 +300,8 @@ export async function onProgress(handler: (event: ProgressEvent) => void): Promi
 /** Sent by the shell when the window's close button is pressed during an operation. */
 export async function onCloseBlocked(handler: () => void): Promise<Unsubscribe> {
   return listen('pomi-close-blocked', () => handler());
+}
+
+export async function onZoomFailed(handler: () => void): Promise<Unsubscribe> {
+  return listen('pomi-zoom-failed', () => handler());
 }

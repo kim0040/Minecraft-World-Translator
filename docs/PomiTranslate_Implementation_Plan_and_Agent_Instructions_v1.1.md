@@ -1,5 +1,13 @@
 # PomiTranslate 🐾 데스크톱 앱 전환 구현 계획서 및 하위 에이전트 작업 지시서
 
+> 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [최신 중단 인계](phase2-pause-2026-10-01.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
+
+## 최신 재개 상태 — 2026-10-01
+
+**Phase2 진행 중 / Phase3 미시작**. `main` / `865b51d`의 WIP 보존, 완료 commit/push 없음. [최신 검증·재개 기록](phase2-validation-2026-10-01.md)과 remaining-work가 과거 상태보다 우선한다. Python17/frontend48/browser64/Rust23/check/build 및 unsigned macOS Eval59.17MiB PASS. 실제 native200%·최신 검토 resume·원본4파일 byte-identical 복원을 검증했다. Actual provider key 직접 등록/usage/cost/restore, 외부 pack parity, startup·최종 review가 남는다. 추가 API 비용$0.
+
+아래 9월28~30일 관측은 역사 기록/장기 계획이며 현재 완료 증거가 아니다. 사용자 결정인 local encrypted credential 기본·keychain opt-in, 웹 선검증 후 native 최종 gate, Phase별 검증→commit→push 순서를 유지한다.
+
 > 원격 인계용 사본: 프로젝트 루트 계획/기록을 제품 저장소에도 포함했다. 본문의 프로젝트 루트 경로는 기존 로컬 배치를 설명하며, 이 저장소만 clone한 경우 실행 명령은 clone 루트에서 수행한다.
 
 > 제품명: **PomiTranslate 🐾**\
