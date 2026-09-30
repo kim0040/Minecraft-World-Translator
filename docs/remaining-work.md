@@ -47,7 +47,7 @@
 
 ## 배포와 안전
 
-일반 feature push에 3 OS installer를 전부 돌리지 않는다. installer는 manual/tag, 수동 기본 Linux이며 최종 gate에 cross-platform 검증을 수행한다. 서명 credential 없으면 unsigned development build로 기록한다.
+[CI 실행 정책](ci-policy.md): UI/브라우저 테스트 변경은 Python CI를 시작하지 않는다. 일반 feature push에 3 OS installer를 전부 돌리지 않는다. installer는 manual/tag, 수동 기본 Linux이며 최종 gate에 cross-platform 검증을 수행한다. 서명 credential 없으면 unsigned development build로 기록한다.
 
 원본 sample write 금지. `/private/tmp/pomi-eval/` copy에서 hash snapshot·번역·restore 비교. 알 수 없는 형식이나 unreadable chunk/provider 실패를 성공으로 보고하지 않는다.
 

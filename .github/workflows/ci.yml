@@ -1,24 +1,25 @@
 name: ci
 
-# Runs only where it protects something: a pull request into main, or a push to main. Pushes to a
-# feature branch run nothing until a pull request exists. Docs, images and the UI do not touch the
-# Python core, so they do not start it. A newer run replaces one still going for the same ref.
+# Automatic core checks are limited to Python/dependency changes on main or PRs into main.
+# Browser/frontend tests are verified locally and must not trigger the Python suite.
+# Packaging is manual/release-tag only; see docs/ci-policy.md.
 on:
   pull_request:
     branches: [main]
     paths:
-      - "**.py"
+      - "**/*.py"
       - "requirements.txt"
-      - "tests/**"
       - ".github/workflows/ci.yml"
   push:
     branches: [main]
     paths:
-      - "**.py"
+      - "**/*.py"
       - "requirements.txt"
-      - "tests/**"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
