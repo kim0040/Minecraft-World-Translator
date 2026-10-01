@@ -196,6 +196,7 @@ def public_settings_from_config(config: dict) -> dict:
         normalized_options_from_core_scan,
     )
 
+    from mwt.reasoning import normalize_reasoning
     api = config.get("api") or {}
     from mwt.desktop_resource_packs import normalize_external_pack_paths
     prompt = config.get("prompt") or {}
@@ -212,6 +213,7 @@ def public_settings_from_config(config: dict) -> dict:
         "model": api.get("model", ""),
         "base_url": api.get("base_url", ""),
         "wire_format": api.get("wire_format", ""),
+        "openrouter_reasoning": normalize_reasoning(api.get("openrouter_reasoning", "default")),
         "target_language": prompt.get("target_language", ""),
         "style_preset": prompt.get("style_preset", ""),
         "style_prompt": prompt.get("style_prompt", ""),

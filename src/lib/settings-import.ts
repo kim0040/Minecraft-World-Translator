@@ -221,6 +221,11 @@ function applyCurrentShape(target: Settings, source: JsonObject): void {
     target.provider = selectedProvider;
   }
 
+  if (hasOwn(source, 'openrouter_reasoning')) {
+    const value = source.openrouter_reasoning;
+    if (typeof value !== 'string' || !['default', 'enabled', 'disabled', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value)) throw new Error('Invalid openrouter_reasoning');
+    target.openrouter_reasoning = value;
+  }
   setStringField(target, source, 'model', MAX_MODEL_CHARS, 'settings.model');
   setStringField(target, source, 'target_language', MAX_LANGUAGE_CHARS, 'settings.target_language');
   setStringField(target, source, 'style_prompt', MAX_STYLE_PROMPT_CHARS, 'settings.style_prompt');

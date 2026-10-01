@@ -22,6 +22,7 @@ export type Settings = {
   model: string;
   base_url: string;
   wire_format: string;
+  openrouter_reasoning?: string;
   target_language: string;
   style_preset: string;
   style_prompt?: string;
@@ -193,6 +194,8 @@ export type ProviderUsage = {
 };
 
 export type ModelInfo = {
+  supported_parameters?: string[];
+  reasoning?: { mandatory?: boolean; default_enabled?: boolean; default_effort?: string; supported_efforts?: string[] | null };
   id: string;
   display_name?: string;
   pricing_prompt?: string;

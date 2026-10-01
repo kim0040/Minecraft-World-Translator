@@ -1,6 +1,6 @@
 # PomiTranslate 후속 에이전트 인계
 
-> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
+> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](../verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
 
 > **2026-10-01 중단 갱신:** [최신 중단·인계](phase2-pause-2026-10-01.md)가 아래 진행 기록보다 우선한다. 외부 ZIP/사용량 조회 후속 구현과 검증 시점, 재개 순서는 해당 문서를 따른다. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)도 기록했다. Phase2 미완/Phase3 미시작, commit/push 없음.
 
@@ -8,17 +8,17 @@
 
 **Phase2 진행 중 / Phase3 미시작**, `main` / `865b51d` WIP 보존, Phase commit/push 없음. Python17 suites/frontend48/browser64/Rust23/check/build PASS, 최신 unsigned Eval59.17MiB. 실제 native200% dialog·keyboard·복원 확인, 최신 검토 resume 수정과 원본4파일 hash differences0 PASS. 실제 provider key 직접 등록/usage/cost/restore, 외부 pack parity 계약, startup 안정성·최종 review가 남는다. 추가 API 비용$0.
 
-[최신 검증·정확한 재개 순서](phase2-validation-2026-10-01.md) → [전체 미완 backlog](remaining-work.md) → [현재 상태](current-state.md) → [기능 비교](legacy-ui-parity.md)를 먼저 읽는다. 아래 9월30일 Git 상태/숫자/미구현 설명은 당시 관측이다.
+[최신 검증·정확한 재개 순서](phase2-validation-2026-10-01.md) → [전체 미완 backlog](../follow-up-work.md) → [현재 상태](../current-state.md) → [기능 비교](../legacy-ui-parity.md)를 먼저 읽는다. 아래 9월30일 Git 상태/숫자/미구현 설명은 당시 관측이다.
 
 ## 1. 읽기 순서와 우선순위
 
-**현재 재개 상태:** 아래 초기 관측은 역사 기록이다. 현재 `main` / `865b51d`의 미커밋 작업과 최신 검증/미완 gate는 [2026-10-01 기록](phase2-validation-2026-10-01.md)이 우선한다. [legacy UI parity](legacy-ui-parity.md)도 함께 읽는다. Phase 2 완료 commit/push와 Phase 3은 아직 수행하지 않았다.
+**현재 재개 상태:** 아래 초기 관측은 역사 기록이다. 현재 `main` / `865b51d`의 미커밋 작업과 최신 검증/미완 gate는 [2026-10-01 기록](phase2-validation-2026-10-01.md)이 우선한다. [legacy UI parity](../legacy-ui-parity.md)도 함께 읽는다. Phase 2 완료 commit/push와 Phase 3은 아직 수행하지 않았다.
 
 1. 프로젝트 루트 `AGENTS.md` 및 사용자 최신 지시.
 2. 이 인계 문서.
-3. [credential 저장 변경 계획](credential-storage-plan.md)과 [웹 우선 검증·화면 비율 대응 계획](browser-first-testing-plan.md).
-4. [개정된 구현 계획](PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md). 프로젝트 루트에도 원본이 있으며, 이 저장소의 사본만으로 원격 인계 가능하다.
-5. [현재 코드 상태](current-state.md), [남은 작업](remaining-work.md), [fixture 지원 표](support-matrix.md).
+3. [credential 저장 변경 계획](../credential-storage-plan.md)과 [웹 우선 검증·화면 비율 대응 계획](../browser-first-testing-plan.md).
+4. [개정된 구현 계획](../PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md). 프로젝트 루트에도 원본이 있으며, 이 저장소의 사본만으로 원격 인계 가능하다.
+5. [현재 코드 상태](../current-state.md), [남은 작업](../follow-up-work.md), [fixture 지원 표](../support-matrix.md).
 
 2026-09-30 결정: 데스크톱 credential 기본 저장을 **로컬 암호화 DB + 별도 설치별 암호화 키 파일**로 변경할 계획이다. 키체인은 선택 기능으로 유지한다. 이전 문서의 “OS 키체인에만 저장” 요구보다 이 변경이 우선한다. 평문 API 키 저장 금지는 유지한다. 상세 threat model과 migration은 credential 계획을 따른다.
 
@@ -127,7 +127,7 @@ shots: <repo>/output/playwright/ (ignored)
 
 ## 6. 다음 실행 순서 — Phase 2 우선
 
-최신 사용자 요청: **앱 bundle 이전에 같은 Svelte UI를 웹으로 최대한 검증하고, Tauri 빌드/패키지 E2E는 최후 gate로 남긴다.** 고정 aspect ratio에 의존하지 않고 좁은/넓은/낮은/세로형 창과 resize/zoom을 처리한다. 상세 실행 계약과 현재 browser harness의 한계는 [웹 우선 검증 계획](browser-first-testing-plan.md)을 따른다.
+최신 사용자 요청: **앱 bundle 이전에 같은 Svelte UI를 웹으로 최대한 검증하고, Tauri 빌드/패키지 E2E는 최후 gate로 남긴다.** 고정 aspect ratio에 의존하지 않고 좁은/넓은/낮은/세로형 창과 resize/zoom을 처리한다. 상세 실행 계약과 현재 browser harness의 한계는 [웹 우선 검증 계획](../browser-first-testing-plan.md)을 따른다.
 
 ### 2-A. 기준선·빌드·실제 상태 복구
 
@@ -138,7 +138,7 @@ shots: <repo>/output/playwright/ (ignored)
 
 ### 2-B. credential 저장 변경 구현
 
-- [credential 계획](credential-storage-plan.md)의 vault와 mode/migration을 구현.
+- [credential 계획](../credential-storage-plan.md)의 vault와 mode/migration을 구현.
 - 상태 확인 때문에 키체인을 읽는 동작 제거. 새 local default에서 startup/Settings/scan의 keychain 접근 0회 증명.
 - Rust boundary에서 공개 provider/Custom host를 검증한 뒤 키 주입.
 - CLI/legacy 호환, permission, 오류, restart, privacy/i18n 문구까지 완료.

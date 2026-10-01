@@ -369,6 +369,35 @@ def test_resume_respects_latest_review(tmp_path: Path) -> None:
         assert run.call_args.kwargs["manual_overrides"] == expected_manual
 
 
+def test_reasoning_settings_roundtrip(root: Path) -> None:
+    from mwt.desktop_entry import _settings_fingerprint
+    data = root / "data"
+    default = _settings_set(data, provider="openrouter", openrouterReasoning="default")
+    assert default["openrouter_reasoning"] == "default"
+    old_fingerprint = _settings_fingerprint(data)
+    path = settings_path(data)
+    import json
+    legacy = json.loads(path.read_text()); legacy.pop("openrouter_reasoning"); path.write_text(json.dumps(legacy))
+    assert _settings_fingerprint(data) == old_fingerprint
+    saved = _settings_set(data, provider="openrouter", openrouterReasoning="high")
+    assert saved["openrouter_reasoning"] == "high"
+    assert _settings_fingerprint(data) != old_fingerprint
+    assert _request(data, "app.bootstrap", {"credentialOwner": "rust"})["payload"]["settings"]["openrouter_reasoning"] == "high"
+    before = path.read_bytes()
+    for invalid in [None, {}, True, "ultra"]:
+        try:
+            _settings_set(data, openrouterReasoning=invalid)
+            raise AssertionError("invalid reasoning choice accepted")
+        except ValueError:
+            pass
+        assert path.read_bytes() == before
+    world = _synthetic_world(root / "world")
+    with patch.object(core, "WorldTranslator") as translator:
+        translator.return_value.run.return_value = {"status": "completed"}
+        desktop_entry._run_translator(world, report_path=data / "reports" / "test.json", data_dir=data, dry_run=True)
+        assert translator.call_args.args[0]["api"]["openrouter_reasoning"] == "high"
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="pomi-desktop-parity-") as temporary:
         root = Path(temporary)
@@ -377,6 +406,7 @@ def main() -> None:
         assert bootstrap['settings']['provider'] == 'openai'
         assert bootstrap['apiKeyStored'] is False
         assert bootstrap['worlds'] == []
+        test_reasoning_settings_roundtrip(root / "reasoning")
         test_public_settings_roundtrip_and_defaults(root / "roundtrip")
         test_invalid_public_parity_settings_are_atomic(root / "validation")
         test_model_and_translation_preferences_preserve_scan_scope(root / "fingerprints")

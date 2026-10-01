@@ -36,7 +36,7 @@ export const STEPS: Step[] = ['world', 'scan', 'review', 'run', 'result'];
 
 export const defaultSettings = (): Settings => ({
   provider: 'openai', model: '', base_url: '', wire_format: 'openai', target_language: '한국어', style_preset: 'neutral',
-  style_prompt: '', custom_system_prompt: '', temperature: 0.3, batch_size: 40, request_timeout: 120, rpm_limit: 0,
+  openrouter_reasoning: 'default', style_prompt: '', custom_system_prompt: '', temperature: 0.3, batch_size: 40, request_timeout: 120, rpm_limit: 0,
   tpm_limit: 0, max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false, resource_pack_options: resourcePackOptions(), external_resource_pack_paths: [], skip_target_language_text: true,
   max_file_write_retries: 2, continue_on_file_error: true, source_overrides: {},
   ui_language: 'ko', last_world_dir: '', scan_options: normalizedScanOptions()
@@ -72,6 +72,9 @@ export class AppState {
   credentialRecovery = new SvelteSet<string>();
   private settingsRecoveryRevision = 0;
   models = $state<ModelInfo[]>([]);
+  modelsScope = $state('');
+  modelsCached = $state(false);
+  private modelCatalogs = new Map<string, { models: ModelInfo[]; fetchedAt: number; cached: boolean }>();
 
   worldDir = $state('');
   inspection = $state<WorldInspection | null>(null);
@@ -515,6 +518,7 @@ export class AppState {
         stylePrompt: s.style_prompt,
         customSystemPrompt: s.custom_system_prompt,
         uiLanguage: s.ui_language,
+        openrouterReasoning: s.openrouter_reasoning ?? 'default',
         temperature: s.temperature,
         batchSize: s.batch_size,
         requestTimeout: s.request_timeout,
@@ -597,17 +601,37 @@ export class AppState {
     }
   }
 
-  async loadModels(): Promise<number> {
+  private modelScope(selection: Settings): string {
+    return JSON.stringify([selection.provider, selection.provider === 'custom' ? selection.base_url : '', selection.provider === 'custom' ? selection.wire_format : '']);
+  }
+
+  modelsFor(selection: Settings): ModelInfo[] {
+    return this.modelsScope === this.modelScope(selection) ? this.models : [];
+  }
+
+  async loadModels(selection: Settings = this.settings, force = false): Promise<number> {
+    const scope = this.modelScope(selection);
+    const cached = this.modelCatalogs.get(scope);
+    if (!force && cached && Date.now() - cached.fetchedAt < 5 * 60_000) {
+      this.models = cached.models;
+      this.modelsScope = scope;
+      this.modelsCached = cached.cached;
+      return cached.models.length;
+    }
+    if (this.busy) throw new Error(t('settings.model.wait'));
     this.busy = 'models';
     try {
-      await this.persistSettings();
-      const listed = await callBackend<{ models: ModelInfo[] }>('models.list', {
-        provider: this.settings.provider,
-        ...(this.settings.provider === 'custom' ? { baseUrl: this.settings.base_url } : {}),
-        model: this.settings.model,
-        wireFormat: this.settings.wire_format
+      const listed = await callBackend<{ models: ModelInfo[]; cached?: boolean }>('models.list', {
+        provider: selection.provider,
+        ...(selection.provider === 'custom' ? { baseUrl: selection.base_url } : {}),
+        model: '',
+        wireFormat: selection.wire_format,
+        ...(selection.provider === 'openrouter' ? { publicCatalog: true } : {})
       });
       this.models = listed.models;
+      this.modelsScope = scope;
+      this.modelsCached = !!listed.cached;
+      this.modelCatalogs.set(scope, { models: listed.models, fetchedAt: Date.now(), cached: !!listed.cached });
       return listed.models.length;
     } finally {
       this.busy = '';

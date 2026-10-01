@@ -103,7 +103,7 @@
   .skip:focus { translate: 0; }
   .shell { min-height: 100vh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
   .shell.rail { grid-template-columns: var(--sidebar-rail) minmax(0, 1fr); }
-  .workspace { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  .workspace { grid-column: 2; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
   .workflow-head {
     position: sticky; inset-block-start: 0; z-index: 20; min-width: 0; overflow-x: auto;
     padding: var(--space-3) clamp(var(--space-4), 3vw, var(--space-6));
@@ -124,12 +124,12 @@
     .shell, .shell.rail { grid-template-columns: var(--sidebar-rail) minmax(0, 1fr); }
   }
   @media (max-width: 640px) {
-    .shell, .shell.rail { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-    .workspace { grid-row: 2; }
+    .shell, .shell.rail { --mobile-nav-height: calc(40px + 2 * var(--space-2) + 1px); grid-template-columns: minmax(0, 1fr); padding-block-start: var(--mobile-nav-height); }
+    .workspace { grid-column: 1; grid-row: 1; }
     main { padding: var(--space-4) var(--space-3) var(--space-6); }
-    .workflow-head { padding-inline: var(--space-2); }
+    .workflow-head { top: var(--mobile-nav-height); padding-inline: var(--space-2); }
     :global(.sidebar) {
-      position: static !important; width: 100% !important; height: auto !important; padding: var(--space-2) !important;
+      position: fixed !important; inset-block-end: auto; width: 100% !important; height: var(--mobile-nav-height) !important; padding: var(--space-2) !important;
       display: grid !important; grid-template-columns: auto minmax(0, 1fr) !important; align-items: center !important;
       border-inline-end: 0 !important; border-block-end: 1px solid var(--border); gap: var(--space-2) !important;
     }

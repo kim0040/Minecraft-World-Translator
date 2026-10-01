@@ -75,6 +75,13 @@ fn is_allowed_request(kind: &str) -> bool {
     ALLOWED_REQUESTS.contains(&kind)
 }
 
+/// Only the pinned, public OpenRouter catalog can bypass credential access.
+fn is_public_catalog(kind: &str, payload: &serde_json::Map<String, Value>) -> bool {
+    kind == "models.list"
+        && payload.get("provider").and_then(Value::as_str) == Some("openrouter")
+        && payload.get("publicCatalog").and_then(Value::as_bool) == Some(true)
+}
+
 /// Remove and return every complete line in `buffer`, without its trailing whitespace.
 /// A partial last line stays in the buffer for the next chunk.
 fn drain_complete_lines(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
@@ -197,7 +204,7 @@ async fn sidecar_request(
         // A false claim receives no key and cannot enable an authenticated API call.
         let manual_only = matches!(kind.as_str(), "translate.start" | "translate.resume")
             && payload.get("manualOnly").and_then(Value::as_bool) == Some(true);
-        if !manual_only {
+        if !manual_only && !is_public_catalog(&kind, payload) {
             if let Some(secret) = credentials.read(&credential_root(&app)?, &provider)? {
                 payload.insert("apiKey".into(), Value::String(secret.to_string()));
             }
@@ -452,6 +459,23 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_catalog_bypass_is_limited_to_openrouter_model_reads() {
+        let public = serde_json::json!({"provider":"openrouter", "publicCatalog":true});
+        assert!(is_public_catalog("models.list", public.as_object().unwrap()));
+        for kind in ["translate.start", "translate.resume", "prompt.enhance", "provider.usage"] {
+            assert!(!is_public_catalog(kind, public.as_object().unwrap()));
+        }
+        for payload in [
+            serde_json::json!({"provider":"custom", "publicCatalog":true}),
+            serde_json::json!({"provider":"openai", "publicCatalog":true}),
+            serde_json::json!({"provider":"openrouter", "publicCatalog":"true"}),
+            serde_json::json!({"provider":"openrouter"}),
+        ] {
+            assert!(!is_public_catalog("models.list", payload.as_object().unwrap()));
+        }
+    }
 
     #[test]
     fn only_known_requests_reach_the_sidecar() {

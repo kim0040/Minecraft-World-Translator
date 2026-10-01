@@ -5,6 +5,8 @@ import os
 import re
 import threading
 from typing import Any
+
+from mwt.reasoning import model_reasoning, normalize_reasoning, reasoning_payload
 from urllib import error, parse, request
 
 
@@ -334,6 +336,7 @@ def _model_record(model_id: str, item: dict[str, Any], *, display_name: str, des
         "pricing_completion": str(pricing.get("completion", "")),
         "supported_parameters": [str(parameter) for parameter in parameters],
         "text": text,
+        "reasoning": model_reasoning(item.get("reasoning")),
     }
 
 
@@ -374,6 +377,7 @@ class LLMProviderClient:
     def __init__(self, config: dict[str, Any]) -> None:
         api_config = config["api"]
         self.provider = api_config["provider"]
+        self.openrouter_reasoning = normalize_reasoning(api_config.get("openrouter_reasoning", "default"))
         self.base_url = api_config["base_url"].rstrip("/")
         self.api_key = api_config["api_key"]
         self.model = api_config["model"]
@@ -409,6 +413,12 @@ class LLMProviderClient:
         if self.family == "anthropic":
             return self._list_models_anthropic()
         raise RuntimeError(f"Unsupported provider family: {self.family}")
+
+    def list_public_models(self) -> list[dict[str, Any]]:
+        """Read OpenRouter's pinned catalog without authenticating or generating text."""
+        if self.provider != "openrouter" or self.base_url != default_base_url("openrouter"):
+            raise ValueError("Public catalog is only available at the OpenRouter endpoint")
+        return self._list_models_openai_compatible(public=True)
 
     def try_refresh_text_models(self) -> list[dict[str, Any]]:
         """Fetch text models once and pin the configured id to a published model."""
@@ -450,6 +460,12 @@ class LLMProviderClient:
             self.model = str(match["id"])
             self.model_info = match
             self.supports_json_response = _catalog_allows_json(match, self.provider)
+        if self.provider == "openrouter":
+            try:
+                reasoning_payload(self.openrouter_reasoning, self.model_info)
+            except ValueError as exc:
+                self._catalog_error = ModelCatalogError(str(exc))
+                raise self._catalog_error from exc
         return self._catalog
 
     def complete_text(
@@ -614,6 +630,9 @@ class LLMProviderClient:
             payload["response_format"] = {"type": "json_object"}
         if self.provider == "openrouter":
             payload["usage"] = {"include": True}
+            reasoning = reasoning_payload(self.openrouter_reasoning, self.model_info)
+            if reasoning is not None:
+                payload["reasoning"] = reasoning
 
         response = self._request_json(
             "POST",
@@ -627,11 +646,11 @@ class LLMProviderClient:
         message = choices[0].get("message", {})
         return flatten_text_payload(message.get("content"))
 
-    def _list_models_openai_compatible(self) -> list[dict[str, Any]]:
+    def _list_models_openai_compatible(self, *, public: bool = False) -> list[dict[str, Any]]:
         url = f"{self.base_url}/models"
         if self.provider == "openrouter":
             url = f"{url}?output_modalities=text"
-        response = self._request_json("GET", url, headers=self._openai_headers())
+        response = self._request_json("GET", url, headers={"Accept": "application/json"} if public else self._openai_headers())
         data = response.get("data") or []
         models: list[dict[str, Any]] = []
         for item in data:

@@ -1,5 +1,7 @@
 # Phase 2 검증과 재개 기록 — 2026-10-01
 
+> **재개 이후 최신 상태:** [2026-10-01 재개·검증](phase2-resume-2026-10-01.md). 아래 중단/검사 시점 기록은 이력이며 새 실행 결과는 재개 기록을 따른다.
+
 > **2026-10-01 중단 갱신:** [최신 중단·인계](phase2-pause-2026-10-01.md)가 아래 진행 기록보다 우선한다. 외부 ZIP/사용량 조회 후속 구현과 검증 시점, 재개 순서는 해당 문서를 따른다. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)도 기록했다. Phase2 미완/Phase3 미시작, commit/push 없음.
 
 이 문서가 9월 30일의 중단/진행 기록과 충돌할 때 우선한다. **Phase 2 진행 중, Phase 3 미시작. 완료 commit/push 없음.** 제품 저장소 `main` / `865b51d`, 기존 modified/untracked WIP를 보존했다. 원본 sample world는 변경하지 않았다.
@@ -73,8 +75,8 @@ native 입력·화면은 CUA만 사용했다. 이전 cold launch 한 번은 blan
 
 1. 사용자가 실제 OpenRouter provider/model/key를 **Eval 앱에서 직접 입력하고 로컬 저장**해야 한다. computer-use skill의 새 credential 입력·제출 handoff 규칙 때문에 agent가 대신 입력하지 않는다. 채팅/파일/로그로 키를 보내지 않는다. 이전 OS keychain을 자동 읽거나 가져오지 않는다.
 2. 등록 뒤 mock 없이 공식 endpoint/usage 전후를 확인하고 소량 합성 텍스트로 최종 실제 API E2E, 사용량/비용, 백업·복원 해시 비교. 허용 추가 총≤$1, 목표$0.01–$0.10. 현재 추가비용$0.
-3. [Legacy parity](legacy-ui-parity.md): external ZIP/folder/merge 및 app-managed backup/checkpoint 계약 잔여. 현재 in-world pack/항상 안전 백업만으로 전체 parity 완료라고 하지 않는다. 외부 scope 확장과 Phase2 gate 경계에 대한 질문은 답변 미수신이며 축소 승인으로 간주하지 않는다.
-4. startup 안정성, 최종 docs/diff/secret-artifact review→Phase2 완료 commit→push. 그 뒤에만 [Phase3 전체 backlog](remaining-work.md)를 구현한다.
+3. [Legacy parity](../legacy-ui-parity.md): external ZIP/folder/merge 및 app-managed backup/checkpoint 계약 잔여. 현재 in-world pack/항상 안전 백업만으로 전체 parity 완료라고 하지 않는다. 외부 scope 확장과 Phase2 gate 경계에 대한 질문은 답변 미수신이며 축소 승인으로 간주하지 않는다.
+4. startup 안정성, 최종 docs/diff/secret-artifact review→Phase2 완료 commit→push. 그 뒤에만 [Phase3 전체 backlog](../follow-up-work.md)를 구현한다.
 5. Windows/Linux clean-machine, signing/notarization/updater/cross-platform installer는 NOT RUN. 현재 artifact는 **unsigned development build**이며 release-ready가 아니다.
 
 CI 정책은 관련 Python main push/PR만 core 실행, installer manual/tag, 수동 기본Linux다. 이번 변경은 CI dispatch하지 않았다. Legacy UI/launcher를 제거하지 않았다.

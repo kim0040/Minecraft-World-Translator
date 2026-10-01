@@ -1,6 +1,6 @@
 # 검증 실행 정책 — 2026-10-01
 
-이 정책은 사용자 요청인 검증 최적화와 웹 우선 개발을 실행 규칙으로 만든다. [최신 인계](phase2-pause-2026-10-01.md), [남은 작업](remaining-work.md), [이유·근거](test-efficiency-audit-2026-10-01.md)와 함께 읽는다. **이미 성공한 동일 검사 재실행은 기본 동작이 아니다.**
+이 정책은 사용자 요청인 검증 최적화와 웹 우선 개발을 실행 규칙으로 만든다. [최신 인계](history/settings-ux-2026-10-01.md), [남은 작업](follow-up-work.md), [이유·근거](history/test-efficiency-audit-2026-10-01.md)와 함께 읽는다. **이미 성공한 동일 검사 재실행은 기본 동작이 아니다.**
 
 ## 에이전트 필수 규칙
 
@@ -45,7 +45,7 @@
 - cache는 실행 비용 절약 도구이며 모든 환경 변화를 자동 탐지하는 증명 시스템이 아니다. browser/permissions/네트워크/sandbox/node_modules 변경은 에이전트가 판단해 `--force` 또는 영향 검사 직접 실행.
 - 수동 GUI/native/API/restore 증거는 별도 기록하며 cache로 대체하지 않는다. source/package/world baseline/app identifier/결과 시점을 함께 남긴다.
 - `output/verification/`, test worlds/DB/keys/build/screenshots는 Git 제외. commit 이후 같은 source 검사 PASS는 재사용할 수 있으며 commit hash가 바뀌었다는 이유만으로 full suite를 반복하지 않는다.
-- 이번 사용자 중단 요청에서는 **syntax와 계획 출력만 확인**했고 새 executor의 실제 run/cache/invalidation/cancel/lock 및 최적화된 screenshot suite의 runtime는 내일 targeted 검증한다. 현재 CLI가 모든 OS에서 검증됐다고 주장하지 않는다.
+- 중단 시점에는 syntax/plan만 확인했다. 재개 후 macOS 합성 executor 18개와 targeted screenshot4개 및 전체 browser67 PASS. [최신 증거](history/phase2-resume-2026-10-01.md)를 따른다. 모든 OS의 CLI/process 동작 검증은 아니다.
 
 ## 실제로 줄인 반복
 
@@ -54,6 +54,10 @@
 3. 기본 sidecar script의 무조건 `--clean`을 제거하고 명시적인 clean 명령을 분리했다.
 4. 전체 실행만 있던 명령에 plan/smoke/final과 conservative evidence reuse를 추가했다. 리소스 문제를 고려해 Playwright workers1을 유지했다.
 
-## 내일 첫 후속 검사
+## 재개 후 검증
 
-executor의 source/명령/실패/중단/cache/lock 동작을 임시 합성 command runner로 targeted 검증하고, `screens.spec.ts`의 result success/failure·대표 화면 PNG 매핑만 확인한다. 구현 변화가 없는 unrelated 전체 gate를 이 최적화 검증 때문에 다시 돌리지 않는다. 이후 [기존 Phase2 잔여](remaining-work.md)를 이어간다.
+합성 executor/cache/invalidation/failure/cancel/lock과 screenshot artifact mapping의 targeted 검증을 완료했다. Rust build script 누락을 수정했다. 최종 관련 source를 고정한 뒤 frontend49/Python19/browser67, 별도로 최신 routing Rust23과 native 외부ZIP gate를 확인했다. 실제 provider와 남은 계약은 [잔여 작업](follow-up-work.md)을 따른다. 동일 source의 유효 PASS를 재사용한다.
+
+## 설정 UI/UX 후속 증거
+
+2026-10-01 최신 관련 frontend28/browser30(29+1)/Rust24/Python provider 두 파일 및 UI build·native 결과는 [후속 기록](history/settings-ux-2026-10-01.md)을 따른다. 위 전체49/67 등의 숫자는 최적화 당시 이력이며 최신 UX source의 전체 PASS가 아니다.

@@ -1,10 +1,10 @@
 # 웹 우선 검증과 유동적인 화면 대응 계획
 
-> 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [최신 중단 인계](phase2-pause-2026-10-01.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
+> 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [현재 상태](current-state.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
 
 기준일: 2026-09-30\
-상태: 실행 계약. 최신 browser 전체64/대표14 screenshot 및 실제 native200% 검증을 수행했다. actual provider와 플랫폼 최종 gate는 미완이다.\
-연결: [전체 인계](agent-handoff-2026-09-30.md), [credential 계획](credential-storage-plan.md)
+상태: 실행 계약. 아래 browser64/대표14 screenshot/native200% 수치는 2026-09-30 당시 증거다. 최신 검사 범위는 [현재 상태](current-state.md), 실제 provider·플랫폼 잔여 gate는 [추후 작업](follow-up-work.md)을 따른다.\
+연결: [전체 인계](history/agent-handoff-2026-09-30.md), [credential 계획](credential-storage-plan.md)
 
 ## 1. 결정
 
@@ -16,7 +16,7 @@ UI/UX와 브라우저에서 검증 가능한 기능은 **앱 bundle을 만들기
 
 ## 2. 현재 브라우저 검증 기반
 
-- `pnpm dev`는 Vite를 `127.0.0.1`에 실행한다. 수동 mock 화면은 `http://127.0.0.1:5173/tests/frontend/preview.html?scenario=review`로 연다. 이 entry는 synthetic 데이터만 쓰며 실제 sidecar·키·provider를 사용하지 않는다. `pnpm test:browser`는 자동 회귀를 수행한다. 최신 결과는 [검증 기록](phase2-validation-2026-10-01.md)을 따른다.
+- `pnpm dev`는 Vite를 `127.0.0.1`에 실행한다. 수동 mock 화면은 `http://127.0.0.1:5173/tests/frontend/preview.html?scenario=review`로 연다. 이 entry는 synthetic 데이터만 쓰며 실제 sidecar·키·provider를 사용하지 않는다. `pnpm test:browser`는 자동 회귀를 수행한다. 최신 결과는 [검증 기록](history/phase2-validation-2026-10-01.md)을 따른다.
 - 제품 UI는 `src/screens/`와 `src/lib/app.svelte.ts`를 그대로 사용한다.
 - `src/lib/api.ts`의 invoke/listen은 Tauri에 연결돼 있다. 단순히 웹 URL을 열었다는 이유만으로 전체 기능이 동작한다고 판단하지 않는다.
 - `tests/frontend/tauri-fixture-init.js`가 test-only `window.__TAURI_INTERNALS__`와 event/command 응답을 제공한다. 브라우저 시작 시 UI import/실행 전에 주입한다.
@@ -134,4 +134,4 @@ bridge를 만들 필요가 없으면 browser fixture + subprocess contract tests
 
 ## 2026-10-01 중단 후 실행 빈도 개정
 
-[테스트 지연 조사](test-efficiency-audit-2026-10-01.md)와 [최신 중단 기록](phase2-pause-2026-10-01.md)이 우선한다. 개발 중은 affected tests/scenario, 기능 묶음 안정화 후 관련 통합, Phase 완료 후보에서 전체 gate 한번을 기본으로 한다. 모든 수정마다 전체 viewport/axe/screenshot과 sidecar clean build를 반복하지 않는다. UI-only는 browser/dev, backend 변경은 관련 Python 계약 먼저, 패키지는 마지막 native gate에서 만든다. 동일 source의 PASS를 반복 실행하지 않는다. 현재는 사용자 요청으로 중단했으며 테스트 삭제/새 profiler/worker 증가를 수행하지 않았다.
+[테스트 지연 조사](history/test-efficiency-audit-2026-10-01.md)와 [최신 중단 기록](history/phase2-pause-2026-10-01.md)이 우선한다. 개발 중은 affected tests/scenario, 기능 묶음 안정화 후 관련 통합, Phase 완료 후보에서 전체 gate 한번을 기본으로 한다. 모든 수정마다 전체 viewport/axe/screenshot과 sidecar clean build를 반복하지 않는다. UI-only는 browser/dev, backend 변경은 관련 Python 계약 먼저, 패키지는 마지막 native gate에서 만든다. 동일 source의 PASS를 반복 실행하지 않는다. 현재는 사용자 요청으로 중단했으며 테스트 삭제/새 profiler/worker 증가를 수행하지 않았다.

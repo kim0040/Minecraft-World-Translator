@@ -1,6 +1,6 @@
 # 테스트·작업 지연 조사 — 2026-10-01
 
-> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
+> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](../verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
 
 사용자 중단 요청 뒤 read-only로 설정·테스트 소스·기존 결과를 조사했다. **시간을 측정하려고 새 테스트를 돌리지 않았다.** 전체 작업 시간의 정확한 비중은 실행별 구조화 로그가 없어 산정하지 않는다.
 
@@ -46,4 +46,4 @@
 
 ## 후속 조치
 
-사용자 추가 요청으로 policy/AGENTS와 tiered verifier, conservative evidence cache, sidecar incremental/explicit clean, result-failed 통합과 duplicate PNG copy를 구현했다. 위 조사 시점의 ‘script 미수정’은 역사 기록이다. [정책](verification-policy.md)을 적용하며 오늘 runtime 재실행 없이 syntax/plan만 확인했다. 새로운 harness 동작과 screenshot 회귀는 내일 targeted 검증으로 남겼다.
+사용자 추가 요청으로 policy/AGENTS와 tiered verifier, conservative evidence cache, sidecar incremental/explicit clean, result-failed 통합과 duplicate PNG copy를 구현했다. 위 조사 시점의 ‘script 미수정’은 역사 기록이다. [정책](../verification-policy.md)을 적용하며 오늘 runtime 재실행 없이 syntax/plan만 확인했다. 새로운 harness 동작과 screenshot 회귀는 내일 targeted 검증으로 남겼다.

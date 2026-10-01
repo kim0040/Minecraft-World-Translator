@@ -49,7 +49,7 @@
 - `mwt/desktop_prompt.py`와 `prompt.enhance` Rust/sidecar 경로: 스타일 brief 보조. 제공사·모델·전송/요금 확인 후 실행하며 결과는 미저장 prompt draft에 반영. 사용자 설정을 자동 저장하지 않음. 실제 paid 호출은 미실행.
 - `src/lib/settings-import.ts`: schema 1 공개 설정 및 allowlisted legacy JSON import, endpoint/type/range/size 검사, secret/unknown fields 제외, 현재 UI language/world path 유지. 파일은 최대 1 MiB. 가져오기는 draft만 변경하며 키를 가져오지 않는다.
 - 새 핵심 문자열은 ko/en/ja. 중국어 README는 중국어 UI 지원과 별개다.
-- legacy UI/launcher는 삭제하지 않았다. [parity 감사](legacy-ui-parity.md)의 남은 차이를 재개 시 해결한다.
+- legacy UI/launcher는 삭제하지 않았다. [parity 감사](../legacy-ui-parity.md)의 남은 차이를 재개 시 해결한다.
 
 ## 3. 실제 실행한 검사
 
@@ -96,4 +96,4 @@ CUA로 별도 임시 프로필 Chrome의 **실제 browser zoom 200%**를 확인�
 - 제품 source 및 docs의 modified/untracked 파일을 그대로 보존했다. 이번 중단 문서는 local filesystem에만 있고 새 commit/push는 없다.
 - 대표 screenshot/test artifacts는 ignored `output/playwright/`; 임시 world/별도 typecheck crate는 Git 밖. 다른 머신에서 fixture로 재생성해야 한다.
 - Windows/Linux native permission/clean-machine, signing/notarization/updater 및 공개 release는 NOT RUN. 서명 credential을 임의 생성하거나 검증을 우회하지 않는다.
-- 현재 **release-ready 아님**. Phase 2 final/native/provider/parity gate 및 Phase 3가 남아 있다. Phase 3 전체 backlog는 [remaining-work](remaining-work.md)와 [인계](agent-handoff-2026-09-30.md)에 보존했다.
+- 현재 **release-ready 아님**. Phase 2 final/native/provider/parity gate 및 Phase 3가 남아 있다. Phase 3 전체 backlog는 [remaining-work](../follow-up-work.md)와 [인계](agent-handoff-2026-09-30.md)에 보존했다.

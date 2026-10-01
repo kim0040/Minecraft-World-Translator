@@ -1,4 +1,5 @@
 (() => {
+  window.__pomiRequests = [];
   const callbacks = new Map();
   const listeners = new Map();
   let callbackId = 0;
@@ -38,7 +39,7 @@
   ];
   const credentialModes = new Map();
   const settings = {
-    provider: 'openrouter', model: 'xiaomi/mimo-v2.6-flash', base_url: '', wire_format: 'openai',
+    provider: 'openrouter', model: new URLSearchParams(location.search).get('model') || 'xiaomi/mimo-v2.6-flash', base_url: '', wire_format: 'openai',
     target_language: '한국어', style_preset: 'neutral', style_prompt: '', custom_system_prompt: '',
     temperature: 0.3, batch_size: 40, request_timeout: 120, rpm_limit: 0, tpm_limit: 0,
     max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false,
@@ -146,6 +147,7 @@
   async function sidecar(request) {
     const type = request.type;
     const body = request.payload || {};
+    window.__pomiRequests.push({ type, provider: body.provider, publicCatalog: body.publicCatalog });
     const current = scenario();
     if (type === 'app.bootstrap') {
       const empty = current === 'empty';
@@ -165,7 +167,7 @@
     }
     if (type === 'settings.set') {
       if (new URLSearchParams(location.search).get('slowSettings') === '1') await new Promise((resolve) => setTimeout(resolve, 1500));
-      const aliases = { externalResourcePackPaths: 'external_resource_pack_paths', resourcePackOptions: 'resource_pack_options', sourceOverrides: 'source_overrides', continueOnFileError: 'continue_on_file_error', maxFileWriteRetries: 'max_file_write_retries', targetLanguage: 'target_language', uiLanguage: 'ui_language', baseUrl: 'base_url', wireFormat: 'wire_format', resourcePackEnabled: 'resource_pack_enabled', skipTargetLanguageText: 'skip_target_language_text', scanOptions: 'scan_options' };
+      const aliases = { openrouterReasoning: 'openrouter_reasoning', externalResourcePackPaths: 'external_resource_pack_paths', resourcePackOptions: 'resource_pack_options', sourceOverrides: 'source_overrides', continueOnFileError: 'continue_on_file_error', maxFileWriteRetries: 'max_file_write_retries', targetLanguage: 'target_language', uiLanguage: 'ui_language', baseUrl: 'base_url', wireFormat: 'wire_format', resourcePackEnabled: 'resource_pack_enabled', skipTargetLanguageText: 'skip_target_language_text', scanOptions: 'scan_options' };
       for (const [key, value] of Object.entries(body)) {
         if (key !== 'apiKey' && key !== 'credentialMode') settings[aliases[key] || key] = value;
       }
@@ -184,7 +186,11 @@
     }
     if (type === 'candidates.page') return ok(request, filteredPage(body));
     if (type === 'provider.usage') return ok(request, { provider: 'openrouter', checkedAt: '2026-10-01T00:00:00Z', usage: 0.123456, byokUsage: 0, limit: null, limitRemaining: null });
-    if (type === 'models.list') return ok(request, { models: [{ id: 'xiaomi/mimo-v2.6-flash', display_name: 'MiMo V2.6 Flash' }] });
+    if (type === 'models.list') {
+      if (new URLSearchParams(location.search).get('slowModels') === '1') await new Promise((resolve) => setTimeout(resolve, 700));
+      if (new URLSearchParams(location.search).get('modelError') === '1') return { v: 1, id: request.id, type: 'response.error', error: { code: 'MODELS_FAILED', message: 'Synthetic metadata lookup failure' } };
+      return ok(request, { cached: new URLSearchParams(location.search).get('cachedModels') === '1', models: [{ id: 'xiaomi/mimo-v2.6-flash', display_name: 'MiMo V2.6 Flash' }, { id: 'deepseek/deepseek-v4.1-flash', supported_parameters: ['reasoning'], reasoning: { mandatory: false, default_enabled: true, default_effort: 'high', supported_efforts: ['max', 'high', 'low'] } }, { id: 'mandatory-fixture', reasoning: { mandatory: true, supported_efforts: ['high'] } }] });
+    }
     if (type === 'prompt.enhance') return ok(request, { enhancedPrompt: '중세 판타지 분위기에 맞추어 짧고 자연스럽게 번역하세요.' });
     if (type === 'scan.start') {
       if (current === 'scan-running') {
@@ -226,7 +232,7 @@
       if (command === 'plugin:event|listen') { const id = ++eventId; listeners.set(id, { id, event: args.event, handler: args.handler }); return id; }
       if (command === 'plugin:event|unlisten') { listeners.delete(args.eventId); return null; }
       if (command === 'plugin:dialog|open') return window.__pomiDialogFiles ?? null;
-      if (command === 'credential_status') return { stored: true, mode: credentialModes.get(args.provider) || 'local' };
+      if (command === 'credential_status') return { stored: new URLSearchParams(location.search).get('missingKey') !== '1', mode: credentialModes.get(args.provider) || 'local' };
       if (command === 'credential_import') return { stored: true, mode: 'local' };
       if (command === 'operation_active') return false;
       if (command === 'cancel_active') return true;

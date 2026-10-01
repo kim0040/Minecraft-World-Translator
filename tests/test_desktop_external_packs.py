@@ -15,7 +15,10 @@ from mwt.desktop_resource_packs import normalize_external_pack_paths
 def workflow(root: Path) -> None:
     world = _synthetic_world(root/'world-fixture')
     pack = root/'external-packs'/'selected.zip'
-    original_pack = _resource_pack(pack)
+    _resource_pack(pack)
+    with zipfile.ZipFile(pack, 'a') as archive:
+        archive.writestr('assets/second/lang/en_us.json', json.dumps({'second.greeting': 'Hello pack'}))
+    original_pack = pack.read_bytes()
     original_world = _files_under(world)
     data = root/'data'
     _settings_set(data, worldDir=str(world), resourcePackEnabled=True, externalResourcePackPaths=[str(pack)],
@@ -28,16 +31,21 @@ def workflow(root: Path) -> None:
     assert set(sources)=={'Hello sign','Hello pack'},sources
     assert next(row for row in scan['coverage'] if row['id']=='external_resource_pack')['scanned']
     assert pack.read_bytes()==original_pack and _files_under(world)==original_world
+    scan_report=json.loads((data/'reports'/'scan-report.json').read_text())
+    assert scan_report['changed_file_count']==0
+    assert scan_report['candidate_file_count']==2  # one region and one physical ZIP
     with patch('mwt.secrets.load_api_key',side_effect=AssertionError('manual external pack must not read keychain')):
         result=_request(data,'translate.start',{'worldDir':str(world),'credentialOwner':'rust',
             'fingerprint':scan['fingerprint'],'scanPlanId':scan['scanPlanId'],
             'candidateOverrides':{sources['Hello sign']:'표지판 번역',sources['Hello pack']:'팩 번역'}})['payload']
     assert result['status']=='completed',result
     assert result['providerRequests']==0
+    assert result['changedFileCount']==2  # two language entries still change only one ZIP
     translated_pack=pack.read_bytes()
     assert translated_pack!=original_pack
     with zipfile.ZipFile(pack) as archive:
         assert json.loads(archive.read('assets/demo/lang/ko_kr.json'))=={'demo.greeting':'팩 번역'}
+        assert json.loads(archive.read('assets/second/lang/ko_kr.json'))=={'second.greeting':'팩 번역'}
     backups=_request(data,'backups.list',{'worldDir':str(world)})['payload']['backups']
     selected=next(row for row in backups if row['backupSetId']==result['backupSetId'])
     assert selected['externalTargets']==[str(pack)]

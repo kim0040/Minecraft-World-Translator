@@ -410,10 +410,59 @@ def test_desktop_settings(tmp: Path) -> None:
     print("PASS providers.desktop_settings")
 
 
+def test_reasoning_request_shapes() -> None:
+    from unittest.mock import patch
+    from llm_backends import _model_record
+    from mwt.reasoning import normalize_reasoning, reasoning_payload
+
+    info = _model_record("reasoning-model", {
+        "supported_parameters": ["reasoning"],
+        "reasoning": {"mandatory": False, "default_enabled": True, "default_effort": "high", "supported_efforts": ["max", "high", "low"]},
+    }, display_name="Reasoning", description="Synthetic")
+    assert info["reasoning"]["supported_efforts"] == ["max", "high", "low"]
+    for choice, expected in [
+        ("default", None), ("enabled", {"enabled": True, "exclude": True}),
+        ("disabled", {"enabled": False, "exclude": True}),
+        *[(effort, {"effort": effort, "exclude": True}) for effort in ["low", "high", "max"]],
+    ]:
+        provider = client("https://example.invalid/v1", "openrouter", "reasoning-model")
+        provider.openrouter_reasoning = choice
+        provider._catalog_checked = True
+        provider.model_info = info
+        with patch.object(provider, "_request_json", return_value={"choices": [{"message": {"content": "final answer", "reasoning": "synthetic reasoning"}}]}) as request:
+            assert provider.complete_text(system_prompt="translate", user_prompt="sample", temperature=0.3) == "final answer"
+            payload = request.call_args.kwargs["payload"]
+            assert payload.get("reasoning") == expected, payload
+            assert payload["usage"] == {"include": True}
+    for choice, metadata in [("medium", info), ("disabled", {**info, "reasoning": {"mandatory": True}}), ("high", None), ("enabled", {"supported_parameters": []})]:
+        provider = client("https://example.invalid/v1", "openrouter", "reasoning-model")
+        provider.openrouter_reasoning = choice; provider.model_info = metadata; provider._catalog_checked = True
+        with patch.object(provider, "_request_json") as request:
+            try:
+                provider.complete_text(system_prompt="translate", user_prompt="sample", temperature=0.3)
+                raise AssertionError("unsupported reasoning must fail before POST")
+            except ValueError:
+                pass
+            request.assert_not_called()
+    for invalid in [None, {}, True, "ultra", "HIGH"]:
+        try:
+            normalize_reasoning(invalid)
+            raise AssertionError("invalid choice accepted")
+        except ValueError:
+            pass
+    non_router = client("https://example.invalid/v1", "custom", "reasoning-model")
+    non_router.openrouter_reasoning = "high"; non_router._catalog_checked = True
+    with patch.object(non_router, "_request_json", return_value={"choices": [{"message": {"content": "ok"}}]}) as request:
+        non_router.complete_text(system_prompt="translate", user_prompt="sample", temperature=0.3)
+        assert "reasoning" not in request.call_args.kwargs["payload"]
+    print("PASS providers.reasoning_shapes_and_boundaries")
+
+
 def main_test() -> None:
     import tempfile
 
     test_public_providers()
+    test_reasoning_request_shapes()
     server, base = start()
     try:
         with tempfile.TemporaryDirectory() as temp_dir:

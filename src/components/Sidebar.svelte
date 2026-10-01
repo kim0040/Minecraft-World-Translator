@@ -77,7 +77,7 @@
 
 <style>
   .sidebar {
-    position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: var(--space-5);
+    position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 30; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior-y: contain; display: flex; flex-direction: column; gap: var(--space-5);
     padding: var(--space-5) var(--space-4) var(--space-4); background: var(--bg-surface); border-inline-end: 1px solid var(--border);
     width: var(--sidebar-width);
   }

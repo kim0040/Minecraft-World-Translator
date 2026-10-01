@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from mwt.extract import CATEGORIES, EXTRACTOR_VERSION
+from mwt.reasoning import normalize_reasoning
 from mwt.desktop_settings import (
     DEFAULT_CONTINUE_ON_FILE_ERROR,
     DEFAULT_MAX_FILE_WRITE_RETRIES,
@@ -71,6 +72,9 @@ def _settings_fingerprint(data_dir: Path) -> str:
             ),
         }
     )
+    reasoning = normalize_reasoning(saved.get("openrouter_reasoning", "default"))
+    if reasoning != "default":
+        relevant["openrouter_reasoning"] = reasoning
     external_paths = normalize_external_pack_paths(saved.get("external_resource_pack_paths", []))
     if external_paths:
         relevant["external_resource_pack_paths"] = external_paths
@@ -619,6 +623,7 @@ def _run_translator(
                 "model": model,
                 "base_url": base_url,
                 "wire_format": wire_format,
+                "openrouter_reasoning": normalize_reasoning(saved.get("openrouter_reasoning", "default")),
                 "request_timeout": int(
                     saved.get("request_timeout") or DEFAULT_CONFIG["api"]["request_timeout"]
                 ),
@@ -699,6 +704,7 @@ def _settings_payload(data_dir: Path, provider: str = "", *, check_keyring: bool
     saved = dict(_saved(data_dir))
     if not saved.get("provider"):
         saved["provider"] = "openai"
+    saved["openrouter_reasoning"] = normalize_reasoning(saved.get("openrouter_reasoning", "default"))
     saved["source_overrides"] = normalize_source_overrides(
         saved.get("source_overrides", {}), field="saved source_overrides"
     )
@@ -891,6 +897,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "model": str(body.get("model") or saved.get("model") or ""),
                 "base_url": base_url,
                 "wire_format": str(body.get("wireFormat") or body.get("wire_format") or saved.get("wire_format") or ""),
+                "openrouter_reasoning": normalize_reasoning(public_setting("openrouterReasoning", "openrouter_reasoning", "default")),
                 "request_timeout": request_timeout,
                 "rpm_limit": rpm_limit,
                 "tpm_limit": tpm_limit,
@@ -1000,6 +1007,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
 
         saved = _saved(data_dir)
         provider = str(body.get("provider") or saved.get("provider") or "openai")
+        public_catalog = provider == "openrouter" and body.get("publicCatalog") is True
         config = merge_nested(
             DEFAULT_CONFIG,
             {
@@ -1007,7 +1015,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "runtime": {"data_dir": str(data_dir)},
                 "api": {
                     "provider": provider,
-                    "api_key": str(body.get("apiKey") or "")
+                    "api_key": "" if public_catalog else str(body.get("apiKey") or "")
                     or os.environ.get("POMI_API_KEY")
                     or (load_api_key(provider) if body.get("credentialOwner") != "rust" else "")
                     or "",
@@ -1020,8 +1028,23 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
         if body.get("credentialOwner") == "rust":
             from mwt.desktop_provider import resolve_desktop_provider
             config["api"].update(resolve_desktop_provider(body, saved))
+        if body.get("model") == "":
+            config["api"]["model"] = ""  # Catalog lookup must not validate the saved model.
         try:
-            models = LLMProviderClient(config).try_refresh_text_models()
+            cached = False
+            if public_catalog:
+                from mwt.userdata import load_model_catalog, remember_model_catalog
+                config["api"].update({"api_key": "", "base_url": "https://openrouter.ai/api/v1", "wire_format": "openai", "model": ""})
+                try:
+                    models = LLMProviderClient(config).list_public_models()
+                    remember_model_catalog(provider, models, root=data_dir)
+                except Exception:
+                    models = load_model_catalog(provider, root=data_dir)
+                    if not models:
+                        raise
+                    cached = True
+            else:
+                models = LLMProviderClient(config).try_refresh_text_models()
         except Exception as exc:
             emit(
                 {
@@ -1037,7 +1060,7 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 "v": 1,
                 "id": request_id,
                 "type": "response.ok",
-                "payload": {"provider": provider, "models": models, "localhostServer": False},
+                "payload": {"provider": provider, "models": models, "cached": cached, "localhostServer": False},
             }
         )
         return

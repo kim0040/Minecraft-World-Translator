@@ -53,3 +53,25 @@ output/verification/
 *.pfx
 .pomi-backups/
 .pomi-translate/
+
+# Local reports, browser traces and temporary verification artifacts.
+output/
+test-results/
+playwright-report/
+.pomi-reports/
+.pomi-cache/
+*.log
+
+# User worlds and generated world fixtures must not be published.
+/worlds/
+/test-worlds/
+/samples/
+*.mca
+*.mcc
+*.mcr
+*.linear
+session.lock
+level.dat
+level.dat_old
+
+# docs/images contains curated, synthetic documentation screenshots and is tracked.

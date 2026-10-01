@@ -49,7 +49,7 @@ function inputs(name) {
   const paths = listed.stdout.split('\0').filter(file => {
     if (common.includes(file)) return true;
     if (name === 'python-final') return file.endsWith('.py') || ['requirements.txt', '.github/workflows/ci.yml'].includes(file);
-    if (name === 'rust-final') return /^src-tauri\/(src\/|Cargo\.|tauri\.conf\.json|capabilities\/)/.test(file);
+    if (name === 'rust-final') return /^src-tauri\/(src\/|Cargo\.|build\.rs$|tauri\.conf\.json|capabilities\/)/.test(file) || /^(?:\.cargo\/config(?:\.toml)?|rust-toolchain(?:\.toml)?)$/.test(file);
     if (/^(src\/|public\/)/.test(file) || /^(vite|playwright|tsconfig).*\.(ts|json)$/.test(file)) return true;
     if (name === 'frontend') return file.startsWith('tests/frontend/');
     if (name.startsWith('browser-')) return file.startsWith('tests/browser/') || ['tests/frontend/tauri-fixture-init.js', 'tests/frontend/preview.html'].includes(file);

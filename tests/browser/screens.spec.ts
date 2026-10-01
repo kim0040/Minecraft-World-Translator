@@ -162,3 +162,46 @@ test('sidebar elapsed time ticks while waiting for an in-flight request', async 
   await expect(page.locator('.sidebar .sub')).not.toHaveText('0초', { timeout: 4000 });
   expect(await page.locator('main').innerText()).not.toMatch(/translation_batch_start|phase_start/);
 });
+
+
+test('OpenRouter reasoning separates mode and supported effort and persists choices', async ({ page }) => {
+  await boot(page, 'selected&model=deepseek/deepseek-v4.1-flash');
+  await page.getByRole('button', { name: '환경 설정', exact: true }).click();
+  await expect(page.getByText('모델 기본값: 켜짐 · 강하게 (high)', { exact: true })).toBeVisible();
+  await expect(page.getByRole('radio', { name: '모델 기본값', exact: true })).toBeChecked();
+  await expect(page.locator('#openrouter-reasoning')).toHaveCount(0);
+  await page.getByRole('radio', { name: '직접 설정', exact: true }).check();
+  const select = page.locator('#openrouter-reasoning');
+  await expect(select.locator('option')).toHaveText(['가볍게 (low)', '강하게 (high)', '최대 (max)']);
+  await select.selectOption('max');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(select).toHaveValue('max');
+  await expect(page.getByText('저장된 설정과 같습니다', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '정보', exact: true }).click();
+  await page.getByRole('button', { name: '환경 설정', exact: true }).click();
+  await expect(select).toHaveValue('max');
+  await page.locator('#model').fill('mandatory-fixture');
+  await expect(page.getByRole('radio', { name: '추론 끄기', exact: true })).toBeDisabled();
+  await expect(page.getByText('이 모델은 추론을 끌 수 없습니다.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
+  await page.getByRole('radio', { name: '모델 기본값', exact: true }).check();
+  await page.locator('#model').fill('xiaomi/mimo-v2.6-flash');
+  await expect(page.getByRole('radio', { name: '직접 설정', exact: true })).toBeDisabled();
+});
+
+for (const width of [1440, 840, 320]) {
+  test(`sidebar stays fixed while settings scroll at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 620 });
+    await boot(page, 'selected');
+    await page.getByRole('button', { name: '환경 설정', exact: true }).click();
+    const sidebar = page.locator('.sidebar');
+    const before = await sidebar.boundingBox();
+    await page.getByRole('button', { name: '저장', exact: true }).scrollIntoViewIfNeeded();
+    const after = await sidebar.boundingBox();
+    expect(after?.y).toBeCloseTo(before!.y, 0);
+    expect(after?.height).toBeCloseTo(before!.height, 0);
+    await expect(page.getByRole('button', { name: '번역 작업', exact: true })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `output/playwright/fixed-sidebar-${width}.png` });
+  });
+}

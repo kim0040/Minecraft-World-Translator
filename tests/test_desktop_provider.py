@@ -62,5 +62,37 @@ def main_test():
             raise AssertionError("public provider accepted another host")
     print("PASS desktop_provider.owned_context_and_no_environment_fallback")
 
+
+def test_public_catalog() -> None:
+    from llm_backends import LLMProviderClient
+    from mwt.userdata import remember_user_settings, settings_path
+
+    with tempfile.TemporaryDirectory() as directory:
+        data = Path(directory) / "data"
+        remember_user_settings({"provider": "custom", "model": "unsaved-fixture", "target_language": "한국어"}, data)
+        before = settings_path(data).read_bytes()
+        body = {"provider": "openrouter", "publicCatalog": True, "credentialOwner": "rust", "model": "", "apiKey": "synthetic-ignored-key"}
+        request = {"v": 1, "id": "public", "type": "models.list", "payload": body}
+        catalog = {"data": [{"id": "reasoning-fixture", "reasoning": {"default_enabled": True, "default_effort": "high", "supported_efforts": ["low", "high"]}}]}
+        with patch.dict(os.environ, {"POMI_API_KEY": "synthetic-inherited-key"}), patch("mwt.secrets.load_api_key", side_effect=AssertionError("public lookup must not read keys")), patch.object(LLMProviderClient, "_request_json", return_value=catalog) as network, patch.object(entry, "emit") as emit:
+            entry.handle(request, data / "reports", data)
+            method, url = network.call_args.args
+            assert method == "GET" and url == "https://openrouter.ai/api/v1/models?output_modalities=text"
+            assert "Authorization" not in network.call_args.kwargs["headers"]
+            reply = emit.call_args.args[0]
+            assert reply["type"] == "response.ok" and reply["payload"]["cached"] is False
+            assert reply["payload"]["models"][0]["reasoning"]["default_enabled"] is True
+            assert "synthetic-ignored-key" not in json.dumps(reply)
+        assert settings_path(data).read_bytes() == before
+        with patch.object(LLMProviderClient, "_request_json", side_effect=RuntimeError("Synthetic offline")), patch.object(entry, "emit") as emit:
+            entry.handle(request, data / "reports", data)
+            assert emit.call_args.args[0]["payload"]["cached"] is True
+            fresh = Path(directory) / "fresh"
+            entry.handle(request, fresh / "reports", fresh)
+            assert emit.call_args.args[0]["type"] == "response.error"
+        assert settings_path(data).read_bytes() == before
+    print("PASS desktop_provider.public_catalog_no_credentials_no_settings_write_cache_and_retry")
+
 if __name__ == "__main__":
     main_test()
+    test_public_catalog()

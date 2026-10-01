@@ -37,6 +37,7 @@ export function normalizedScanOptions(options?: Partial<ScanOptions>): ScanOptio
 export function publicSettingsForExport(settings: Settings): Settings {
   return {
     provider: settings.provider, model: settings.model, base_url: settings.base_url, wire_format: settings.wire_format,
+    openrouter_reasoning: settings.openrouter_reasoning ?? 'default',
     target_language: settings.target_language, style_preset: settings.style_preset,
     style_prompt: settings.style_prompt, custom_system_prompt: settings.custom_system_prompt,
     temperature: settings.temperature, batch_size: settings.batch_size, request_timeout: settings.request_timeout,

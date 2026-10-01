@@ -1,6 +1,8 @@
 # PomiTranslate 중단·인계 — 2026-10-01 02:11 KST
 
-> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
+> **재개 이후 최신 상태:** [2026-10-01 재개·검증](phase2-resume-2026-10-01.md). 아래 중단/검사 시점 기록은 이력이며 새 실행 결과는 재개 기록을 따른다.
+
+> **최신 결정 — 검증 최적화 후 중간 저장/중단:** 사용자 요청으로 실행 정책·명령을 반영하고 현재 WIP를 checkpoint commit/push한다. Phase2 완료 commit이 아니며 Phase3 미시작이다. [검증 실행 정책](../verification-policy.md)과 아래 최적화 후속 기록을 우선한다. 테스트·개발 서버·Eval 앱은 종료됐으며 내일 재개 전 새 검사/빌드를 실행하지 않는다.
 
 사용자 요청: **하던 것까지만 정리 후 중단하고, 작업 지연과 테스트 과잉 여부를 조사해 브리핑**. 추가 기능, 새 전체 회귀, Tauri 재빌드/실행, 유료 호출을 시작하지 않았다. 이 문서가 앞선 진행 기록과 충돌할 때 우선한다.
 
@@ -59,14 +61,14 @@
 ## 재개 시 다음 순서
 
 1. 이 기록/AGENTS/구현 계획을 읽고 git 상태와 diff 확인. 기존 WIP를 삭제하지 않는다.
-2. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)와 개정 [웹 우선 계획](browser-first-testing-plan.md)을 적용한다. 소스를 먼저 안정화하고 **변경 관련 검사만** 실행한다. 이전 PASS 증거를 날짜/소스 범위와 함께 재사용한다.
+2. [테스트 지연 조사](test-efficiency-audit-2026-10-01.md)와 개정 [웹 우선 계획](../browser-first-testing-plan.md)을 적용한다. 소스를 먼저 안정화하고 **변경 관련 검사만** 실행한다. 이전 PASS 증거를 날짜/소스 범위와 함께 재사용한다.
 3. 최신 `provider.usage` Rust routing 검증 및 영향받은 backend 계약을 확인한다. 정확한 기준점이 필요할 때 소스 고정 후 마지막 full gate를 한 번 수행한다. 테스트 실행 중 소스를 수정하지 않는다.
 4. Eval 앱을 정상 종료한 뒤 최신 frontend/sidecar를 Tauri에 묶는다. UI-only 수정이면 sidecar 재패키징하지 않는다. 외부 ZIP native select→scan→manual run(API0)→backup/restore→5 target hashes difference0을 확인한다.
 5. Native 시험 준비 경로: `/private/tmp/pomi-eval/external-20261001/External ZIP workflow world`, external ZIP `/private/tmp/pomi-eval/external-20261001/outside-world/selected external pack.zip`, baseline `/private/tmp/pomi-eval/external-20261001/before.json`(world4+ZIP1). 아직 native write하지 않았다.
 6. 기존 Eval identifier `app.pomitranslate.eval20260930r1`, app data `~/Library/Application Support/app.pomitranslate.eval20260930r1`, core root `core`. 기존 production 앱 데이터는 건드리지 않는다. 새 bundle 빌드 시 실행 앱을 먼저 종료한다.
 7. 실제 API gate는 사용자가 Eval Settings에서 OpenRouter/model/새 키 입력·로컬 저장을 직접 완료해야 한다. computer-use skill credential handoff 규칙 때문이며 키를 채팅/로그/평문파일로 받지 않는다. 이전 keychain 자동 읽기 없음. 기존 예산 추가 총≤$1, 목표$0.01–$0.10. 현재 등록 미완이므로 비용/실제 provider 성공을 주장하지 않는다.
 8. Legacy arbitrary ZIP native parity와 app-managed backup/checkpoint 대체 범위, startup 안정성, docs/diff/artifact/secret review를 마무리한다. 항상 안전 백업 정책과 legacy off/suffix/path 토글 차이를 숨기지 않는다. **legacy UI/launcher는 보존한다.**
-9. Phase2 모든 gate 후 문서/review→commit→push. 그 뒤에만 [Phase3 전체 backlog](remaining-work.md) 구현. Windows/Linux clean-machine/signing/updater/release도 아직 미완이다.
+9. Phase2 모든 gate 후 문서/review→commit→push. 그 뒤에만 [Phase3 전체 backlog](../follow-up-work.md) 구현. Windows/Linux clean-machine/signing/updater/release도 아직 미완이다.
 
 ## 마지막 빌드의 주의점
 

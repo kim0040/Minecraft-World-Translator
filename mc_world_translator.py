@@ -874,10 +874,16 @@ class WorldTranslator(TextExtractionMixin):
     def refresh_report_counts(self) -> None:
         self.report["changed_file_count"] = len(
             [item for item in self.report["changed_files"] if item.get("changed_chunks", 0) > 0]
-        )
+        ) + len({
+            item["zip_path"] for item in self.report["resource_packs"]
+            if item.get("translated_files", 0) > 0
+        })  # A ZIP is one changed file, even when several language entries are written.
         self.report["candidate_file_count"] = len(
             [item for item in self.report["changed_files"] if item.get("candidates", 0) > 0]
-        )
+        ) + len({
+            item["zip_path"] for item in self.report["resource_packs"]
+            if item.get("candidates", 0) > 0
+        })
         self.report["candidate_text_count"] = len(self.candidate_texts)
 
     def run(self) -> dict[str, Any]:

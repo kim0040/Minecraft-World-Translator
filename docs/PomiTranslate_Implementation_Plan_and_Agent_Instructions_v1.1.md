@@ -1,11 +1,14 @@
 # PomiTranslate 🐾 데스크톱 앱 전환 구현 계획서 및 하위 에이전트 작업 지시서
 
-> 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [최신 중단 인계](phase2-pause-2026-10-01.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
+> 현재 검증과 잔여 범위는 [현재 상태](current-state.md)와 [추후 작업](follow-up-work.md)을 따른다. 날짜별 기록은 이력이다.
 
-## 최신 재개 상태 — 2026-10-01
+> 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [이전 중단 인계](history/phase2-pause-2026-10-01.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
 
-**Phase2 진행 중 / Phase3 미시작**. `main` / `865b51d`의 WIP 보존, 완료 commit/push 없음. [최신 검증·재개 기록](phase2-validation-2026-10-01.md)과 remaining-work가 과거 상태보다 우선한다. Python17/frontend48/browser64/Rust23/check/build 및 unsigned macOS Eval59.17MiB PASS. 실제 native200%·최신 검토 resume·원본4파일 byte-identical 복원을 검증했다. Actual provider key 직접 등록/usage/cost/restore, 외부 pack parity, startup·최종 review가 남는다. 추가 API 비용$0.
+## 현재 작업 상태 — 2026-10-01
 
+**Phase2 진행 중 / Phase3 미시작 / release-ready 아님.** 현재 구현은 [current-state](current-state.md), 미완 gate와 완료 조건은 [follow-up-work](follow-up-work.md), 최신 추론/설정 검증은 [UI/UX 이력](history/settings-ux-2026-10-01.md)을 따른다. 사용자 OpenRouter key/model 등록과 승인된 여섯 UI/UX 개선은 완료했다. 실제 유료 번역의 usage-cost-restore, legacy 대체 계약, startup·플랫폼·정식 배포/라이선스 gate는 남아 있다. 추가 API 비용$0.
+
+이번 서비스 소개·사용 안내·합성 screenshot·면책·제3자 검토 정리와 진행 저장은 사용자 요청의 checkpoint다. 과거 key 대기·테스트 수·HEAD를 현재 상태로 복사하지 않는다.
 아래 9월28~30일 관측은 역사 기록/장기 계획이며 현재 완료 증거가 아니다. 사용자 결정인 local encrypted credential 기본·keychain opt-in, 웹 선검증 후 native 최종 gate, Phase별 검증→commit→push 순서를 유지한다.
 
 > 원격 인계용 사본: 프로젝트 루트 계획/기록을 제품 저장소에도 포함했다. 본문의 프로젝트 루트 경로는 기존 로컬 배치를 설명하며, 이 저장소만 clone한 경우 실행 명령은 clone 루트에서 수행한다.
@@ -17,7 +20,7 @@
 > 문서 기준일: **2026-09-28 (Asia/Seoul)**\
 > 문서 버전: **1.1-draft — PomiTranslate 브랜딩/고지 반영**\
 > 기준 저장소 HEAD: `cf91bb5d7453202932bff548266a0cb6756be0c9` (`feat: harden map translation workflow`)
-> 초기 구현 현황 (2026-09-28, 역사 기록; 최신 상태는 아래 2026-09-30 개정 참조): 1.0 안전 코어, CLI, JSONL 데스크톱 진입점, `LZ4Block`, 외부 `.mcc`, OpenAI/Gemini/Anthropic/OpenRouter/Custom, 지원 표, GitHub Actions가 `main`에 있다. Tauri/Svelte 화면은 아직 없다. 패키지는 PyInstaller 진입점이다. 보이는 상태는 `reference/Minecraft-World-Translator/docs/current-state.md`에 있다.\
+> 초기 구현 현황 (2026-09-28, 역사 기록; 현재 상태는 맨 위 current-state 참조): 1.0 안전 코어, CLI, JSONL 데스크톱 진입점, `LZ4Block`, 외부 `.mcc`, OpenAI/Gemini/Anthropic/OpenRouter/Custom, 지원 표, GitHub Actions가 `main`에 있다. Tauri/Svelte 화면은 아직 없다. 패키지는 PyInstaller 진입점이다. 보이는 상태는 `reference/Minecraft-World-Translator/docs/current-state.md`에 있다.\
 > 대상: 구현 총괄 에이전트, 월드 포맷 담당, Python 코어 담당, Tauri/Rust 담당, Svelte UI 담당, LLM/번역 담당, CI·배포 담당, QA 담당\
 > 목적: 기존 기능을 잃지 않고 **설치 후 바로 사용할 수 있는 데스크톱 앱**으로 전환하며, Java Edition 월드 형식 변화와 다양한 서버/런처 구조를 가능한 넓게 지원하고, 실제로 검증한 범위만 지원한다고 표시한다.
 
@@ -27,9 +30,9 @@
 
 문서 버전: **1.1 + 2026-09-30 개정**. 아래 개정은 과거 구현 현황과 충돌하는 경우 우선한다. 이 개정은 계획이며 구현 완료를 뜻하지 않는다.
 
-- [실행 가능한 전체 인계 문서](agent-handoff-2026-09-30.md): 현재 Git 상태, Phase 2 구현/검증 기록과 미완 gate, Phase 3 전체 backlog, 예산, 안전 경계, 실행 명령, 완료 보고 계약.
+- [실행 가능한 전체 인계 문서](history/agent-handoff-2026-09-30.md): 당시 Git 상태와 Phase2/3 작업 이력, 예산, 안전 경계, 실행 명령, 완료 보고 계약.
 - [로컬 credential 저장 상세 계획](credential-storage-plan.md): 암호화 DB, 설치별 키 파일, 플랫폼 permission, migration, UX와 검증.
-- [현재 제품 상태](current-state.md), [남은 작업](remaining-work.md).
+- [현재 제품 상태](current-state.md), [남은 작업](follow-up-work.md).
 
 최신 사용자 결정: 반복되는 키체인 권한 요청을 줄이기 위해 **데스크톱 기본 저장을 로컬 암호화 DB로 계획 변경**한다. Rust가 API 키를 저장 시 AES-256-GCM으로 암호화하고 사용 시 복호화한다. 설치별 무작위 master key는 DB와 별도 사용자 전용 파일에 둔다. 키체인과 세션 전용 저장은 선택 기능이다. 통합 SQLite data layer는 아직 없으며 작은 credential vault부터 도입한다.
 
@@ -2744,7 +2747,7 @@ shared contract:
 산출물:
 
 - `docs/current-state.md`
-- `docs/test-baseline.md`
+- `docs/history/test-baseline.md`
 
 완료:
 
@@ -3596,3 +3599,7 @@ GitHub Actions 기반 multi-platform package/release
 를 먼저 해결한다.
 
 **완료의 기준은 “창이 뜬다”가 아니라 실제 월드 fixture에서 Scan → 검토 → 번역 → write → 재검증 → restore가 반복 가능하고, clean machine에서 설치본 하나로 실행되는 것이다.**
+
+### 2026-10-01 설정·추론 UI/UX 후속
+
+승인된 여섯 개선과 최신 targeted/native 검증은 제품 저장소 `docs/history/settings-ux-2026-10-01.md`를 따른다. 사용자 key/model 등록 완료. Phase2 진행 중이며 이전 전체 matrix 숫자를 최신 UX source PASS로 복사하지 않는다.

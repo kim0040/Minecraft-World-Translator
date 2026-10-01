@@ -5,9 +5,21 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
+  import { reasoningSummary } from '../lib/reasoning';
 
   const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', comet: 'Comet API', custom: 'Custom' };
   const running = $derived(app.busy === 'translate');
+  const reasoningModel = $derived(app.modelsFor(app.settings).find((model) => model.id === app.settings.model.trim()));
+  const reasoning = $derived(reasoningSummary(app.settings.openrouter_reasoning ?? 'default', reasoningModel));
+  let attemptedMetadata = false;
+  $effect(() => {
+    if (app.settings.provider !== 'openrouter' || app.manualOnly || app.busy || attemptedMetadata) return;
+    const timer = setTimeout(() => {
+      attemptedMetadata = true;
+      void app.loadModels().catch(() => {}); // The summary explicitly keeps unknown metadata unknown.
+    }, 0);
+    return () => clearTimeout(timer);
+  });
   const estimate = $derived(app.estimate);
   const modelText = $derived(
     app.manualOnly ? t('run.manualOnly') : app.hasModel ? `${providerLabels[app.settings.provider] ?? app.settings.provider} · ${app.settings.model}` : t('run.noModel')
@@ -134,6 +146,9 @@
         <div><dt>{t('run.summary.world')}</dt><dd title={app.worldDir}>{baseName(app.worldDir)}<span class="sub mono">{middleEllipsis(app.worldDir, 44)}</span></dd></div>
         <div><dt>{t('run.summary.language')}</dt><dd>{app.settings.target_language}</dd></div>
         <div><dt>{t('run.summary.model')}</dt><dd class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
+        {#if app.settings.provider === 'openrouter' && !app.manualOnly}
+          <div><dt>{t('settings.reasoning.label')}</dt><dd>{reasoning}<button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
+        {/if}
         <div><dt>{t('run.summary.texts')}</dt><dd class="num">{formatNumber(app.outgoingCount, app.locale)}</dd></div>
         <div><dt>{t('run.summary.manual')}</dt><dd class="num">{formatNumber(app.manualCount, app.locale)}</dd></div>
         <div><dt>{t('run.summary.requests')}</dt><dd class="num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : t('common.unknown')}</dd></div>
@@ -143,6 +158,7 @@
             {#if estimate && estimate.requests > 0}
               <span class="sub">{t('run.summary.tokens', { input: formatCompact(estimate.inputTokens, app.locale), output: formatCompact(estimate.outputTokens, app.locale) })}</span>
               <span class="sub">{estimate.cost ? t('run.cost.note') : t('run.cost.unknownWhy')}</span>
+              {#if app.settings.provider === 'openrouter' && app.settings.openrouter_reasoning !== 'disabled'}<span class="sub">{t('run.reasoning.cost')}</span>{/if}
             {/if}
           </dd>
         </div>
@@ -174,6 +190,7 @@
 
 <style>
   .external-paths { padding-inline-start: 1em; margin: 0; overflow-wrap: anywhere; }
+  .edit-settings { display: block; margin-block-start: var(--space-1); }
   .live { padding: var(--space-5); display: grid; gap: var(--space-5); }
   .phases { display: flex; gap: var(--space-5); margin: 0; padding: 0; list-style: none; flex-wrap: wrap; }
   .phases li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-weight: 600; }

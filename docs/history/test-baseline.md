@@ -1,6 +1,6 @@
 # 기준 테스트
 
-> 최신 검사 순서: [웹 우선 UI/기능 검증·화면 비율 대응](browser-first-testing-plan.md). 앱 packaging은 웹/코어 검사 후 마지막 native gate에서 수행한다.
+> 최신 검사 순서: [웹 우선 UI/기능 검증·화면 비율 대응](../browser-first-testing-plan.md). 앱 packaging은 웹/코어 검사 후 마지막 native gate에서 수행한다.
 
 > 원격 인계용 사본: 프로젝트 루트 계획/기록을 제품 저장소에도 포함했다. 본문의 프로젝트 루트 경로는 기존 로컬 배치를 설명하며, 이 저장소만 clone한 경우 실행 명령은 clone 루트에서 수행한다.
 

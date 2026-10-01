@@ -4,7 +4,7 @@
 
 1. 사용자 최신 요청과 상위 AGENTS.md.
 2. `docs/verification-policy.md` — 검증 선택·증거 재사용·중단 규칙.
-3. `docs/phase2-pause-2026-10-01.md`, `docs/current-state.md`, `docs/remaining-work.md`.
+3. `docs/history/phase2-resume-2026-10-01.md`, `docs/current-state.md`, `docs/follow-up-work.md` (이전 중단 이력: `docs/history/phase2-pause-2026-10-01.md`).
 4. `docs/PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md`.
 
 ## 실행 계약
@@ -20,6 +20,10 @@
 - 사용자 중간 저장 요청에 따른 checkpoint commit은 허용하지만 Phase complete라고 부르지 않는다. Phase 완료 commit은 검증→docs/diff review→commit→push 순서다.
 - CI는 관련 main Python만 자동, installer manual/tag. 사용자 중단·중간 저장 push는 `[skip ci]`로 불필요 실행을 막는다. 공개 release/signing/upload는 기존 승인 경계를 따른다.
 
-## 현재 중단
+## 현재 재개 상태
 
-2026-10-01 사용자 요청으로 중간 저장 후 내일 재개. Phase2 미완/Phase3 미시작, 실제 API 비용$0. 최신 optimization runtime·외부 ZIP native·provider/cost/restore·최종 release gates가 남아 있다. 정확한 근거와 경로는 최신 인계를 따른다.
+2026-10-01 승인된 설정·추론 UI/UX 여섯 개선을 완료했다. 최신 증거는 `docs/history/settings-ux-2026-10-01.md`다. Phase2 진행 중/Phase3 미시작, 추가 API 비용$0. 관련 frontend28/browser30(29+1)/Rust24·Python provider 두 파일·build·native 저장/재시작/기본값 복원 PASS. 전체 matrix는 UX 이전 결과를 최신 PASS로 복사하지 않는다. 사용자의 OpenRouter key/model 직접 등록은 완료됐다. 실제 유료 provider usage-cost-restore, legacy 대체 계약, 과거 blank/clean-machine startup과 최종 gate가 남아 있다.
+
+## 문서 정리 후 진입점
+
+사용자 문서: README.md / docs/user-guide.md / docs/privacy.md / docs/disclaimer.md. 작업 상태: docs/current-state.md / docs/follow-up-work.md. 이력: docs/history/. 라이선스: THIRD_PARTY_NOTICES.md / docs/legal/. 소개용 합성 screenshot은 docs/images/에서 의도적으로 추적하며 일반 output·report·world·DB·key는 제외한다. 현재 진행 저장은 사용자 승인 checkpoint이고 Phase2 완료가 아니다.

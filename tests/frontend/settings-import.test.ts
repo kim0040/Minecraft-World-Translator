@@ -14,6 +14,16 @@ function currentSettings(overrides: Partial<Settings> = {}): Settings {
 }
 
 describe('settings import', () => {
+  it('round-trips reasoning preferences through the public allowlist and rejects invalid values', () => {
+    for (const value of ['default', 'enabled', 'disabled', 'low', 'high', 'max']) {
+      const exported = publicSettingsForExport(currentSettings({ openrouter_reasoning: value }));
+      expect(parseSettingsImport(JSON.stringify({ schema: 1, settings: exported }), currentSettings()).openrouter_reasoning).toBe(value);
+    }
+    for (const value of [null, true, {}, 'ultra']) {
+      expect(() => parseSettingsImport(JSON.stringify({ schema: 1, settings: { openrouter_reasoning: value } }), currentSettings())).toThrow();
+    }
+  });
+
   it('uses the same endpoint rules for manual entry and imported settings', () => {
     for (const endpoint of ['https://example.test/v1', 'http://127.0.0.1:52973/v1', ' https://example.test/v1 ']) {
       expect(isValidCustomEndpoint(endpoint)).toBe(true);

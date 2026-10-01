@@ -18,9 +18,9 @@ test('settings save shows pending state and blocks duplicate writes and draft ed
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByRole('button', { name: '저장 중…', exact: true })).toBeDisabled();
   await expect(page.locator('#model')).toBeDisabled();
-  await expect(page.locator('#api-key')).toBeDisabled();
+  await expect(page.getByRole('button', { name: '키 변경', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '번역 작업', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
   await expect(page.locator('#model')).toHaveValue('pending-save-fixture');
   await expect(page.locator('#model')).toBeEnabled();
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
@@ -199,14 +199,15 @@ test('manual draft survives desktop to narrow dialog resize', async ({ page }) =
 test('credential modes and explicit import never reveal a stored key', async ({ page }) => {
   await review(page);
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
+  await page.locator('#key-management > summary').click();
   await expect(page.locator('#credential-mode')).toHaveValue('local');
-  await expect(page.locator('#api-key')).toHaveValue('');
+  await expect(page.locator('#api-key')).toHaveCount(0);
   await page.locator('#credential-mode').selectOption('session');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.locator('#credential-mode')).toHaveValue('session');
   await page.getByRole('button', { name: '기존 키체인 키 가져오기' }).click();
   await expect(page.locator('#credential-mode')).toHaveValue('local');
-  await expect(page.locator('#api-key')).toHaveValue('');
+  await expect(page.locator('#api-key')).toHaveCount(0);
 });
 
 test('model preserves scan; target language invalidates it', async ({ page }) => {
@@ -248,7 +249,9 @@ test('settings export omits credentials and reset remains an unsaved draft', asy
   await review(page);
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await page.getByLabel('사용 모델', { exact: true }).fill('synthetic-draft-model');
+  await page.getByRole('button', { name: '키 변경', exact: true }).click();
   await page.locator('#api-key').fill('synthetic-secret-never-export');
+  await page.locator('#settings-management > summary').click();
   const downloading = page.waitForEvent('download');
   await page.getByRole('button', { name: '설정 내보내기', exact: true }).click();
   const download = await downloading;
@@ -257,7 +260,7 @@ test('settings export omits credentials and reset remains an unsaved draft', asy
   expect(contents).not.toMatch(/synthetic-secret|apiKey|api_key|masterKey|credentialMode/);
   expect(JSON.parse(contents).settings.model).toBe('synthetic-draft-model');
   await page.getByRole('button', { name: '초기값으로 편집', exact: true }).click();
-  await expect(page.locator('#api-key')).toHaveValue('');
+  await expect(page.locator('#api-key')).toHaveCount(0);
   await expect(page.getByLabel('사용 모델', { exact: true })).not.toHaveValue('synthetic-draft-model');
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
@@ -288,7 +291,7 @@ test('legacy settings import omits keys, preserves the world and stays a draft',
     prompt: { target_language: '한국어', style_preset: 'story' }, batch_size: 64
   })) });
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('imported-model');
-  await expect(page.locator('#api-key')).toHaveValue('');
+  await expect(page.locator('#api-key')).toHaveCount(0);
   await expect(page.getByText('설정을 편집 화면에 불러왔습니다. 확인한 뒤 저장해 주세요. API 키는 가져오지 않았습니다.', { exact: true })).toBeVisible();
   await page.locator('input[type="file"]').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
   await expect(page.getByText(/설정을 가져올 수 없습니다/)).toBeVisible();
@@ -307,7 +310,7 @@ test('literal Python settings import uses a preview and remains unsaved on failu
   await page.locator('input[type="file"]').setInputFiles({ name: 'translate.py', mimeType: 'text/x-python', buffer: Buffer.from(source) });
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('literal-model');
   await page.screenshot({ path: 'output/playwright/settings-python-import.png', fullPage: true });
-  await expect(page.locator('#api-key')).toHaveValue('');
+  await expect(page.locator('#api-key')).toHaveCount(0);
   await expect(page.locator('main')).not.toContainText('synthetic-secret');
   await page.locator('input[type="file"]').setInputFiles({ name: 'invalid.py', mimeType: 'text/x-python', buffer: Buffer.from('invalid Python import') });
   await expect(page.getByText(/설정을 가져올 수 없습니다/)).toBeVisible();
@@ -386,6 +389,7 @@ test('OpenRouter usage reads stored credentials without saving drafts or transla
   await button.click();
   await expect(page.getByText(/누적 사용 크레딧: 0.123456/)).toBeVisible();
   await expect(page.locator('#model')).toHaveValue('unsaved-model');
+  await page.getByRole('button', { name: '키 변경', exact: true }).click();
   await page.locator('#api-key').fill('fake-unsaved-key');
   await expect(button).toBeDisabled();
   await page.locator('#api-key').fill('');
