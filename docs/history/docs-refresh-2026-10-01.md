@@ -36,3 +36,15 @@ Cargo 외부525개 중333 metadata 확인·192 미확인, npm 설치72·Python �
 ## 첫 push 뒤 확인된 원격 이동
 
 첫 진행 저장 `46b90698bf7f088d7a3c7ea1856ecbe44d615dfb` push는 성공했다. GitHub가 새 주소 `https://github.com/kim0040/PomiTranslate.git`를 안내했고 두 URL의 main SHA가 같은 것을 확인했다. README의 clone/cd/Issue 링크와 활성 문서·origin을 새 주소로 갱신한다. 기존 날짜별 기록의 당시 URL은 이력으로 보존하며 로컬 checkout/mwt는 이동하지 않는다.
+
+## 다국어 README·사용 안내 보강
+
+사용자가 문서 전체를 조사하고, 특히 README의 부족한 내용과 번역체를 개선하며 지원 언어 README를 서로 연결해 달라고 요청했다. 코드 수정이 아닌 문서 수정이다.
+
+- root README(한국어)에 동작 흐름·기능 그룹·지원 범위·개발/검증 상태를 보강하고 기존 링크·안전 고지를 유지했다.
+- docs/README.en.md·README.ja.md·README.zh.md를 한국어판과 같은 범위로 다시 작성하고 언어 링크를 서로 연결했다. 중국어 UI 미구현 안내는 유지했다.
+- docs/README.md에 언어별 소개와 소개 화면 정보 링크를 추가하고 docs/README.ko.md 진입점을 정리했다.
+- docs/user-guide.md에 설정 그룹, 결과 상태, CLI 옵션, 오류 코드 문제 해결, 사용량 조회·정보 화면·보고서 내보내기를 보강했다.
+- 서술은 i18n 카탈로그·화면·CLI help·support matrix·최신 검증 기록과 대조했고 이모지를 사용하지 않았다.
+- 7개 문서 내부 링크 누락0, 코드 펜스·details·표 균형 이상0, 이모지0. 문서 전용 변경이라 Python/frontend/browser/Rust/native/API 검사를 실행하지 않았다.
+- About 화면의 저장소 URL이 이전 이름(`kim0040/Minecraft-World-Translator`)을 가리키는 코드 불일치는 이번 범위 밖이라 수정하지 않았다.

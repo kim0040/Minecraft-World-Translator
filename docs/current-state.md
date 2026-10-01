@@ -27,7 +27,7 @@
 
 ## 문서·라이선스 정리
 
-서비스 소개와 사용법은 root README, 자세한 실행·복원은 user-guide, 비용·키 저장은 privacy, 개인 프로젝트/보증·책임 제한은 disclaimer로 구분했다. 기여자는 김현민(mini0227kim@gmail.com)이다. 기존 MIT를 유지하고 제3자 metadata 검토·미확인 플랫폼/배포 고지를 legal 문서와 LEGAL-01에 기록했다. 날짜별 기록은 history, 의도적인 합성 소개 화면은 images에서 관리한다. 이번 문서 작업으로 유료 API·전체 matrix·installer 빌드를 실행하지 않았다.
+서비스 소개와 사용법은 root README, 자세한 실행·복원은 user-guide, 비용·키 저장은 privacy, 개인 프로젝트/보증·책임 제한은 disclaimer로 구분했다. 기여자는 김현민(mini0227kim@gmail.com)이다. 기존 MIT를 유지하고 제3자 metadata 검토·미확인 플랫폼/배포 고지를 legal 문서와 LEGAL-01에 기록했다. 날짜별 기록은 history, 의도적인 합성 소개 화면은 images에서 관리한다. 2026-10-01 다국어 README(ko/en/ja/zh)를 같은 범위로 맞추고 user-guide에 설정·결과·CLI·문제 해결을 보강했다. [기록](history/docs-refresh-2026-10-01.md) 이번 문서 작업으로 유료 API·전체 matrix·installer 빌드를 실행하지 않았다.
 
 ## 현재 검증
 
