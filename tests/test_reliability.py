@@ -257,6 +257,11 @@ def test_invented_formatting_code_is_rejected(tmp: Path) -> None:
     assert preserve_tokens("Hello %s", "안녕 %s %s") == "Hello %s"
     assert preserve_tokens("Plain", "§l평범") == "Plain"
     assert preserve_tokens("Open {0}", "{0} 열기") == "{0} 열기"
+    # A reset after the last character changes nothing on screen: it is dropped, not refused.
+    assert preserve_tokens("§7§oWhispers...", "§7§o속삭임...§r") == "§7§o속삭임..."
+    assert preserve_tokens("§7Quiet", "§7조용§r ") == "§7조용 "
+    assert preserve_tokens("§6Gold §rplain", "§6금 §r보통§r") == "§6금 §r보통", "an original reset is kept"
+    assert preserve_tokens("§6Gold tail", "§6금§r 꼬리") == "§6Gold tail", "a reset mid-line still recolours words"
     record("reliability.formatting_codes_exact")
 
 

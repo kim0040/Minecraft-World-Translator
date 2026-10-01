@@ -46,9 +46,12 @@ def reasoning_payload(choice: str, info: dict | None) -> dict | None:
 
 
 # Gemini reports only a boolean "thinking" flag. Generation 3+ takes a thinking level; 2.5 takes a
-# token budget. Measured 2026-10-01: "minimal" (3.x flash/lite) and budget 0 (2.5 flash) return no
-# thought tokens; flash-lite 3.x rejects budget 0, so it is never sent to generation 3+.
+# token budget. Measured 2026-10-01: the lowest accepted level differs per model ("minimal" works on
+# 3.5/3.6 flash and the lite models, 3.7/3.8 flash and pro start at "low"), so a rejected level is
+# raised one step at request time (see GEMINI_LEVELS). flash-lite 3.x rejects budget 0, so a budget
+# is never sent to generation 3+.
 _GEMINI_LEVELS = ("minimal", "low", "medium", "high")
+GEMINI_LEVELS = _GEMINI_LEVELS
 _GEMINI_BUDGETS = {"minimal": 512, "low": 1024, "medium": 8192, "high": 24576}
 
 
@@ -58,6 +61,9 @@ def _gemini_generation(model_id: str) -> tuple[float, bool, bool]:
     lowered = model_id.lower().removeprefix("models/")
     match = re.match(r"gemini-(\d+(?:\.\d+)?)", lowered)
     generation = float(match.group(1)) if match else 0.0
+    if not match and re.fullmatch(r"gemini-(?:flash|flash-lite|pro)-latest", lowered):
+        # Moving aliases; on 2026-10-01 all three answered with Gemini 3 thinking levels.
+        generation = 3.0
     return generation, "pro" in lowered, "lite" in lowered
 
 

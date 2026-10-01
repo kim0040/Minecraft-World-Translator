@@ -23,7 +23,23 @@ def tokens_preserved(original: str, translated: str) -> bool:
     return expected == found
 
 
+def _without_trailing_reset(original: str, translated: str) -> str:
+    """Drop a ``§r`` the model appended after the last character.
+
+    Gemini 3.6–3.8 flash end most coloured lines with ``§r`` (measured 2026-10-01). A reset after
+    the final character changes nothing on screen, so it is removed instead of costing the line
+    its translation. A reset anywhere else would recolour the following words and is still refused.
+    """
+    stripped = translated.rstrip()
+    trailing = translated[len(stripped):]
+    # Only resets beyond those the original has; a moved original reset is a real token.
+    while stripped.endswith("§r") and stripped.count("§r") > original.count("§r"):
+        stripped = stripped[:-2].rstrip()
+    return stripped + trailing if stripped else translated
+
+
 def preserve_tokens(original: str, translated: str) -> str:
     if not isinstance(translated, str) or not translated:
         return original
+    translated = _without_trailing_reset(original, translated)
     return translated if tokens_preserved(original, translated) else original

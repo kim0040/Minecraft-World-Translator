@@ -74,6 +74,40 @@
 
 총 생성 요청 13회, 입력 약 1,000 / 출력(사고 포함) 약 3,600 tokens. Gemini는 비용을 응답에 보고하지 않아 정확한 금액은 unknown이며, 토큰 기준 수 센트 이하로 추정한다(예산 US$3 대비 미미).
 
+## 최신 모델 실측 (후속 요청)
+
+사용자 요청으로 공개 모델 목록(무료 GET)에서 최신 텍스트 모델을 골라 앱 코드 경로 그대로 테스트했다. 2026-10-01 목록 기준 최신: flash `gemini-3.8-flash`, lite `gemini-3.5-flash-lite`, pro `gemini-3.1-pro-preview`, 별칭 `gemini-{flash,flash-lite,pro}-latest`.
+
+이 테스트로 찾아 고친 결함:
+
+1. **최신 flash에서 "추론 끄기"가 400으로 실패.** 3.7/3.8 flash, `gemini-flash-latest`, pro는 `thinkingLevel: minimal`을 거부한다(3.5/3.6 flash와 lite는 허용). 모델별 최저 단계를 미리 알 수 없으므로 "Thinking level … not supported" 400이면 한 단계 올려 같은 요청을 재시도하고, 프로세스 안에서 그 모델의 최저 단계를 기억한다. 거부된 요청도 요청 수에 정직하게 센다.
+2. **`*-latest` 별칭에서 추론 설정 불가.** 버전 숫자가 없어 metadata가 비었다. 세 별칭은 Gemini 3 thinking level을 받으므로 3세대로 취급한다.
+3. **서식 검사 강화의 회귀.** 3.6–3.8 flash는 색 코드가 있는 줄 끝에 `§r`을 습관적으로 붙인다. 개수 완전 일치 규칙이 이를 거부해 원문이 남았다(12문장 중 1개). 원문보다 많은 `§r`이 **마지막 글자 뒤**에만 있으면 화면에 영향이 없으므로 제거하고 통과시킨다. 줄 중간에 추가된 `§r`은 여전히 거부한다.
+
+배치 번역(12문장: `§` 코드, `%s`, `{0}`, 줄바꿈, 고유명사, 합성):
+
+| 모델 | 추론 | 시간 | 출력(사고 포함) | 비고 |
+| --- | --- | --- | --- | --- |
+| gemini-3.8-flash | 기본 | 4.0초 | 730 | 사고 약 500 |
+| gemini-3.8-flash | 끄기→low 자동 | 2.4초 | 231 | 수정 후 |
+| gemini-3.7-flash / 3.6-flash | 끄기 | 2.6 / 2.2초 | 231 / 234 | |
+| gemini-3.5-flash-lite | 기본 | 1.6초 | 232 | `§lcrypt`→`§lc지하실` 군더더기 1건(서식 개수는 유지돼 통과) |
+| gemini-3.1-flash-lite | 기본 | 1.6초 | 224 | |
+| gemini-flash-latest | 기본 / 끄기 | 5.6 / 10.4초 | 755 / 230 | 별칭은 지연 편차 큼 |
+| gemini-3.1-pro-preview | low | 3.5초 | 230 | 고유명사 `Elder Mira` 원문 유지 경향 |
+| gemini-pro-latest | 기본 | 9.8초 | 1,090 | |
+
+전체 파이프라인 E2E(합성 world: 표지판·책·이름·lore·component·JSON 명령 4 + SNBT 명령 4 + `give` 1, 고유 문장 24):
+
+| 모델 | 추론 | 결과 | 요청 | 출력 | 복원 |
+| --- | --- | --- | --- | --- | --- |
+| gemini-3.8-flash | 끄기 | 24/24 번역, 원문 유지0, 실패0 | 2(400 1 + low 1) | 303 | baseline 전체 hash 일치 |
+| gemini-3.8-flash | 기본 | 24/24 | 1 | 897 | 일치 |
+| gemini-3.5-flash-lite | 기본 | 24/24 | 1 | 302 | 일치 |
+| gemini-3.1-pro-preview | low | 24/24 | 1 | 299 | 일치 |
+
+모든 실행에서 SNBT 명령의 selector·색·`%s`·`give`는 그대로였고 바뀐 문자열만 원래 작은따옴표로 기록됐다. **권장: 번역에는 `gemini-3.8-flash` + 추론 끄기(품질 동등, 기본 대비 출력 약 1/3) 또는 비용 우선이면 `gemini-3.5-flash-lite`.** 이번 후속 요청의 생성 호출은 배치 14회 + thinking 단계 확인 11회 + E2E 4회(요청 5)이며, 비용은 응답에 보고되지 않아 unknown(토큰 기준 수 센트 수준)이다.
+
 ## 남은 것
 
 - **macOS native 확인(사용자 로컬 필요)**: 오버레이 타이틀바와 신호등 위치, 사이드바 드래그, 메뉴·단축키와 라벨 번역, ⌘Q 보호, 드래그&드롭, Dock 진행률/attention, 다크 시작 깜빡임. `pnpm sidecar:build` 후 `pnpm desktop:dev`(Python 변경 있음).

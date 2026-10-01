@@ -6,7 +6,14 @@ import re
 import threading
 from typing import Any
 
-from mwt.reasoning import gemini_reasoning, gemini_thinking_config, model_reasoning, normalize_reasoning, reasoning_payload
+from mwt.reasoning import (
+    GEMINI_LEVELS,
+    gemini_reasoning,
+    gemini_thinking_config,
+    model_reasoning,
+    normalize_reasoning,
+    reasoning_payload,
+)
 from urllib import error, parse, request
 
 
@@ -370,6 +377,8 @@ def flatten_text_payload(content: Any) -> str:
 
 
 GEMINI_MIN_OUTPUT_TOKENS = 32768
+# The lowest thinking level each Gemini model accepted in this process, learned from 400 replies.
+_GEMINI_LEVEL_FLOOR: dict[str, str] = {}
 
 
 class LLMProviderClient:
@@ -698,14 +707,32 @@ class LLMProviderClient:
         if expect_json:
             payload["generationConfig"]["responseMimeType"] = "application/json"
         thinking = gemini_thinking_config(self.openrouter_reasoning, self.model, self.model_info)
-        if thinking is not None:
-            payload["generationConfig"]["thinkingConfig"] = thinking
-        response = self._request_json(
-            "POST",
-            f"{self.base_url}/{model_name}:generateContent",
-            headers=self._gemini_headers(),
-            payload=payload,
-        )
+        level = (thinking or {}).get("thinkingLevel")
+        floor = _GEMINI_LEVEL_FLOOR.get(self.model)
+        if level and floor and GEMINI_LEVELS.index(floor) > GEMINI_LEVELS.index(level):
+            thinking, level = {"thinkingLevel": floor}, floor
+        while True:
+            if thinking is not None:
+                payload["generationConfig"]["thinkingConfig"] = thinking
+            try:
+                response = self._request_json(
+                    "POST",
+                    f"{self.base_url}/{model_name}:generateContent",
+                    headers=self._gemini_headers(),
+                    payload=payload,
+                )
+                break
+            except ProviderError as exc:
+                # Models disagree on their lowest level (3.8 flash rejects "minimal"). Use the next
+                # level up rather than failing every batch; "high" is the ceiling.
+                text = str(exc).lower()
+                if not (exc.status == 400 and level and "thinking level" in text and "not supported" in text):
+                    raise
+                if level == GEMINI_LEVELS[-1]:
+                    raise
+                level = GEMINI_LEVELS[GEMINI_LEVELS.index(level) + 1]
+                thinking = {"thinkingLevel": level}
+                _GEMINI_LEVEL_FLOOR[self.model] = level
         candidates = response.get("candidates") or []
         if not candidates:
             reason = (response.get("promptFeedback") or {}).get("blockReason")

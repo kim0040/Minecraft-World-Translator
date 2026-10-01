@@ -20,9 +20,9 @@ from tests.test_release_fixtures import compound, nbt_bytes, string, write_regio
 class Recorder(BaseHTTPRequestHandler):
     seen: list[tuple] = []
 
-    def _send(self, payload: dict) -> None:
+    def _send(self, payload: dict, status: int = 200) -> None:
         raw = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
@@ -74,6 +74,18 @@ class Recorder(BaseHTTPRequestHandler):
                         "thinking": True,
                     },
                     {
+                        "name": "models/gemini-3.8-flash",
+                        "displayName": "Gemini 3.8 Flash",
+                        "supportedGenerationMethods": ["generateContent"],
+                        "thinking": True,
+                    },
+                    {
+                        "name": "models/gemini-flash-latest",
+                        "displayName": "Gemini Flash Latest",
+                        "supportedGenerationMethods": ["generateContent"],
+                        "thinking": True,
+                    },
+                    {
                         "name": "models/gemini-2.5-flash",
                         "displayName": "Gemini 2.5 Flash",
                         "supportedGenerationMethods": ["generateContent"],
@@ -94,6 +106,10 @@ class Recorder(BaseHTTPRequestHandler):
         headers = {key.lower(): value for key, value in self.headers.items()}
         Recorder.seen.append(("POST", self.path.split("?", 1)[0], self.path, headers, body))
         if "generateContent" in self.path:
+            level = body.get("generationConfig", {}).get("thinkingConfig", {}).get("thinkingLevel")
+            if "gemini-3.8-flash" in self.path and level == "minimal":
+                self._send({"error": {"code": 400, "message": "Thinking level MINIMAL is not supported for this model. Please retry with other thinking level.", "status": "INVALID_ARGUMENT"}}, 400)
+                return
             if "max-tokens" in self.path:
                 self._send({"candidates": [{"content": {"parts": [{"text": "{\"0\": \"Ho"}]}, "finishReason": "MAX_TOKENS"}]})
                 return
@@ -194,7 +210,9 @@ def test_openai_gemini_anthropic_openrouter_custom(base: str, tmp: Path) -> None
     # Thought tokens are billed as output: counted, but thought text never becomes the answer.
     assert LLMProviderClient.usage["completion_tokens"] == 34
     assert LLMProviderClient.usage["prompt_tokens"] == 10
-    assert [item["id"] for item in gemini.try_refresh_text_models()] == ["gemini-test", "gemini-3.5-flash", "gemini-2.5-flash"]
+    assert [item["id"] for item in gemini.try_refresh_text_models()] == [
+        "gemini-test", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash"
+    ]
     assert gemini.model_info["reasoning"] is None
 
     flash3 = client(f"{root}/v1beta", "gemini", "gemini-3.5-flash", reasoning="disabled")
@@ -203,6 +221,17 @@ def test_openai_gemini_anthropic_openrouter_custom(base: str, tmp: Path) -> None
     assert flash3.model_info["reasoning"]["supported_efforts"] == ["minimal", "low", "medium", "high"]
     low3 = client(f"{root}/v1beta", "gemini", "gemini-3.5-flash", reasoning="low")
     low3.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+    # 3.8 flash rejects "minimal" (measured): the client steps up once and remembers the floor.
+    newest = client(f"{root}/v1beta", "gemini", "gemini-3.8-flash", reasoning="disabled")
+    before = len([item for item in Recorder.seen if item[0] == "POST"])
+    assert newest.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
+    posts = [item for item in Recorder.seen if item[0] == "POST"][before:]
+    assert [p[4]["generationConfig"]["thinkingConfig"]["thinkingLevel"] for p in posts] == ["minimal", "low"]
+    newest.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}, "the floor is reused"
+    alias = client(f"{root}/v1beta", "gemini", "gemini-flash-latest", reasoning="low")
+    alias.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
     assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
     flash25 = client(f"{root}/v1beta", "gemini", "gemini-2.5-flash", reasoning="disabled")
     flash25.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
