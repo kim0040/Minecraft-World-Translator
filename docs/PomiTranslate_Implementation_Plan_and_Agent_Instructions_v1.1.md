@@ -16,7 +16,7 @@
 > 제품명: **PomiTranslate 🐾**\
 > 부제: **World Translator for Minecraft**\
 > 한줄 설명: **Pomi가 도와주는 마인크래프트 월드/맵 번역 도구**\
-> 저장소: `kim0040/Minecraft-World-Translator`\
+> 저장소: `kim0040/PomiTranslate`\
 > 문서 기준일: **2026-09-28 (Asia/Seoul)**\
 > 문서 버전: **1.1-draft — PomiTranslate 브랜딩/고지 반영**\
 > 기준 저장소 HEAD: `cf91bb5d7453202932bff548266a0cb6756be0c9` (`feat: harden map translation workflow`)
@@ -80,7 +80,7 @@ DB와 키 파일 모두에 접근할 수 있는 같은 사용자 프로세스는
 - 마스코트 이름은 **Pomi**로 표기한다.
 - 제품 부제는 **World Translator for Minecraft**를 사용한다.
 - `Minecraft World Translator`는 더 이상 메인 서비스명이 아니다.
-- 기존 GitHub 저장소 이름 `Minecraft-World-Translator`는 실제 저장소를 rename하기 전까지 기술 식별자로 유지한다.
+- 2026-10-01 원격 응답과 양쪽 main SHA 비교로 GitHub 저장소가 `PomiTranslate`로 이동한 것을 확인했다. 로컬 checkout `reference/Minecraft-World-Translator`와 내부 `mwt`는 유지한다.
 - 저장소 rename은 별도 migration 작업으로 취급하며 기존 링크, Release, Issue, clone URL 영향 여부를 먼저 확인한다.
 - 설치 파일, 앱 타이틀, About 화면, README, GitHub Release, updater metadata, 로그의 product field는 새 제품명으로 통일한다.
 - 내부 Python package/module 이름 `mwt`는 즉시 바꿀 필요가 없다. 안정성을 위해 내부 식별자와 사용자 노출 브랜드명을 구분한다.
@@ -2833,7 +2833,7 @@ CI smoke로 최소 shell build.
 - Notice 전체 반영
 - 설치 파일/Release asset/updater metadata 제품명 통일
 - Pomi 마스코트 표시 위치 연결
-- 기존 저장소명은 실제 rename 전까지 그대로 유지
+- 원격 저장소명은 확인된 PomiTranslate, 로컬 checkout 경로·mwt는 호환성을 위해 유지
 - package identifier 변경 여부 ADR 작성
 - updater/app data migration 영향 확인
 - 기존 사용자 설정/키링 namespace가 제품명 변경으로 유실되지 않게 설계
@@ -3347,7 +3347,7 @@ parity 이후에만.
 # 50. 총괄 에이전트용 시작 프롬프트
 
 ```markdown
-너는 `kim0040/Minecraft-World-Translator` 저장소를 기반으로 **PomiTranslate 🐾 — World Translator for Minecraft** 데스크톱 앱을 구현하는 총괄 에이전트다.
+너는 `kim0040/PomiTranslate` 저장소를 기반으로 **PomiTranslate 🐾 — World Translator for Minecraft** 데스크톱 앱을 구현하는 총괄 에이전트다.
 
 사용자에게 노출되는 메인 제품명은 `PomiTranslate`이며, 기존 저장소명은 레거시 기술 식별자다.
 
@@ -3515,7 +3515,7 @@ PomiTranslate 다운로드
 ## 프로젝트
 
 - Repository\
-  `https://github.com/kim0040/Minecraft-World-Translator`
+  `https://github.com/kim0040/PomiTranslate`
 - 기준 commit\
   `cf91bb5d7453202932bff548266a0cb6756be0c9`
 

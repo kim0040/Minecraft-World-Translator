@@ -51,6 +51,6 @@ MIT は Minecraft のゲーム資産、マップ、パック、商標の権利�
 
 **김현민** — 制作・保守 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
 
-[Issues](https://github.com/kim0040/Minecraft-World-Translator/issues) · [貢献方法](../CONTRIBUTING.md)
+[Issues](https://github.com/kim0040/PomiTranslate/issues) · [貢献方法](../CONTRIBUTING.md)
 
 プロジェクトソースは既存の MIT を維持します。依存関係はそれぞれのライセンスに従い、正式なバイナリ配布の告知・プラットフォーム検証は未完了です。[第三者の告知](../THIRD_PARTY_NOTICES.md) · [文書一覧](README.md)

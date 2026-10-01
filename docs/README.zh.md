@@ -51,6 +51,6 @@ MIT 不授权第三方 Minecraft 游戏资产、地图、资源包或商标。�
 
 **김현민** — 制作、维护 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
 
-[Issues](https://github.com/kim0040/Minecraft-World-Translator/issues) · [贡献说明](../CONTRIBUTING.md)
+[Issues](https://github.com/kim0040/PomiTranslate/issues) · [贡献说明](../CONTRIBUTING.md)
 
 项目源码保留原有 MIT；依赖分别遵循自身许可。正式二进制发布的完整第三方声明和平台检查仍待完成。[第三方声明](../THIRD_PARTY_NOTICES.md) · [文档目录](README.md)

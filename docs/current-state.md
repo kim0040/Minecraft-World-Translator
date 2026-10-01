@@ -51,3 +51,7 @@
 Legacy UI/launcher는 유지한다. [기능 비교](legacy-ui-parity.md)의 외부 팩·앱 관리 backup/checkpoint 대체 범위는 최종 Phase 계약 확인 전이며 기능 parity 완료로 표시하지 않는다.
 
 실제 provider/usage/cost/restore, 남은 범위 결정과 최종 diff review 후에만 Phase2 **완료** commit → push한다. 사용자 요청의 현재 checkpoint 저장은 이 완료 판정과 구분한다. Phase 3 및 Windows/Linux clean-machine, signing/notarization/updater/release는 남아 있다. [CI 정책](ci-policy.md)은 main의 관련 Python 변경/PR만 자동 core 검사, installer manual/tag, 수동 기본 Linux다. 이번 작업은 CI를 dispatch하지 않았다.
+
+## 저장소 주소
+
+GitHub push 응답의 이동 안내와 기존/새 주소의 동일 main SHA로 `kim0040/PomiTranslate`를 확인했다. 소개/clone/문의 링크와 origin을 새 주소로 맞췄다. 로컬 `reference/Minecraft-World-Translator` 및 mwt 경로는 유지한다.

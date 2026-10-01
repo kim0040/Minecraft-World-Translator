@@ -60,6 +60,6 @@ MIT does not grant rights to Minecraft assets, maps, resource packs or trademark
 ## Contributor and license
 
 - **김현민 / Hyunmin Kim** — creator/maintainer · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
-- [Issues](https://github.com/kim0040/Minecraft-World-Translator/issues) · [Contributing](../CONTRIBUTING.md)
+- [Issues](https://github.com/kim0040/PomiTranslate/issues) · [Contributing](../CONTRIBUTING.md)
 
 Project source retains MIT. Dependencies retain their own licenses; unresolved platform and bundled-notice obligations block a final binary release. [Third-party notices](../THIRD_PARTY_NOTICES.md) · [Documentation index](README.md)

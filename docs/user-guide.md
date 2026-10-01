@@ -60,4 +60,4 @@ CLI는 같은 Python 코어를 사용하며 데스크톱 vault와 credential 경
 
 macOS/Linux 예시이며 Windows에서는 `.venv\Scripts\python.exe`를 사용합니다. 번역 명령에는 `--target-language`, `--provider`, `--model`, `--style-preset`, `--expect-fingerprint` 등이 있습니다. fingerprint는 스캔 보고서에서 확인한 값을 사용하며, 실제 실행은 파일 수정과 API 청구를 발생시킬 수 있습니다. CLI의 `--restore-backup`은 검증된 최신 백업 복원입니다.
 
-문제가 있으면 [Issues](https://github.com/kim0040/Minecraft-World-Translator/issues)에 OS·버전·비밀을 제거한 재현 절차를 남겨 주세요. [면책 안내](disclaimer.md) · [데이터 안내](privacy.md)
+문제가 있으면 [Issues](https://github.com/kim0040/PomiTranslate/issues)에 OS·버전·비밀을 제거한 재현 절차를 남겨 주세요. [면책 안내](disclaimer.md) · [데이터 안내](privacy.md)

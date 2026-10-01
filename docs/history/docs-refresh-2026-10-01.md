@@ -32,3 +32,7 @@
 Cargo 외부525개 중333 metadata 확인·192 미확인, npm 설치72·Python 설치14 metadata를 기록했다. metadata는 최종 SBOM/원문 notice 동봉 검증이 아니다. 소스 MIT 유지의 알려진 충돌은 발견하지 못했으며 **정식 바이너리 배포의 license 완료 판정은 보류**한다. [LEGAL-01과 기타 gate](../follow-up-work.md)를 따른다.
 
 사용자 요청의 이번 commit/push는 **checkpoint**이고 Phase2 완료 commit이 아니다. Phase2 진행 중/Phase3 미시작/release-ready 아님. 불필요한 CI를 막는 [skip ci]를 사용한다. 태그·공개 release·서명·사용자 world upload는 수행하지 않는다.
+
+## 첫 push 뒤 확인된 원격 이동
+
+첫 진행 저장 `46b90698bf7f088d7a3c7ea1856ecbe44d615dfb` push는 성공했다. GitHub가 새 주소 `https://github.com/kim0040/PomiTranslate.git`를 안내했고 두 URL의 main SHA가 같은 것을 확인했다. README의 clone/cd/Issue 링크와 활성 문서·origin을 새 주소로 갱신한다. 기존 날짜별 기록의 당시 URL은 이력으로 보존하며 로컬 checkout/mwt는 이동하지 않는다.

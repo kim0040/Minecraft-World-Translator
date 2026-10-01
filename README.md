@@ -62,8 +62,8 @@ OpenRouter 추론은 **모델 기본값 / 추론 끄기 / 직접 설정**으로 
 현재는 개발 빌드를 기준으로 안내합니다. 정식 서명 설치본이나 모든 OS 지원이 완료됐다고 소개하지 않습니다. 소스 실행에는 Python 3.12, Node.js, pnpm, Rust 및 [Tauri 플랫폼 준비 항목](https://v2.tauri.app/start/prerequisites/)이 필요합니다.
 
 ```bash
-git clone https://github.com/kim0040/Minecraft-World-Translator.git
-cd Minecraft-World-Translator
+git clone https://github.com/kim0040/PomiTranslate.git
+cd PomiTranslate
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt pyinstaller==6.16.0
@@ -103,7 +103,7 @@ PomiTranslate has no purchase, subscription, or in-app payment.
 ## 기여자·문의
 
 - **김현민** — 제작·유지보수 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
-- 버그·제안: [GitHub Issues](https://github.com/kim0040/Minecraft-World-Translator/issues)
+- 버그·제안: [GitHub Issues](https://github.com/kim0040/PomiTranslate/issues)
 - 기여: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 버그 보고에는 OS, 앱 버전, 재현 방법을 적어 주세요. API 키, 개인 월드, 비밀이 포함된 로그를 공개 Issue에 올리지 마세요. 답변·수정 일정이나 금전 보상을 약속하는 지원 서비스는 제공하지 않습니다.
