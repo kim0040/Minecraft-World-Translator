@@ -113,4 +113,4 @@
 - **macOS native 확인(사용자 로컬 필요)**: 오버레이 타이틀바와 신호등 위치, 사이드바 드래그, 메뉴·단축키와 라벨 번역, ⌘Q 보호, 드래그&드롭, Dock 진행률/attention, 다크 시작 깜빡임. `pnpm sidecar:build` 후 `pnpm desktop:dev`(Python 변경 있음).
 - 사이드바 vibrancy(반투명)는 투명 창·private API가 필요해 이번에 넣지 않았다.
 - SNBT/명령 지원은 합성 fixture 기준이다. 1.21.5+로 실제 생성한 맵에서 게임 로드 확인은 COMP-04.
-- Gemini 및 비 OpenRouter 제공사의 비용 추정(가격표)은 QUALITY 과제로 남는다.
+- Gemini 및 비 OpenRouter 제공사의 비용 추정(가격표), thinking 최저 단계 학습의 영속화는 PROVIDER-01, 고유명사 일관성 등은 QUALITY-01로 [추후 작업](../follow-up-work.md)에 남겼다.

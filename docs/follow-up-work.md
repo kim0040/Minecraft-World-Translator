@@ -4,6 +4,16 @@
 
 2026-10-01 사용자 요청에 따른 [잔여 작업·Minecraft 호환성 확대 계획](compatibility-roadmap-2026-10-01.md)은 현재 코드의 버전/형식 공백과 실행 순서·완료 조건을 정리한 제안이다. Phase2 완료 후 Phase3에서 SNBT 명령·최신 component·혼합 버전 검증을 우선한다. 초기 계획 작성 자체는 지원 범위나 Phase 상태를 변경하지 않았으며, 후속 구현·최종 검증으로 Phase2 개발 환경 gate를 완료했다. 후속 요청의 [샘플·시작 복구·실제 provider 검증](history/sample-startup-validation-2026-10-01.md)을 추가했으며 게임 버전 전체 지원은 선언하지 않는다.
 
+## 지금 할 순서 (2026-10-01 후속 기준)
+
+[네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)과 최신 Gemini 실측 뒤 남은 작업의 권장 순서다. 아래 표의 ID와 완료 조건이 기준이다.
+
+1. **UX-NATIVE-01 — macOS 실제 확인(사용자 로컬 필요).** Linux에서는 컴파일·fixture로만 확인했다. `pnpm sidecar:build` → `pnpm desktop:dev`로 overlay 타이틀바·메뉴·⌘Q·drop·saves 목록·Dock 진행률·다크 시작을 본다. 결함은 native-only 재현 후 수정.
+2. **PROVIDER-01 — Gemini 후속.** sidecar가 요청마다 새로 떠서 thinking 최저 단계 학습(`_GEMINI_LEVEL_FLOOR`)이 작업마다 초기화된다(작업당 거부 요청 1회, 동시 batch 수만큼 늘 수 있음). 모델 catalog 캐시에 저장하고, 비 OpenRouter 제공사의 날짜 명시 가격표 기반 비용 추정, 모델 목록에서 robotics/computer-use 등 번역 부적합 모델 정리.
+3. **COMP-02 → COMP-03 → COMP-04** ([호환성 계획](compatibility-roadmap-2026-10-01.md)): 최신 component(26.x object fallback, hover/book/sign), chunk별 DataVersion·coverage UI, 1.21.5+로 실제 생성한 맵의 번역·게임 로드 확인.
+4. **QUALITY-01 — 번역 품질.** 고유명사 유지/번역 일관성(실측: "Elder Mira"가 모델마다 다름), lite 모델 군더더기 글자(`§lcrypt`→`§lc지하실`) 같은 서식 인접 오류 감지, glossary·TM(Phase3 QUALITY).
+5. **UX-NATIVE-02**, 그다음 **CONTENT(datapack `.mcfunction`)**, **DATA/RECOVERY**, 마지막으로 **LEGAL-01 / PLATFORM-01 / RELEASE-01**.
+
 ## 다음 작업의 우선순위와 완료 조건
 
 | ID | 작업 | 현재 경계·선행 조건 | 완료 조건 |
@@ -14,6 +24,9 @@
 | P2-FINAL 완료 | 최종 Phase2 개발 환경 gate | Python20/frontend58/build/Rust28, browser86+수정 후 영향7 및 최종 native .mcc PASS | 검증·증거 재사용 경계 명시, docs/diff/secret/artifact review→완료 commit/push. 플랫폼/release gate 별도 |
 | UX-NATIVE-01 | 네이티브 UX 후속의 macOS 확인 | 2026-10-01 구현·Linux Rust/browser94 PASS. [기록](history/native-ux-and-compat-2026-10-01.md) | Python 변경이 있으므로 sidecar 재빌드 후 macOS dev app에서 overlay 타이틀바·신호등·드래그 영역, 메뉴 라벨/단축키, ⌘Q 보호(작업 중), 폴더 drop, saves 목록, Dock 진행률/attention, 다크 시작 깜빡임을 확인하고 결함 수정 |
 | UX-NATIVE-02 | 남은 네이티브 다듬기 | 미착수 | 사이드바 vibrancy(투명 창 필요 여부 결정), 후보 행 우클릭 메뉴(포함/제외/직접 번역/복사), 창 크기·위치 기억, Windows Mica/타이틀바 확인 |
+| PROVIDER-01 | Gemini·비 OpenRouter 제공사 후속 | 2026-10-01 최신 모델 실측 완료: 3.8/3.7 flash·pro·`flash-latest`는 minimal 거부 → 자동 단계 상승 구현. 학습한 단계는 프로세스 메모리에만 있음 | 단계 학습을 catalog 캐시에 저장해 작업 간 재사용(동시 batch에서도 거부 1회 이하), Gemini/OpenAI/Anthropic 가격을 날짜·출처와 함께 추정에 반영(확인 불가 시 unknown), 번역 부적합 모델(robotics, computer-use 등) 목록 정리, 변경마다 최소 실제 호출로 확인 |
+| QUALITY-01 | 번역 품질 보강 | 서식 토큰 개수 검사·끝 `§r` 정리 완료. 고유명사 일관성·서식 인접 군더더기는 미검출 | 고유명사 처리 규칙/glossary와 연결, 서식 코드 바로 뒤 원문 잔여 글자 감지(경고 또는 재시도), 모델별 비교 fixture(합성)로 회귀 확인 |
+| COMP-02–06 | 호환성 확대 | COMP-01 완료. 나머지는 [호환성 계획](compatibility-roadmap-2026-10-01.md) | 계획 문서의 각 완료 조건 |
 | LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. Cargo192 metadata 미확인, 모든 OS 고지 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
 | PLATFORM-01 | clean-machine·키체인 | macOS arm64 개발 앱·Local/Session 검증; OS keychain opt-in/Windows/Linux native 미완 | Python/Node/Rust 없는 각 목표 OS에서 설치·chooser·credential permission/import·restart·backup/restore 확인; macOS Intel 목표 결정 |
 | RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle이며 updater/release 미완 | 실제 credential 승인 후 signing/notarization, updater signature/rollback·data 유지·진행 중 write 처리 검증 |
