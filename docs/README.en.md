@@ -86,6 +86,8 @@ The screenshots were captured by running the current UI with **synthetic data**.
 
 - A Tauri 2 + Svelte 5 shell with a Python core; the desktop app opens no localhost server for its UI.
 - Korean, English and Japanese UI, with system, light and dark themes. The View menu zooms the interface from 75% to 200%.
+- Feels like a desktop app: unified macOS title bar, fixed sidebar and toolbar with only the content scrolling, menu shortcuts (`Cmd/Ctrl+O` open world, `Cmd+,` settings, `Cmd/Ctrl+F` find), drag a world folder onto the window, a list of worlds from your Minecraft saves folders (with icons), Dock/taskbar progress, and quit protection while a job runs.
+- Command blocks: `tellraw`/`title` text is read in both JSON and Java 1.21.5+ SNBT form; only changed strings are rewritten in their original quoting, and unreadable commands are kept and reported.
 - A CLI built on the same core. Keys saved in the desktop app and the CLI's keyring/environment variables are not shared automatically.
 
 ## Usage

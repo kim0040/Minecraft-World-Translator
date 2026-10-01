@@ -14,7 +14,7 @@
   import { callBackend, credentialStatus, importCredential, type CredentialMode, type Settings, type ProviderUsage } from '../lib/api';
   import { t, type MessageKey } from '../lib/i18n/index.svelte';
   import type { ThemeChoice } from '../lib/theme';
-  import { defaultReasoningLabel, effortLabel, reasoningMode, supportedEfforts, supportsReasoning } from '../lib/reasoning';
+  import { REASONING_PROVIDERS, defaultReasoningLabel, effortLabel, reasoningMode, supportedEfforts, supportsReasoning } from '../lib/reasoning';
 
   const providers = [
     { value: 'openai', label: 'OpenAI' },
@@ -179,7 +179,7 @@
   const currentReasoning = $derived(draft.openrouter_reasoning ?? 'default');
   const mode = $derived(reasoningMode(currentReasoning));
   const hiddenReasoning = $derived(!['default', 'enabled', 'disabled', ...reasoningEfforts].includes(currentReasoning));
-  const reasoningInvalid = $derived(draft.provider === 'openrouter' && currentReasoning !== 'default' &&
+  const reasoningInvalid = $derived(REASONING_PROVIDERS.includes(draft.provider) && currentReasoning !== 'default' &&
     (!reasoningModel || !reasoningSupported || (currentReasoning === 'disabled' && !!reasoningMetadata?.mandatory) || hiddenReasoning));
   const dirty = $derived(!!snapshot && (JSON.stringify(copySettings(draft)) !== JSON.stringify(copySettings(snapshot)) ||
     !!apiKey.trim() || credentialMode !== savedCredentialMode));
@@ -394,7 +394,6 @@
 
 <div class="page settings" style:--settings-save-height={`${saveBarHeight}px`}>
   <header class="page-head">
-    <p class="eyebrow">PomiTranslate</p>
     <h1>{t('settings.title')}</h1>
     <p class="lead">{t('settings.lead')}</p>
   </header>
@@ -438,7 +437,7 @@
           </div>
           <datalist id="model-list">{#each models as model (model.id)}<option value={model.id}>{model.display_name || model.id}</option>{/each}</datalist>
         </div>
-        {#if draft.provider === 'openrouter'}
+        {#if REASONING_PROVIDERS.includes(draft.provider)}
           <div class="field full reasoning">
             <fieldset class="reasoning-modes" aria-describedby="reasoning-help reasoning-default">
               <legend class="label">{t('settings.reasoning.label')}</legend>
@@ -718,7 +717,7 @@
       </details>
     </section>
     </fieldset>
-    <footer class="save-bar" bind:clientHeight={saveBarHeight}>
+    <footer class="save-bar" class:dirty bind:clientHeight={saveBarHeight}>
       <div class="save-status" role="status" aria-live="polite">
         <strong>{t(app.busy === 'settings' ? 'settings.saving' : dirty ? 'settings.dirty' : 'settings.savedState')}</strong>
         {#if dirty && hasBlockingError}<span class="field-error">{t('settings.fixErrors')}</span>{/if}
@@ -726,7 +725,7 @@
       <div class="save-buttons">
       <button type="button" class="btn btn-secondary" disabled={!!app.busy || !dirty} onclick={discardDraft}>{t('settings.discard')}</button>
       <button type="submit" class="btn btn-primary" disabled={!!app.busy || hasBlockingError || !dirty}>
-        <Icon name="check" size={18} /> {t(app.busy === 'settings' ? 'settings.saving' : 'common.save')}
+        <Icon name="check" size={15} /> {t(app.busy === 'settings' ? 'settings.saving' : 'common.save')}
       </button>
       </div>
     </footer>
@@ -755,22 +754,24 @@
 {/if}
 
 <style>
-  .settings { max-width: 920px; }
+  .settings > :global(*), .settings-form > fieldset { max-width: 920px; }
+  .settings > .settings-form { max-width: none; }
   .settings-form { display: grid; gap: var(--space-4); }
   .settings-form > fieldset { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: 0; border: 0; }
   .settings-form > fieldset :global(input), .settings-form > fieldset :global(select), .settings-form > fieldset :global(textarea), .settings-form > fieldset :global(button), .settings-form > fieldset :global(summary) { scroll-margin-block-end: calc(var(--settings-save-height) + var(--space-4)); }
   .scope-body { display: grid; gap: var(--space-5); }
-  .settings-section { padding: var(--space-5); display: grid; gap: var(--space-5); }
+  .settings-section { padding: var(--space-4) var(--space-5); display: grid; gap: var(--space-4); }
   .section-head { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
-  .section-head h2 { font-size: var(--text-lg); }
+  .section-head h2 { font-size: var(--text-lg); font-weight: 600; }
   .section-head p { color: var(--text-secondary); font-size: var(--text-sm); margin-top: var(--space-1); }
-  .section-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-soft-text); }
+  .section-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--accent); color: var(--text-on-accent); }
+  .section-icon :global(.icon) { width: 16px; height: 16px; }
   .fields { display: grid; gap: var(--space-4); min-width: 0; }
   .fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fields.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .field { display: grid; gap: var(--space-2); min-width: 0; align-content: start; }
   .field.full { grid-column: 1 / -1; }
-  .label { color: var(--text); font-size: var(--text-sm); font-weight: 700; }
+  .label { color: var(--text); font-size: var(--text-md); font-weight: 600; }
   .label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .optional { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 400; }
   .hint { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.45; }
@@ -778,30 +779,35 @@
   .input.invalid { border-color: var(--danger-solid); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger-solid) 18%, transparent); }
   .field-error { color: var(--danger-text); font-size: var(--text-xs); line-height: 1.4; }
   .secret-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); min-width: 0; }
-  .secret-input .btn { min-height: 40px; }
+  .secret-input .btn { min-height: var(--control-height); }
   .key-status { border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); }
   .key-cancel { justify-self: start; }
-  .key-management summary, #settings-management summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; padding-block: var(--space-2); }
+  .key-management summary, #settings-management summary { font-size: var(--text-sm); font-weight: 600; padding-block: var(--space-2); }
   .model-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .reasoning-modes { border: 0; padding: 0; margin: 0; min-width: 0; }
   .reasoning-modes legend { margin-block-end: var(--space-2); }
   .mode-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .mode-option { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); min-height: 40px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--bg-surface); font-size: var(--text-sm); cursor: pointer; }
+  .mode-option { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); min-height: var(--control-height); border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-surface); font-size: var(--text-sm); }
   .mode-option.selected { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
   .mode-option:has(input:disabled) { opacity: 0.6; cursor: default; }
   .mode-option input { accent-color: var(--accent); margin: 0; }
   .strength { max-width: 320px; }
-  .save-bar { position: sticky; inset-block-end: var(--space-2); z-index: 15; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--bg-surface); box-shadow: var(--shadow-pop); }
-  .save-status { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
+  /* A window footer, quiet until there is something to save. */
+  .save-bar { position: sticky; inset-block-end: calc(-1 * var(--pane-pad-bottom, 0px)); z-index: 15; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3);
+    margin: 0 calc(-1 * var(--pane-pad-x, 0px)) calc(-1 * var(--pane-pad-bottom, 0px)); padding: 10px var(--pane-pad-x, var(--space-4));
+    border-top: 1px solid var(--border); background: var(--bg-toolbar); backdrop-filter: saturate(1.6) blur(16px); -webkit-backdrop-filter: saturate(1.6) blur(16px); }
+  .save-bar.dirty { background: color-mix(in srgb, var(--accent-soft) 85%, transparent); border-top-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  .save-status { display: grid; gap: var(--space-1); font-size: var(--text-sm); color: var(--text-secondary); }
+  .save-bar.dirty .save-status { color: var(--accent-soft-text); }
   .save-buttons { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  .check { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; }
-  .check input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); }
+  .check { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-2); padding: 10px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .check input { width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--accent); }
   .check span { display: grid; gap: var(--space-1); min-width: 0; }
   .check strong { font-size: var(--text-sm); }
   .check small { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 400; }
   .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .advanced { display: grid; gap: var(--space-5); }
-  .advanced summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); cursor: pointer; list-style: none; }
+  .advanced summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); list-style: none; }
   .advanced summary::-webkit-details-marker { display: none; }
   .advanced summary > .section-head { align-items: center; }
   .advanced summary strong { display: block; font-size: var(--text-lg); }

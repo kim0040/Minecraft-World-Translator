@@ -13,12 +13,18 @@
     "windows": [
       {
         "label": "main",
-        "title": "PomiTranslate — World Translator for Minecraft",
+        "title": "PomiTranslate",
         "width": 1180,
         "height": 800,
         "minWidth": 840,
         "minHeight": 620,
-        "backgroundColor": "#f9f8f7"
+        "backgroundColor": "#f9f8f7",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 22
+        }
       }
     ],
     "security": {
@@ -27,9 +33,18 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "externalBin": ["binaries/pomi-sidecar"],
-    "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "externalBin": [
+      "binaries/pomi-sidecar"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "macOS": {
       "minimumSystemVersion": "12.0"
     }

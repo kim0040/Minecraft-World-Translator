@@ -987,6 +987,11 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
     if kind == "world.inspect":
         emit({"v": 1, "id": request_id, "type": "response.ok", "payload": _world_inspection(world)})
         return
+    if kind == "worlds.discover":
+        from mwt.discovery import discover_worlds
+
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": discover_worlds()})
+        return
     if kind == "resume.status":
         candidate = _resume_candidate(data_dir, world)
         emit(

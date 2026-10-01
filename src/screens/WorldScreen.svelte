@@ -24,6 +24,12 @@
   };
   const knownBlockers = ['bedrock', 'mcr', 'linear', 'world_in_use', 'not_writable', 'not_readable', 'missing', 'unsafe_path'];
   const name = $derived(app.worldDir ? baseName(app.worldDir) : '');
+  $effect(() => { void app.loadDiscovered(); });
+
+  function startScan(): void {
+    app.goStep('scan');
+    void app.startScan();
+  }
   const kind = $derived((app.inspection?.kind ?? 'unknown') as 'java_world' | 'server_root' | 'unknown');
 </script>
 
@@ -72,11 +78,15 @@
       {/if}
 
       <div class="cta">
-        <button type="button" class="btn btn-primary btn-lg" disabled={blockers.length > 0} onclick={() => app.goStep('scan')}>
-          {t('world.continue')} <Icon name="chevron-right" size={20} />
-        </button>
         <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.chooseWorld()}>
-          <Icon name="folder" size={18} /> {t('world.open')}
+          <Icon name="folder" size={16} /> {t('world.open')}
+        </button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-secondary" disabled={blockers.length > 0} onclick={() => app.goStep('scan')}>
+          {t('world.continue')}
+        </button>
+        <button type="button" class="btn btn-primary btn-lg" disabled={blockers.length > 0 || app.isBusy} onclick={startScan}>
+          <Icon name="search" size={16} /> {t('world.startScan')}
         </button>
       </div>
     </section>
@@ -86,12 +96,41 @@
       <div class="copy">
         <h2>{t('world.open')}</h2>
         <p class="muted">{t('world.openHint')}</p>
+        <p class="muted small">{t('world.openHintDrop')}</p>
       </div>
       <button type="button" class="btn btn-primary btn-lg" onclick={() => app.chooseWorld()}>
-        <Icon name="folder" size={20} /> {t('world.open')}
+        <Icon name="folder" size={16} /> {t('world.open')}
       </button>
     </section>
   {/if}
+
+  <section class="found" aria-labelledby="found-title">
+    <div class="section-row">
+      <h2 id="found-title" class="section-title">{t('world.discovered')}</h2>
+      <button type="button" class="btn btn-quiet btn-sm" disabled={app.isBusy} onclick={() => app.loadDiscovered(true)}><Icon name="refresh" size={14} /> {t('world.refresh')}</button>
+    </div>
+    <p class="muted small">{t('world.discoveredHelp')}</p>
+    {#if app.discoveredLoaded && app.discovered.length === 0}
+      <p class="muted">{t('world.discoveredEmpty')}</p>
+    {:else if app.discovered.length}
+      <ul class="tiles">
+        {#each app.discovered as world (world.path)}
+          <li>
+            <button type="button" class="tile" class:current={world.path === app.worldDir} disabled={app.isBusy}
+              aria-current={world.path === app.worldDir ? 'true' : undefined} title={world.path} onclick={() => app.useWorld(world.path)}>
+              {#if world.icon}<img class="icon-img" src={world.icon} alt="" width="48" height="48" />
+              {:else}<span class="icon-img placeholder" aria-hidden="true"><Icon name="folder" size={22} /></span>{/if}
+              <span class="tile-text">
+                <span class="n">{world.name}</span>
+                <span class="p">{world.folder}{#if world.versionName} · {world.versionName}{/if}</span>
+                <span class="p">{t('world.lastPlayed', { date: formatDate(world.lastPlayed, app.locale) })}</span>
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
 
   <section class="recent" aria-labelledby="recent-title">
     <h2 id="recent-title" class="section-title">{t('world.recent')}</h2>
@@ -129,27 +168,43 @@
 </div>
 
 <style>
-  .selected { padding: var(--space-5); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .selected { padding: var(--space-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   .head { display: flex; gap: var(--space-4); align-items: center; min-width: 0; }
-  .thumb { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--accent-soft); color: var(--accent-soft-text); }
+  .thumb { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--radius-lg); background: var(--accent-soft); color: var(--accent-soft-text); }
   .who { min-width: 0; }
   .name { font-size: var(--text-xl); margin-top: 2px; overflow-wrap: anywhere; }
   .path { font-size: var(--text-sm); color: var(--text-secondary); margin-top: 2px; }
   .facts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
   .plain { margin: 0; padding-inline-start: 18px; }
-  .cta { display: flex; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--border); margin-top: var(--space-1); padding-top: var(--space-4); }
-  .empty { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-5); padding: var(--space-6) var(--space-5); border-style: dashed; border-color: var(--border-strong); box-shadow: none; }
-  .art img { width: 96px; height: 96px; object-fit: contain; }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-top: 1px solid var(--border); margin-top: var(--space-1); padding-top: var(--space-4); }
+  .spacer { flex: 1; }
+  .small { font-size: var(--text-sm); }
+  .section-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .section-row .section-title { margin-bottom: 0; }
+  .found { display: grid; gap: var(--space-2); }
+  .tiles { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-2); }
+  .tile { width: 100%; min-width: 0; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: var(--space-2); text-align: start;
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color 100ms var(--ease), background-color 100ms var(--ease); }
+  .tile.current { border-color: var(--accent); background: var(--bg-selected); }
+  .tile:disabled { opacity: 0.6; }
+  @media (hover: hover) { .tile:not(:disabled):hover { border-color: var(--border-strong); } }
+  .icon-img { width: 48px; height: 48px; border-radius: var(--radius-md); image-rendering: pixelated; object-fit: cover; outline: 1px solid var(--image-outline); outline-offset: -1px; }
+  .icon-img.placeholder { display: grid; place-items: center; background: var(--bg-sunken); color: var(--text-secondary); }
+  .tile-text { display: grid; min-width: 0; }
+  .tile-text .n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-text .p { font-size: var(--text-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-5); padding: var(--space-5); border-style: dashed; border-color: var(--border-strong); }
+  .art img { width: 72px; height: 72px; object-fit: contain; }
   .copy h2 { font-size: var(--text-xl); }
   .copy p { margin-top: var(--space-1); }
   .section-title { font-size: var(--text-lg); margin-bottom: var(--space-3); }
   .worlds { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
   .world { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); min-width: 0; }
-  .open { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 56px; padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  .open { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 44px; padding: 6px var(--space-3);
     min-width: 0; width: 100%; text-align: start; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color 120ms var(--ease), background-color 120ms var(--ease); }
   .world.current .open { border-color: var(--accent); background: var(--bg-selected); }
   .open:disabled { opacity: 0.6; }
-  .ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--text-secondary); }
+  .ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--text-secondary); }
   .txt { display: grid; min-width: 0; }
   .n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .p { font-size: var(--text-xs); color: var(--text-secondary); }

@@ -76,3 +76,7 @@ jobs:
         run: python tests/test_reliability.py
       - name: Text extraction and NBT round trip
         run: python tests/test_extraction.py
+      - name: SNBT command text (Java 1.21.5+)
+        run: python tests/test_snbt_commands.py
+      - name: Launcher world discovery is read-only
+        run: python tests/test_world_discovery.py

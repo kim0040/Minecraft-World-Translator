@@ -1394,6 +1394,7 @@ class WorldTranslator(TextExtractionMixin):
         stats: dict[str, Any] = {"unreadable_chunks": 0}
         unique_texts: dict[str, None] = {}
         candidate_count = 0
+        unparsed_before = getattr(self, "unparsed_commands", 0)
         for chunk, _root, _refs, occurrences in self._chunk_refs(region, path, stats):
             for text, ref in occurrences:
                 unique_texts[text] = None
@@ -1414,6 +1415,10 @@ class WorldTranslator(TextExtractionMixin):
                 count=stats["unreadable_chunks"],
                 message=stats.get("unreadable_sample", ""),
             )
+        unparsed = getattr(self, "unparsed_commands", 0) - unparsed_before
+        if unparsed:
+            # Command text in a form this reader cannot parse stays as written, and the scan says so.
+            self._warn("command_unparsed", file=self._relative(path), count=unparsed)
         if locked:
             # The file cannot be written, so its text is not a translation candidate.
             result.update(

@@ -2,7 +2,7 @@
   export type IconName =
     | 'folder' | 'search' | 'list' | 'language' | 'check-circle' | 'archive' | 'sliders' | 'info' | 'chevron-right'
     | 'chevron-left' | 'chevron-down' | 'x' | 'check' | 'alert-triangle' | 'alert-circle' | 'refresh' | 'trash'
-    | 'eye' | 'eye-off' | 'play' | 'stop' | 'sidebar' | 'pencil' | 'shield' | 'clock' | 'minus' | 'plus' | 'undo';
+    | 'eye' | 'eye-off' | 'play' | 'stop' | 'sidebar' | 'pencil' | 'shield' | 'clock' | 'minus' | 'plus' | 'undo' | 'download';
 </script>
 
 <script lang="ts">
@@ -37,7 +37,8 @@
     clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
     minus: 'M5 12h14',
     plus: 'M12 5v14M5 12h14',
-    undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3'
+    undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+    download: 'M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14'
   };
   const filled = new Set<IconName>(['play']);
 </script>

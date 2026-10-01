@@ -4,6 +4,7 @@
 
 | 기록 | 읽는 이유 |
 | --- | --- |
+| [2026-10-01 네이티브 UX·Gemini·SNBT](native-ux-and-compat-2026-10-01.md) | COMP-01 SNBT, Gemini thinking/사용량, 네이티브 셸·메뉴·드래그·saves 목록, Python22/Rust28/browser94 및 실제 Gemini 13요청. macOS native 미확인 |
 | [2026-10-01 Phase2 완료](phase2-completion-2026-10-01.md) | 최종20 Python/58 frontend·browser 실패 수정/영향7, 신규 .mcc 생성·복원·집계와 native hash, Legacy 대체 범위 |
 | [2026-10-01 실제 샘플·시작 복구·provider](sample-startup-validation-2026-10-01.md) | 샘플9435청크·복사본 restore, 최신 시작 deadline/retry와 실제 API 비용·native 복원 |
 | [2026-10-01 문서·라이선스 정리](docs-refresh-2026-10-01.md) | 소개·면책·Git 제외·진행 저장과 다국어 README 보강 범위 |

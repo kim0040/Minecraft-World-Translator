@@ -184,6 +184,15 @@
       return ok(request, { settings: { ...settings }, apiKeyStored: true, credentialMode: body.credentialMode || 'local' });
     }
     if (type === 'world.inspect') return ok(request, inspection);
+    if (type === 'worlds.discover') {
+      if (current === 'empty') return ok(request, { worlds: [], savesDirs: [], total: 0 });
+      // A generated 16x16 PNG keeps the tile realistic without shipping a binary fixture.
+      const icon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACo0lEQVR4nBXR6XLadgAEcL0V0l+LDnQ8BEISEjrQGScTu/ksIQMCzCUQgS9JxjmnndZJ2yTNTHrYePxYJU+wv92lrCOid3DvETwgvkbyAj99h30L62ecfUd0i+Ar0vewHmD8C+8FqEfXMI/QPuHJSzy9QXCPx19w9g3eHfrvcPEZ+isYf6P7G559w5MHUOef4P+Dp18Q/4noCP8I6w88eonzGyQfcPY7nv2HizvEb3D2C9I7UPZH6Nc/PMFruNfw36P9Ef5fOH8L7R7JK3hHOLe4uEH46w8IlXXIJqJHvrCx2Z0mTl32ylNWHtmE/DzlJj6/6omZL2Yem6fiwm1RG1vNYrput8pUmcTi0MXU5Sce2bfZSchtbW5qyludbByxtpSDyVDTtFn1+bFOr7riIUbpMIekVRnyJOQXrjzx5dxnR211E8pri37eF6i1ww1iobDoPGzOYzoLyDAUxm05T8jU4NcBPbOaRUSGFn8wGstUonKbKxM5D8R9m94bdKExS41ZherUFAeutPWEmd2c+uQyauw8pjJpataXtpqcu+rekXe+klnNtc0cfG5uNE5lij55Hkq1LlYROcSNpcFRe49edUjtIXNIpqu7nnDo0PuYOzHWmliZzNjkFolUutIskgceR81NeRerl6l0aZJloFQmW3bZKhTHkVD7/KjXKANpZLbGjro35F3QpBanoI500JSxxYxsbmSzw4QuTfq05qBDBraQu0rlNDJHnHvqoKtSV4ZY2Eztk0XIF2GrdpVJyhcOqYNW3sM2ZYeuUujsNJXXPSwCgTp9UZjSTOdLj77U1JXN7cLW1FPWndZSZ8uY1DoZduXaY6uEveqCqsxm6QpZX75yhG0g1EFj020UljoMlVG3mYdKEQu1wS46dOZyq476PxC9O4m8/TG/AAAAAElFTkSuQmCC';
+      return ok(request, { total: 2, savesDirs: ['/Users/fixture/Library/Application Support/minecraft/saves'], worlds: [
+        { path: worldDir, folder: 'Roguefire', name: 'Roguefire', lastPlayed: 1790672400, dataVersion: 4189, versionName: '1.21.4', icon, source: 'saves' },
+        { path: '/Users/fixture/Library/Application Support/minecraft/saves/Skyblock', folder: 'Skyblock', name: 'Skyblock Classic', lastPlayed: 1790500000, dataVersion: 4556, versionName: '1.21.11', icon: null, source: 'saves' }
+      ] });
+    }
     if (type === 'worlds.remember') return ok(request, { worlds: [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }] });
     if (type === 'worlds.forget') return ok(request, { worlds: [] });
     if (type === 'resume.status') return ok(request, ['result-cancelled', 'result-needs_retry'].includes(current) ? { ...resumePayload(), status: current.slice(7) } : { available: false });
@@ -222,6 +231,9 @@
     return ok(request, {});
   }
 
+  window.__pomiEmit = (name, payload) => {
+    for (const listener of listeners.values()) if (listener.event === name) callbacks.get(listener.handler)?.({ event: name, id: listener.id, payload });
+  };
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener(event, id) { listeners.delete(id); } };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
@@ -249,6 +261,8 @@
       if (command === 'operation_active') return false;
       if (command === 'cancel_active') return true;
       if (command === 'sidecar_request') return sidecar(args.request);
+      // Window chrome calls are decoration in the preview: accept and record them.
+      if (command.startsWith('plugin:window|') || command === 'set_menu_labels') { (window.__pomiChrome ||= []).push({ command, args }); return null; }
       throw new Error(`Unsupported fixture command: ${command}`);
     }
   };

@@ -26,6 +26,7 @@ Not scanned: data packs, `data/*.dat` (command storage, scoreboard), `level.dat`
 - text.item_components: supported
 - text.direct_component: supported
 - text.commands: supported
+- text.snbt_commands: supported
 - text.component_shapes: supported
 - text.modified_utf8: supported
 - text.resource_pack_lang: supported

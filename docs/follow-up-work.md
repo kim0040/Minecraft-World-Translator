@@ -1,6 +1,6 @@
 # 추후 작업 — 2026-10-01
 
-**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님.** 이 문서는 미완 작업의 기준 목록이다. [최종 완료 증거](history/phase2-completion-2026-10-01.md)는 플랫폼·정식 배포 완료와 구분한다. 최신 구현은 [현재 상태](current-state.md), 범위별 증거는 [검증 이력](history/README.md)을 따른다.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 이 문서는 미완 작업의 기준 목록이다. [최종 완료 증거](history/phase2-completion-2026-10-01.md)는 플랫폼·정식 배포 완료와 구분한다. 최신 구현은 [현재 상태](current-state.md), 범위별 증거는 [검증 이력](history/README.md)을 따른다.
 
 2026-10-01 사용자 요청에 따른 [잔여 작업·Minecraft 호환성 확대 계획](compatibility-roadmap-2026-10-01.md)은 현재 코드의 버전/형식 공백과 실행 순서·완료 조건을 정리한 제안이다. Phase2 완료 후 Phase3에서 SNBT 명령·최신 component·혼합 버전 검증을 우선한다. 초기 계획 작성 자체는 지원 범위나 Phase 상태를 변경하지 않았으며, 후속 구현·최종 검증으로 Phase2 개발 환경 gate를 완료했다. 후속 요청의 [샘플·시작 복구·실제 provider 검증](history/sample-startup-validation-2026-10-01.md)을 추가했으며 게임 버전 전체 지원은 선언하지 않는다.
 
@@ -12,12 +12,16 @@
 | P2-START 완료 | startup 지연·무응답 복구 | 개발 환경 targeted/native PASS: hello30초/bootstrap60초 오류·cleanup·retry/cold Ready. 과거 blank 원인·clean-machine는 미확정 | 무응답/지연 sidecar·저장소 fixture, handshake/bootstrap deadline·오류 안내·소유 process cleanup; native 재시작 증거. write 전체에 무조건 timeout을 적용하지 않음 |
 | P2-PARITY 완료 | 문서화한 Legacy 대체 범위 | 항상 백업·앱 관리 backup/checkpoint 유지, off/suffix/path 차이 명시 | 기존 안전 구현의 범위·literal import·legacy restore 검증. 동등 옵션/100% parity 아님, Legacy 유지 |
 | P2-FINAL 완료 | 최종 Phase2 개발 환경 gate | Python20/frontend58/build/Rust28, browser86+수정 후 영향7 및 최종 native .mcc PASS | 검증·증거 재사용 경계 명시, docs/diff/secret/artifact review→완료 commit/push. 플랫폼/release gate 별도 |
+| UX-NATIVE-01 | 네이티브 UX 후속의 macOS 확인 | 2026-10-01 구현·Linux Rust/browser94 PASS. [기록](history/native-ux-and-compat-2026-10-01.md) | Python 변경이 있으므로 sidecar 재빌드 후 macOS dev app에서 overlay 타이틀바·신호등·드래그 영역, 메뉴 라벨/단축키, ⌘Q 보호(작업 중), 폴더 drop, saves 목록, Dock 진행률/attention, 다크 시작 깜빡임을 확인하고 결함 수정 |
+| UX-NATIVE-02 | 남은 네이티브 다듬기 | 미착수 | 사이드바 vibrancy(투명 창 필요 여부 결정), 후보 행 우클릭 메뉴(포함/제외/직접 번역/복사), 창 크기·위치 기억, Windows Mica/타이틀바 확인 |
 | LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. Cargo192 metadata 미확인, 모든 OS 고지 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
 | PLATFORM-01 | clean-machine·키체인 | macOS arm64 개발 앱·Local/Session 검증; OS keychain opt-in/Windows/Linux native 미완 | Python/Node/Rust 없는 각 목표 OS에서 설치·chooser·credential permission/import·restart·backup/restore 확인; macOS Intel 목표 결정 |
 | RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle이며 updater/release 미완 | 실제 credential 승인 후 signing/notarization, updater signature/rollback·data 유지·진행 중 write 처리 검증 |
 | DOCS-01 | 문서·화면 유지 | 이번 서비스 소개·합성 screenshot·면책·개발 안내 정리 | 기능/지원/credential/가격 정책이 바뀔 때 소개·user-guide·privacy·support evidence와 화면을 같이 갱신; 목표를 검증된 기능으로 표시하지 않음 |
 
 ## 이번에 완료한 범위
+
+- [x] 2026-10-01 후속: COMP-01 SNBT 명령(선행 `/`·문자열 컴포넌트 포함, 미해석 경고), Gemini thinking/사고 토큰/헤더 인증/잘림 처리, 서식 토큰 완전 일치 검사, 기본 창 크기 후보 표 원문 열 결함 수정, 데스크톱 셸·밀도·메뉴·drop·saves 목록·진행률·⌘Q 보호. Python22/Rust28/browser94, 실제 Gemini 13요청. [기록](history/native-ux-and-compat-2026-10-01.md)
 
 - [x] 신규 .mcc 생성 경계·백업·중간 write 실패·recovery roundtrip와 물리 파일 집계 수정. 최종 native 변경2/API0/원래2파일 복원 hash 차이0.
 - [x] Legacy 대체 범위와 최종 개발 환경 gate 정리. SourceOverrides 오류 해소 시 입력창 닫힘 수정, Python20/frontend58/browser 영향7 PASS.
@@ -35,7 +39,9 @@
 
 이전 전체19 Python/50 frontend/71 browser PASS는 UX 이전 소스의 이력이다. 위 targeted PASS를 전체 matrix·actual provider·release-ready로 확대하지 않는다. 실제 최소 E2E와 공개 models GET은 전체 번역 품질·모든 제공사·최종 청구서 검증을 대신하지 않는다.
 
-## Phase 3 — 미시작
+## Phase 3 — 진행 중
+
+- [x] COMP-01 SNBT 명령 텍스트(합성 fixture·실제 Gemini 합성 world E2E). 1.21.5+ 실제 생성 맵의 게임 로드는 COMP-04.
 
 - [ ] datapack visible text / command storage / scoreboard 조사, opt-in 지원과 detected/unsupported/preserved coverage.
 - [ ] external folder pack/fill/merge, collision·path 안전성. ZIP/source·target locale/overwrite·skip는 Phase2 구현, native gate PASS.

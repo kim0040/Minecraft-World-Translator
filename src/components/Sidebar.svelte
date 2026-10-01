@@ -36,7 +36,8 @@
 </script>
 
 <aside class="sidebar" class:rail={app.railCollapsed}>
-  <div class="brand">
+  <div class="titlebar" data-tauri-drag-region></div>
+  <div class="brand" data-tauri-drag-region>
     <img class="wordmark" src="/images/wordmark.png" alt="PomiTranslate" width="176" />
     <span class="dark-wordmark" role="img" aria-label="PomiTranslate">Pomi<span>Translate</span></span>
   </div>
@@ -61,7 +62,7 @@
 
   <div class="foot">
     <div class="state" role="status" aria-live="polite">
-      <img class="pomi" src="/images/pomi.png" alt="" width="44" height="44" />
+      <img class="pomi" src="/images/pomi.png" alt="" width="32" height="32" />
       <div class="text">
         <span class="dot" class:busy={app.isBusy} aria-hidden="true"></span>
         <span class="status-text">{status}{percent !== null ? ` ${percent}%` : ''}</span>
@@ -77,46 +78,55 @@
 </aside>
 
 <style>
+  /* A source list: tinted, quiet, full height. On macOS the traffic lights sit in its top strip. */
   .sidebar {
-    position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 30; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior-y: contain; display: flex; flex-direction: column; gap: var(--space-5);
-    padding: var(--space-5) var(--space-4) var(--space-4); background: var(--bg-surface); border-inline-end: 1px solid var(--border);
-    width: var(--sidebar-width);
+    min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior-y: contain; display: flex; flex-direction: column; gap: var(--space-4);
+    padding: var(--space-3) var(--space-3) var(--space-3); background: var(--bg-sidebar); border-inline-end: 1px solid var(--border);
   }
-  .sidebar.rail { width: var(--sidebar-rail); padding-inline: var(--space-3); }
-  .brand { padding-inline: var(--space-2); min-height: 56px; display: flex; align-items: center; }
-  .wordmark { width: 156px; height: auto; margin-top: -6px; }
-  .dark-wordmark { display: none; font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.04em; color: var(--text); white-space: nowrap; }
+  .titlebar { flex: none; height: var(--titlebar-inset); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0; }
+  .sidebar.rail { padding-inline: var(--space-2); }
+  .brand { padding-inline: var(--space-2); min-height: 40px; display: flex; align-items: center; }
+  .wordmark { width: 132px; height: auto; margin-top: -4px; pointer-events: none; }
+  .dark-wordmark { display: none; font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.03em; color: var(--text); white-space: nowrap; pointer-events: none; }
   .dark-wordmark span { color: var(--accent-text); }
   :global([data-theme='dark']) .wordmark { display: none; }
   :global([data-theme='dark']) .sidebar:not(.rail) .dark-wordmark { display: inline; }
   @media (max-width: 1000px) { :global([data-theme='dark']) .sidebar:not(.rail) .dark-wordmark { display: none; } }
   .rail .brand { justify-content: center; padding: 0; }
   .rail .wordmark { display: none; }
-  .rail .brand::before { content: ''; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; }
-  nav { display: grid; gap: var(--space-1); }
+  .rail .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; }
+  nav { display: grid; gap: 2px; }
   .nav {
-    display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: 0 var(--space-3);
-    border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-secondary);
-    font-size: var(--text-md); font-weight: 600; text-align: start;
-    transition: background-color 120ms var(--ease), color 120ms var(--ease);
+    display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
+    border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text);
+    font-size: var(--text-md); font-weight: 500; text-align: start;
+    transition: background-color 100ms var(--ease), color 100ms var(--ease);
   }
-  .nav.active { background: var(--accent-soft); color: var(--accent-soft-text); }
-  .rail .nav { justify-content: center; padding: 0; }
+  .nav :global(.icon) { color: var(--accent-text); flex: none; }
+  .nav.active { background: color-mix(in srgb, var(--text) 10%, transparent); font-weight: 600; }
+  .rail .nav { justify-content: center; padding: 0; min-height: 36px; }
   .rail .label { display: none; }
-  @media (hover: hover) { .nav:not(.active):hover { background: var(--bg-hover); color: var(--text); } }
-  .foot { margin-top: auto; display: grid; gap: var(--space-3); }
-  .state { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-lg); background: var(--bg-sunken); }
-  .pomi { width: 44px; height: 44px; object-fit: contain; flex: none; }
-  .text { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--text-sm); font-weight: 600; }
+  @media (hover: hover) { .nav:not(.active):hover { background: color-mix(in srgb, var(--text) 5%, transparent); } }
+  .foot { margin-top: auto; display: grid; gap: var(--space-2); }
+  .state { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-lg); }
+  .pomi { width: 32px; height: 32px; object-fit: contain; flex: none; pointer-events: none; }
+  .text { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; min-width: 0; font-size: var(--text-sm); font-weight: 500; }
   .status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sub { grid-column: 2; font-weight: 400; color: var(--text-secondary); font-size: var(--text-xs); }
-  .dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--success-solid); }
+  .dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--success-solid); }
   .dot.busy { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.35; } }
   .rail .state { justify-content: center; padding: var(--space-2); }
   .rail .text, .rail .pomi { display: none; }
-  .rail .state::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--success-solid); }
+  .rail .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); }
   .collapse { justify-self: start; }
   .rail .collapse { justify-self: center; }
-  @media (max-width: 1000px) { .sidebar { width: var(--sidebar-rail); padding-inline: var(--space-3); } .sidebar .label, .sidebar .wordmark, .sidebar .text, .sidebar .pomi, .sidebar .collapse { display: none; } .sidebar .nav { justify-content: center; padding: 0; } .sidebar .brand { justify-content: center; padding: 0; } .sidebar .brand::before { content: ''; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; } .sidebar .state { justify-content: center; } .sidebar .state::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--success-solid); } }
+  @media (max-width: 1000px) { .sidebar { padding-inline: var(--space-2); } .sidebar .label, .sidebar .wordmark, .sidebar .text, .sidebar .pomi, .sidebar .collapse { display: none; } .sidebar .nav { justify-content: center; padding: 0; min-height: 36px; } .sidebar .brand { justify-content: center; padding: 0; } .sidebar .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; } .sidebar .state { justify-content: center; } .sidebar .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); } }
+  @media (max-width: 640px) {
+    .sidebar { height: auto; flex-direction: row; align-items: center; gap: var(--space-2); padding: var(--space-2); border-inline-end: 0; border-block-end: 1px solid var(--border); overflow: visible; }
+    .titlebar { display: none; }
+    .brand { min-height: 40px; }
+    nav { flex: 1; grid-template-columns: repeat(4, minmax(40px, 1fr)); }
+    .foot { display: none; }
+  }
 </style>

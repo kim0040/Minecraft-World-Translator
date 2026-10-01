@@ -1,6 +1,9 @@
 import type { ModelInfo } from './api';
 import { t, type MessageKey } from './i18n/index.svelte';
 
+/** Providers whose catalog says which models think and how strongly. */
+export const REASONING_PROVIDERS: readonly string[] = ['openrouter', 'gemini'];
+
 const effortKeys: Record<string, MessageKey> = {
   minimal: 'settings.reasoning.minimal', low: 'settings.reasoning.low', medium: 'settings.reasoning.medium',
   high: 'settings.reasoning.high', xhigh: 'settings.reasoning.xhigh', max: 'settings.reasoning.max'
@@ -35,7 +38,11 @@ export function defaultReasoningLabel(model?: ModelInfo): string {
 }
 
 export function reasoningSummary(choice: string, model?: ModelInfo): string {
-  if (choice === 'default') return `${t('settings.reasoning.default')} · ${defaultReasoningLabel(model)}`;
+  if (choice === 'default') {
+    // "Model default: on · high" already names the choice; do not say "Model default" twice.
+    const known = model && supportsReasoning(model) && (model.reasoning?.default_enabled !== undefined || model.reasoning?.mandatory);
+    return known ? defaultReasoningLabel(model) : `${t('settings.reasoning.default')} · ${defaultReasoningLabel(model)}`;
+  }
   if (choice === 'disabled') return t('settings.reasoning.disabled');
   return `${t('settings.reasoning.custom')} · ${choice === 'enabled' ? t('settings.reasoning.unspecified') : effortLabel(choice)}`;
 }

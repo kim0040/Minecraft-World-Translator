@@ -50,6 +50,12 @@ export type Notices = { firstLaunch: string; about: string; backupWarning: strin
 
 export type RecentWorld = { path: string; name: string; lastOpened: number; available: boolean };
 
+/** A world found in a launcher's saves folder. `icon` is the world's own icon.png as a data URL. */
+export type DiscoveredWorld = {
+  path: string; folder: string; name: string; lastPlayed: number;
+  dataVersion?: number | null; versionName?: string | null; icon?: string | null; source: string;
+};
+
 export type WorldInspection = {
   validJavaWorld: boolean;
   kind: 'java_world' | 'server_root' | 'missing' | 'unknown';

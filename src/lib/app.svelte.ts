@@ -18,8 +18,10 @@ import {
   type ScanResult,
   type Settings,
   type TranslationResult,
+  type DiscoveredWorld,
   type WorldInspection
 } from './api';
+import type { MenuAction } from './native';
 import { resourcePackOptions } from './resource-pack';
 import { CandidateSource } from './candidates.svelte';
 import { hasMessage, setLocale, t, type Locale, type MessageKey } from './i18n/index.svelte';
@@ -80,6 +82,8 @@ export class AppState {
   worldDir = $state('');
   inspection = $state<WorldInspection | null>(null);
   recent = $state<RecentWorld[]>([]);
+  discovered = $state<DiscoveredWorld[]>([]);
+  discoveredLoaded = $state(false);
   backups = $state<BackupSummary[]>([]);
 
   scan = $state<ScanResult | null>(null);
@@ -273,7 +277,47 @@ export class AppState {
     this.step = step;
   }
 
+  /** Commands from the native menu bar (or their shortcuts in a browser preview). */
+  menu(action: MenuAction): void {
+    if (!this.ready || this.startupFailed || this.busy === 'settings') return;
+    if (action === 'settings') {
+      this.goto('settings');
+    } else if (action === 'open-world') {
+      if (this.isBusy) return;
+      this.page = 'workspace';
+      void this.chooseWorld();
+    } else if (action === 'find') {
+      if (this.page !== 'workspace' || this.step !== 'review') return;
+      const search = document.getElementById('review-search') as HTMLInputElement | null;
+      search?.focus();
+      search?.select();
+    }
+  }
+
   // --- worlds ------------------------------------------------------------------------------
+
+  /** Worlds the game launchers keep. Read-only and best effort: an empty list is not an error. */
+  async loadDiscovered(force = false): Promise<void> {
+    if (this.discoveredLoaded && !force) return;
+    try {
+      this.discovered = (await callBackend<{ worlds: DiscoveredWorld[] }>('worlds.discover')).worlds ?? [];
+    } catch {
+      this.discovered = [];
+    } finally {
+      this.discoveredLoaded = true;
+    }
+  }
+
+  /** A folder dropped on the window opens like one chosen in the folder dialog. */
+  async openDropped(path: string): Promise<void> {
+    if (!this.ready || this.startupFailed) return;
+    if (this.isBusy) {
+      this.notify(t('world.dropBusy'), 'info');
+      return;
+    }
+    this.page = 'workspace';
+    await this.useWorld(path);
+  }
 
   private resetJob(): void {
     this.estimateRevision++;

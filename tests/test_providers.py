@@ -68,6 +68,18 @@ class Recorder(BaseHTTPRequestHandler):
                         "supportedGenerationMethods": ["generateContent"],
                     },
                     {
+                        "name": "models/gemini-3.5-flash",
+                        "displayName": "Gemini 3.5 Flash",
+                        "supportedGenerationMethods": ["generateContent"],
+                        "thinking": True,
+                    },
+                    {
+                        "name": "models/gemini-2.5-flash",
+                        "displayName": "Gemini 2.5 Flash",
+                        "supportedGenerationMethods": ["generateContent"],
+                        "thinking": True,
+                    },
+                    {
                         "name": "models/gemini-embed",
                         "displayName": "Embed",
                         "supportedGenerationMethods": ["embedContent"],
@@ -82,7 +94,16 @@ class Recorder(BaseHTTPRequestHandler):
         headers = {key.lower(): value for key, value in self.headers.items()}
         Recorder.seen.append(("POST", self.path.split("?", 1)[0], self.path, headers, body))
         if "generateContent" in self.path:
-            self._send({"candidates": [{"content": {"parts": [{"text": json.dumps({"0": "Hola"})}]}}]})
+            if "max-tokens" in self.path:
+                self._send({"candidates": [{"content": {"parts": [{"text": "{\"0\": \"Ho"}]}, "finishReason": "MAX_TOKENS"}]})
+                return
+            self._send({
+                "candidates": [{"content": {"parts": [
+                    {"text": "thinking about it", "thought": True},
+                    {"text": json.dumps({"0": "Hola"})},
+                ]}, "finishReason": "STOP"}],
+                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 4, "thoughtsTokenCount": 30},
+            })
             return
         if self.path.split("?", 1)[0].endswith("/messages"):
             self._send({"content": [{"type": "text", "text": json.dumps({"0": "Hola"})}]})
@@ -101,7 +122,9 @@ def start() -> tuple[ThreadingHTTPServer, str]:
     return server, f"http://{host}:{port}"
 
 
-def client(base: str, provider: str, model: str, *, wire: str = "", data_dir: Path | None = None) -> LLMProviderClient:
+def client(
+    base: str, provider: str, model: str, *, wire: str = "", data_dir: Path | None = None, reasoning: str = "default"
+) -> LLMProviderClient:
     return LLMProviderClient(
         {
             "api": {
@@ -111,6 +134,7 @@ def client(base: str, provider: str, model: str, *, wire: str = "", data_dir: Pa
                 "model": model,
                 "request_timeout": 30,
                 "wire_format": wire,
+                "openrouter_reasoning": reasoning,
             },
             "runtime": {"data_dir": str(data_dir or "")},
         }
@@ -156,13 +180,48 @@ def test_openai_gemini_anthropic_openrouter_custom(base: str, tmp: Path) -> None
     assert "image-model" not in ids
     assert "embed-model" not in ids
 
+    LLMProviderClient.reset_counters()
     gemini = client(f"{root}/v1beta", "gemini", "gemini-test")
     assert gemini.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}
-    _, path, full, _headers, body = last_post()
+    _, path, full, headers, body = last_post()
     assert "/models/gemini-test:generateContent" in full
-    assert "key=gemini-key" in full
+    # The key travels in a header, never in a URL that proxies or logs could record.
+    assert "gemini-key" not in full and headers["x-goog-api-key"] == "gemini-key"
+    assert all("gemini-key" not in item[2] for item in Recorder.seen)
     assert body["systemInstruction"]["parts"][0]["text"] == "sys"
-    assert [item["id"] for item in gemini.try_refresh_text_models()] == ["gemini-test"]
+    assert "thinkingConfig" not in body["generationConfig"]
+    assert body["generationConfig"]["maxOutputTokens"] >= 32768
+    # Thought tokens are billed as output: counted, but thought text never becomes the answer.
+    assert LLMProviderClient.usage["completion_tokens"] == 34
+    assert LLMProviderClient.usage["prompt_tokens"] == 10
+    assert [item["id"] for item in gemini.try_refresh_text_models()] == ["gemini-test", "gemini-3.5-flash", "gemini-2.5-flash"]
+    assert gemini.model_info["reasoning"] is None
+
+    flash3 = client(f"{root}/v1beta", "gemini", "gemini-3.5-flash", reasoning="disabled")
+    flash3.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
+    assert flash3.model_info["reasoning"]["supported_efforts"] == ["minimal", "low", "medium", "high"]
+    low3 = client(f"{root}/v1beta", "gemini", "gemini-3.5-flash", reasoning="low")
+    low3.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+    flash25 = client(f"{root}/v1beta", "gemini", "gemini-2.5-flash", reasoning="disabled")
+    flash25.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    assert last_post()[4]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+    plain = client(f"{root}/v1beta", "gemini", "gemini-test", reasoning="low")
+    try:
+        plain.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    except Exception as exc:
+        assert "reasoning" in str(exc)
+    else:
+        raise AssertionError("a model without thinking must reject a thinking setting")
+    truncated = client(f"{root}/v1beta/max-tokens", "gemini", "gemini-test")
+    truncated._catalog_checked = True
+    try:
+        truncated.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0)
+    except RuntimeError as exc:
+        assert "output token limit" in str(exc)
+    else:
+        raise AssertionError("a truncated Gemini answer must not pass as a translation")
 
     anthropic = client(f"{root}/v1", "anthropic", "text-model")
     assert anthropic.translate_mapping({"0": "Hello"}, system_prompt="sys", temperature=0) == {"0": "Hola"}

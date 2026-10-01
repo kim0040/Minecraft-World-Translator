@@ -118,4 +118,6 @@ COMP-03의 기본 제안은 미검증/미래 DataVersion에서는 읽기 전용 
 
 ## 다음 착수점
 
+2026-10-01 후속에서 **COMP-01을 구현·검증**했다([기록](history/native-ux-and-compat-2026-10-01.md)). 다음은 COMP-02(최신 component)와 COMP-03(chunk별 DataVersion/coverage)이다. 아래 문단은 COMP-01 착수 전 기록이다.
+
 후속 세션에서 **P2-START 개발 환경 회귀와 P2-API 최소 E2E**를 검증했다. 공개5 region과 Roguefire 복사본 총9435청크를 읽고, 실제 혼합 DataVersion4556/4440을 관측했으며 복사본12후보 쓰기·복원을 통과했다. 게임 로드와 경계 버전 텍스트 샘플은 아직 없다. 후속 최종 검증에서 **P2-PARITY 문서화한 대체 범위와 P2-FINAL 개발 환경 gate**를 완료했다. Phase2 완료 commit/push 후 다음 착수점은 **COMP-01 SNBT 명령 지원**이다. 시작할 때 Git/WIP와 최신 인계를 다시 확인한다. 이 계획만으로 미검증 버전 지원 문구나 Phase 상태를 변경하지 않는다.

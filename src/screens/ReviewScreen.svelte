@@ -99,8 +99,9 @@
 
   <div class="toolbar">
     <div class="search">
-      <Icon name="search" size={18} />
+      <Icon name="search" size={15} />
       <input
+        id="review-search"
         class="input"
         type="search"
         value={query}
@@ -152,7 +153,7 @@
     <div class="next">
       {#if app.includedCount === 0}<span class="hint" role="alert">{t('review.nothingIncluded')}</span>{/if}
       <button type="button" class="btn btn-primary btn-lg" disabled={app.includedCount === 0} onclick={() => app.goStep('run')}>
-        {t('review.toRun')} <Icon name="chevron-right" size={20} />
+        {t('review.toRun')} <Icon name="chevron-right" size={16} />
       </button>
     </div>
   </footer>
@@ -166,25 +167,25 @@
 {/if}
 
 <style>
-  .review { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: var(--space-3); height: calc(100vh - 148px); min-height: 520px; }
+  .review { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: var(--space-3); height: 100%; min-height: 460px; }
   .head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
   h1 { font-size: var(--text-2xl); }
   .lead { color: var(--text-secondary); margin-top: var(--space-1); }
   .counts { display: flex; gap: var(--space-2); flex-wrap: wrap; }
   .toolbar { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
   .search { position: relative; flex: 1 1 260px; min-width: 200px; }
-  .search :global(.icon) { position: absolute; inset-inline-start: 12px; top: 11px; color: var(--text-secondary); pointer-events: none; }
-  .search .input { padding-inline-start: 40px; }
+  .search :global(.icon) { position: absolute; inset-inline-start: 9px; top: 50%; translate: 0 -50%; color: var(--text-secondary); pointer-events: none; }
+  .search .input { padding-inline-start: 32px; }
   .sort { flex: 0 0 auto; }
   .sort .select { width: auto; min-width: 200px; }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .chip { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--border-control); background: var(--bg-surface); color: var(--text); font-size: var(--text-sm); font-weight: 600; transition: background-color 120ms var(--ease), border-color 120ms var(--ease); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--border-control); background: var(--bg-surface); color: var(--text); font-size: var(--text-sm); font-weight: 600; transition: background-color 120ms var(--ease), border-color 120ms var(--ease); }
   .chip .n { color: var(--text-secondary); font-weight: 500; }
   .chip[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
   .chip[aria-pressed='true'] .n { color: inherit; }
   @media (hover: hover) { .chip[aria-pressed='false']:hover { background: var(--bg-hover); } }
   .workarea { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-height: 0; }
-  .workarea.wide { grid-template-columns: minmax(0, 1fr) 360px; }
+  .workarea.wide { grid-template-columns: minmax(0, 1fr) 340px; }
   .tablewrap, .detailwrap { min-height: 0; height: 100%; }
   .foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--border); }
   .meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }

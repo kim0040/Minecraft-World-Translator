@@ -2,7 +2,7 @@
 
 ## 판정
 
-**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님.** 시작 HEAD는 `main` / `2d32ebe`다. 검증·문서 검토 후 Phase 완료 commit→push하며 최신 SHA/원격 상태는 Git 기록을 따른다. 플랫폼·서명 배포 gate는 남아 있다.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 2026-10-01 후속 작업으로 [네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)을 구현했다. 이 후속 변경의 macOS native 확인은 아직 하지 않았다(Linux에서 Rust 컴파일·테스트와 browser fixture로만 확인). 최신 SHA/원격 상태는 Git 기록을 따른다. 플랫폼·서명 배포 gate는 남아 있다.
 
 최신 증거는 [Phase2 완료 검증](history/phase2-completion-2026-10-01.md), 샘플 provenance·실제 provider는 [샘플·시작 복구 검증](history/sample-startup-validation-2026-10-01.md), 설정 증거는 [설정·추론 UI/UX 개선](history/settings-ux-2026-10-01.md), 전체 backlog는 [남은 작업](follow-up-work.md)이다. 과거 중단 기록은 현재 실행 상태를 덮어쓰지 않는다.
 
@@ -11,16 +11,18 @@
 - Tauri 2 / Rust shell / Svelte 5 / TypeScript / Vite, 패키지된 Python JSONL sidecar. 기존 CLI와 같은 코어를 사용하며 desktop은 localhost 서버를 열지 않는다.
 - 시작 hello30초/bootstrap60초 절대 deadline, 오류 안내·재시도·소유 sidecar 정리. 무응답30/60초 후 실제 앱 retry와 cold Ready 확인; hello 이후 긴 번역/복원 작업에는 일괄 timeout을 적용하지 않는다.
 - World → Scan → Review → Run → Result, Backups / Settings / About 분리와 공통 shell·dialog·toasts.
+- 데스크톱 셸(후속): 고정 사이드바·툴바와 내용만 스크롤, 13px/30px 데스크톱 밀도, macOS overlay 타이틀바, 메뉴(월드 열기 ⌘/Ctrl+O, 설정 ⌘,, 찾기 ⌘/Ctrl+F), 월드 폴더 드래그&드롭, 런처 saves 월드 목록(`worlds.discover`, 읽기 전용), Dock/작업 표시줄 진행률, 작업 중 ⌘Q 종료 보호, 창 제목·테마 동기화. macOS native 미확인.
 - 고유 후보·발생 횟수·종류·좌표/청크, 검색·종류/포함/제외/직접 번역 필터·정렬·서버 paging·bulk·virtual table. 100k fixture에서 DOM과 페이지 캐시가 제한됨을 브라우저로 검증했다. 실제 100k 월드 전체 처리 성능은 별도다.
 - model/provider/성능 변경은 scan 유지; 번역 범위/대상 언어 변경은 invalidation. 결과 상태·진행 event는 사용자 문구로 표시한다.
 - 재개 요청의 최신 후보 제외·직접 번역을 우선 적용하며, 이전 클라이언트가 생략한 필드만 checkpoint로 보충한다. Native 회귀에서 변경 파일1/요청0/최신 번역문을 확인하고 대상4파일 byte-identical 복원했다.
 - Collect → Translate → Write, provider fail-fast/circuit breaker, checkpoint·retry·cancel, 사용량·실패·경고 보고. 취소 뒤 늦게 도착한 응답 사용량도 최종 보고에 합산한다.
 - NBT 원본 바이트 보존, Java modified UTF-8(NUL/CESU-8 emoji), nested component·extra/with/fallback/hover/click/container/text_display/command text 추출.
+- 명령 텍스트: JSON과 Java 1.21.5+ SNBT(`mwt/snbt.py`, 바뀐 문자열만 원래 따옴표로 재기록), 선행 `/` 명령과 문자열 컴포넌트. 해석 불가 명령은 원본 유지 + `command_unparsed` 경고. `EXTRACTOR_VERSION` 3. 서식 토큰은 개수 완전 일치·추가 금지로 검증.
 - 앱 데이터의 검증된 백업, legacy `.pomi-backups` 발견/복원, 복원 직전 recovery snapshot.
 - 번역 후 처음 생성된 `.mcc`의 원래 부재를 백업하고 복원 직전 payload를 recovery에 보존한다. payload→region 순 write/restore, 물리 `.mcc` 변경 파일 집계와 255-sector 경계·중간 write 실패 fixture/native 검증.
 - 기본 credential은 Rust SQLite/AES-256-GCM + 별도 설치별 key 파일. Session과 opt-in OS keychain; 자동 keychain 읽기/import 없음. 저장된 키 전체는 UI에 반환하지 않는다. Local→Session 전환 시 stale local ciphertext 제거를 atomic metadata transaction으로 처리한다.
 - 같은 계정으로 DB와 key 파일을 모두 읽는 프로세스까지 막는 설계는 아니다. Windows permission 코드는 target typecheck만 통과했으며 native 검증 전이다.
-- OpenAI/Gemini/Anthropic/OpenRouter/Comet/Custom, provider endpoint 고정과 Custom wire format·URL 검증. CLI 환경변수 호환과 Rust-owned sidecar 환경변수 차단을 구분한다.
+- OpenAI/Gemini/Anthropic/OpenRouter/Comet/Custom, provider endpoint 고정과 Custom wire format·URL 검증. Gemini는 헤더 인증, thinking 제어(3.x level/2.5 budget), 사고 토큰 사용량 합산, MAX_TOKENS 실패 처리. CLI 환경변수 호환과 Rust-owned sidecar 환경변수 차단을 구분한다.
 - 설정 그룹/disclosure, 종류별 scope 및 curated presets, 파일/key 규칙, global source overrides, performance/file retry/error 정책, 공개 JSON import/export/reset, literal `translate.py` 읽기 전용 preview, 명시적 확인 후 style helper.
 - System/Light/Dark 및 ko/en/ja semantic i18n. 중국어 UI는 현재 제공하지 않는다.
 - native View 메뉴의 75–200% 실제 WebView 확대. Cmd/Ctrl+0은 100%, Cmd/Ctrl+2는 200%. Dialog는 명시적 fixed 위치·동적 viewport 높이를 사용하고, native에서 보이지 않던 등장 애니메이션을 제거했다.
@@ -35,6 +37,7 @@
 
 | 영역 | 최신 증거 | 범위 |
 | --- | --- | --- |
+| 후속(2026-10-01) | Python22/Rust28/check·build/frontend58/browser94 PASS, 실제 Gemini 13요청 | [네이티브 UX·Gemini·SNBT](history/native-ux-and-compat-2026-10-01.md). Linux 환경, macOS native 미확인 |
 | Python | 최종20 suites PASS | 신규 .mcc 경계/복원/실패/물리 집계 및 기존 core/provider/JSONL |
 | Frontend | 전체11 files /58 PASS | startup4 포함 최신 frontend source |
 | Browser | 최종87 실행 중86 PASS/1 FAIL→수정 후 영향7 PASS | override 입력창 자동 닫힘과 오래된 Save 기대 수정. 영향 없는86 재사용; 단일 전체87 PASS 실행 아님 |

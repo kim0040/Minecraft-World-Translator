@@ -1,3 +1,4 @@
+mod app_menu;
 mod credentials;
 mod document_export;
 mod provider_boundary;
@@ -37,6 +38,7 @@ const ALLOWED_REQUESTS: &[&str] = &[
     "worlds.remember",
     "worlds.forget",
     "world.inspect",
+    "worlds.discover",
     "resume.status",
     "models.list",
     "prompt.enhance",
@@ -429,14 +431,19 @@ pub fn run() {
             zoom_menu::install(app)?;
             Ok(())
         })
-        .on_menu_event(|app, event| zoom_menu::select(app, event.id().as_ref()))
+        .on_menu_event(|app, event| {
+            if !app_menu::select(app, event.id().as_ref()) {
+                zoom_menu::select(app, event.id().as_ref());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             sidecar_request,
             cancel_active,
             credential_status,
             credential_import,
             operation_active,
-            document_export::export_document
+            document_export::export_document,
+            app_menu::set_menu_labels
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -451,6 +458,20 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build PomiTranslate")
         .run(|app, event| {
+            // Quitting (Cmd+Q, the app menu, a session logout) skips CloseRequested. Hold it the same
+            // way while a scan, write or restore owns the core, instead of killing it mid-write.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                let active = app.state::<ActiveSidecar>();
+                if code.is_none() && active.request_gate.try_lock().is_err() {
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        let _ = window.emit("pomi-close-blocked", true);
+                    }
+                    return;
+                }
+            }
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Reopen { .. }) {
                 if let Some(window) = app.get_webview_window("main") {

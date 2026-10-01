@@ -15,6 +15,7 @@ VERIFIED_WHEN_PASSING = (
     "text.item_components",
     "text.direct_component",
     "text.commands",
+    "text.snbt_commands",
     "text.component_shapes",
     "text.modified_utf8",
     "text.resource_pack_lang",

@@ -247,6 +247,19 @@ def test_dropped_formatting_code_is_kept_original(tmp: Path) -> None:
     record("reliability.formatting_codes_protected")
 
 
+def test_invented_formatting_code_is_rejected(tmp: Path) -> None:
+    from mwt.tokens import preserve_tokens
+
+    source = "§6Merchant §rof the Northern Gate"
+    # Moving a code with its word is a translation; adding or dropping one is not.
+    assert preserve_tokens(source, "북쪽 성문의 §6상인§r") == "북쪽 성문의 §6상인§r"
+    assert preserve_tokens(source, "§6북쪽 문§r의 §6상인") == source
+    assert preserve_tokens("Hello %s", "안녕 %s %s") == "Hello %s"
+    assert preserve_tokens("Plain", "§l평범") == "Plain"
+    assert preserve_tokens("Open {0}", "{0} 열기") == "{0} 열기"
+    record("reliability.formatting_codes_exact")
+
+
 def test_unreadable_chunk_is_reported(tmp: Path) -> None:
     provider = Provider()
     world = make_world(tmp, "corrupt", {"r.0.0.mca": ["Hello there"]}, corrupt_chunk=True)
@@ -319,6 +332,7 @@ def run_all(tmp: Path) -> list[str]:
         test_single_bad_string_is_reported,
         test_retry_only_pays_for_what_is_missing,
         test_dropped_formatting_code_is_kept_original,
+        test_invented_formatting_code_is_rejected,
         test_unreadable_chunk_is_reported,
         test_concurrent_batches_are_faster_and_identical,
         test_outage_with_concurrency_still_stops,

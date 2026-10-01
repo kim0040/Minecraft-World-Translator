@@ -49,6 +49,7 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         items,
         current: AtomicU16::new(100),
     });
+    crate::app_menu::extend(app, &menu)?;
     app.set_menu(menu)?;
     Ok(())
 }

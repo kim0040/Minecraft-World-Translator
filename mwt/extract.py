@@ -17,7 +17,7 @@ from typing import Any, Callable
 from mwt import nbtio as nbt
 
 # Bump when the set of texts a scan finds changes, so saved scan plans stop matching.
-EXTRACTOR_VERSION = 2
+EXTRACTOR_VERSION = 3
 
 # What a text is, in words the interface translates. One string per kind of place.
 CATEGORIES = (
@@ -70,9 +70,10 @@ class TextRef:
 
 OnText = Callable[[Any, Any, str], None]
 
+# The component may be JSON (before 1.21.5) or SNBT (1.21.5+), so a quoted string also starts one.
 _COMMAND_JSON = (
-    re.compile(r"^((?:.*?\brun\s+)?tellraw\s+\S+\s+)([\[{].*)$", re.DOTALL),
-    re.compile(r"^((?:.*?\brun\s+)?title\s+\S+\s+(?:title|subtitle|actionbar)\s+)([\[{].*)$", re.DOTALL),
+    re.compile(r"^(/?(?:.*?\brun\s+)?tellraw\s+\S+\s+)([\[{'\"].*)$", re.DOTALL),
+    re.compile(r"^(/?(?:.*?\brun\s+)?title\s+\S+\s+(?:title|subtitle|actionbar)\s+)([\[{'\"].*)$", re.DOTALL),
 )
 
 
@@ -283,19 +284,40 @@ class TextExtractionMixin:
         extracted = self.extract_command_json(container[key])
         if not extracted:
             return
-        prefix, raw_json = extracted
+        prefix, raw_component = extracted
         try:
-            embedded = json.loads(raw_json)
+            embedded = json.loads(raw_component)
         except json.JSONDecodeError:
+            self._walk_snbt_command(container, key, prefix, raw_component, on_text, patch)
             return
+        holder = [embedded]  # A bare string is a component too: tellraw @a "Hello".
         if not patch:
-            self._walk_json(embedded, on_text, False)
+            self._walk_json(holder, on_text, False)
             return
         before = self.serialize_text_component(embedded)
-        self._walk_json(embedded, on_text, True)
-        after = self.serialize_text_component(embedded)
+        self._walk_json(holder, on_text, True)
+        after = self.serialize_text_component(holder[0])
         if after != before:
             container[key] = prefix + after
+
+    def _walk_snbt_command(
+        self, container: dict, key: str, prefix: str, raw: str, on_text: OnText, patch: bool
+    ) -> None:
+        """1.21.5+ commands write components as SNBT. Only changed strings are rewritten."""
+        from mwt import snbt
+
+        try:
+            document = snbt.parse(raw)
+        except snbt.SnbtError:
+            # Neither JSON nor SNBT this reader knows: keep it and say so instead of skipping quietly.
+            if not patch:
+                self.unparsed_commands = getattr(self, "unparsed_commands", 0) + 1
+            return
+        self._walk_json(document.root, on_text, patch)
+        if patch:
+            rendered = document.render()
+            if rendered != raw:
+                container[key] = prefix + rendered
 
     def collect_json_text_refs(self, node: Any, refs: list[TextRef], path: str) -> None:
         def add(container: Any, key: Any, source: str) -> None:
@@ -323,16 +345,14 @@ class TextExtractionMixin:
         self._walk_json(node, patch, True)
 
     def patch_command_component(self, command: str, translations: dict[str, str]) -> str:
-        extracted = self.extract_command_json(command)
-        if not extracted:
-            return command
-        prefix, raw_json = extracted
-        try:
-            component = json.loads(raw_json)
-        except json.JSONDecodeError:
-            return command
-        self.patch_json_component(component, translations)
-        return prefix + self.serialize_text_component(component)
+        def patch(container: Any, key: Any, source: str) -> None:
+            translated = translations.get(source)
+            if translated:
+                container[key] = translated
+
+        holder = {"command": command}
+        self._walk_command(holder, "command", patch, True)
+        return holder["command"]
 
     def _iter_json_nodes(self, node: Any):
         if isinstance(node, dict):
@@ -585,14 +605,9 @@ class TextExtractionMixin:
                     continue
                 self._walk_json(component, lambda container, key, source, ref=ref: add(source, ref))
             elif ref.kind == "command_tag":
-                extracted = self.extract_command_json(ref.tag.value)
-                if extracted is None:
-                    continue
-                try:
-                    component = json.loads(extracted[1])
-                except json.JSONDecodeError:
-                    continue
-                self._walk_json(component, lambda container, key, source, ref=ref: add(source, ref))
+                self._walk_command(
+                    {"command": ref.tag.value}, "command", lambda container, key, source, ref=ref: add(source, ref), False
+                )
         return found
 
     def extract_unique_texts(self, refs: list[TextRef]) -> list[str]:

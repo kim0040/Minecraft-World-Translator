@@ -5,7 +5,7 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
-  import { reasoningSummary } from '../lib/reasoning';
+  import { REASONING_PROVIDERS, reasoningSummary } from '../lib/reasoning';
 
   const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', comet: 'Comet API', custom: 'Custom' };
   const running = $derived(app.busy === 'translate');
@@ -98,7 +98,7 @@
 
       <dl class="facts">
         {#if p.phase === 'translate'}
-          <div><dt>{t('run.summary.requests')}</dt><dd class="num">{t('run.progress.requests', { done: p.requests, total: p.requestsEstimate || estimate?.requests || 0 })}</dd></div>
+          <div><dt>{t('run.progress.requestsLabel')}</dt><dd class="num">{t('run.progress.requests', { done: p.requests, total: p.requestsEstimate || estimate?.requests || 0 })}</dd></div>
           <div><dt>{t('result.stat.failed')}</dt><dd class="num" class:bad={p.failed > 0}>{p.failed}</dd></div>
         {/if}
       </dl>
@@ -140,87 +140,91 @@
       </Callout>
     {/if}
 
-    <section class="card summary" aria-labelledby="summary-title">
-      <h2 id="summary-title" class="sr-only">{t('run.title')}</h2>
-      <dl class="grid">
-        <div><dt>{t('run.summary.world')}</dt><dd title={app.worldDir}>{baseName(app.worldDir)}<span class="sub mono">{middleEllipsis(app.worldDir, 44)}</span></dd></div>
-        <div><dt>{t('run.summary.language')}</dt><dd>{app.settings.target_language}</dd></div>
-        <div><dt>{t('run.summary.model')}</dt><dd class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
-        {#if app.settings.provider === 'openrouter' && !app.manualOnly}
-          <div><dt>{t('settings.reasoning.label')}</dt><dd>{reasoning}<button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
-        {/if}
-        <div><dt>{t('run.summary.texts')}</dt><dd class="num">{formatNumber(app.outgoingCount, app.locale)}</dd></div>
-        <div><dt>{t('run.summary.manual')}</dt><dd class="num">{formatNumber(app.manualCount, app.locale)}</dd></div>
-        <div><dt>{t('run.summary.requests')}</dt><dd class="num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : t('common.unknown')}</dd></div>
-        <div class="wide">
-          <dt>{t('run.summary.cost')}</dt>
-          <dd class="num">{costText}
-            {#if estimate && estimate.requests > 0}
-              <span class="sub">{t('run.summary.tokens', { input: formatCompact(estimate.inputTokens, app.locale), output: formatCompact(estimate.outputTokens, app.locale) })}</span>
-              <span class="sub">{estimate.cost ? t('run.cost.note') : t('run.cost.unknownWhy')}</span>
-              {#if app.settings.provider === 'openrouter' && app.settings.openrouter_reasoning !== 'disabled'}<span class="sub">{t('run.reasoning.cost')}</span>{/if}
-            {/if}
-          </dd>
-        </div>
-        <div class="wide"><dt>{t('run.summary.backup')}</dt><dd><Icon name="shield" size={16} /> {t('run.summary.backupValue')}</dd></div>
-        {#if app.settings.resource_pack_enabled && app.settings.external_resource_pack_paths?.length}
-          <div class="wide"><dt>{t('settings.pack.externalTitle')}</dt><dd><ul class="external-paths">{#each app.settings.external_resource_pack_paths as path}<li class="mono">{path}</li>{/each}</ul><span class="sub">{t('settings.pack.externalHelp')}</span></dd></div>
+    <section aria-labelledby="summary-title">
+      <h2 id="summary-title" class="group-title">{t('run.summaryTitle')}</h2>
+      <dl class="group">
+        <div class="row-item"><dt class="k">{t('run.summary.world')}</dt><dd class="v" title={app.worldDir}>{baseName(app.worldDir)}<span class="sub mono">{middleEllipsis(app.worldDir, 56)}</span></dd></div>
+        <div class="row-item"><dt class="k">{t('run.summary.language')}</dt><dd class="v">{app.settings.target_language}</dd></div>
+        <div class="row-item"><dt class="k">{t('run.summary.model')}</dt><dd class="v" class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
+        {#if REASONING_PROVIDERS.includes(app.settings.provider) && !app.manualOnly}
+          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline">{reasoning}<button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
         {/if}
       </dl>
     </section>
 
-    <fieldset class="policy">
-      <legend>{t('run.failurePolicy')}</legend>
-      <label class="check"><input type="radio" name="policy" value="stop" bind:group={app.failurePolicy} /><span>{t('run.failure.stop')}</span></label>
-      <label class="check"><input type="radio" name="policy" value="skip" bind:group={app.failurePolicy} /><span>{t('run.failure.skip')}</span></label>
+    <section aria-labelledby="work-title">
+      <h2 id="work-title" class="group-title">{t('run.workTitle')}</h2>
+      <dl class="group">
+        <div class="row-item"><dt class="k">{t('run.summary.texts')}</dt><dd class="v num">{formatNumber(app.outgoingCount, app.locale)}</dd></div>
+        <div class="row-item"><dt class="k">{t('run.summary.manual')}</dt><dd class="v num">{formatNumber(app.manualCount, app.locale)}</dd></div>
+        <div class="row-item"><dt class="k">{t('run.summary.requests')}</dt><dd class="v num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : t('common.unknown')}</dd></div>
+        <div class="row-item">
+          <dt class="k">{t('run.summary.cost')}</dt>
+          <dd class="v num">{costText}
+            {#if estimate && estimate.requests > 0}
+              <span class="sub">{t('run.summary.tokens', { input: formatCompact(estimate.inputTokens, app.locale), output: formatCompact(estimate.outputTokens, app.locale) })}</span>
+              <span class="sub">{estimate.cost ? t('run.cost.note') : t('run.cost.unknownWhy')}</span>
+              {#if REASONING_PROVIDERS.includes(app.settings.provider) && app.settings.openrouter_reasoning !== 'disabled'}<span class="sub">{t('run.reasoning.cost')}</span>{/if}
+            {/if}
+          </dd>
+        </div>
+        <div class="row-item"><dt class="k">{t('run.summary.backup')}</dt><dd class="v backup"><Icon name="shield" size={14} /> {t('run.summary.backupValue')}</dd></div>
+        {#if app.settings.resource_pack_enabled && app.settings.external_resource_pack_paths?.length}
+          <div class="row-item"><dt class="k">{t('settings.pack.externalTitle')}</dt><dd class="v"><ul class="external-paths">{#each app.settings.external_resource_pack_paths as path}<li class="mono">{path}</li>{/each}</ul><span class="sub">{t('settings.pack.externalHelp')}</span></dd></div>
+        {/if}
+      </dl>
+    </section>
+
+    <fieldset class="group policy">
+      <legend class="group-title">{t('run.failurePolicy')}</legend>
+      <label class="row-item check"><input type="radio" name="policy" value="stop" bind:group={app.failurePolicy} /><span>{t('run.failure.stop')}</span></label>
+      <label class="row-item check"><input type="radio" name="policy" value="skip" bind:group={app.failurePolicy} /><span>{t('run.failure.skip')}</span></label>
     </fieldset>
 
-    <p class="confirm muted">{t('run.confirm.body')}</p>
-
-    <div class="cta">
-      <button type="button" class="btn btn-primary btn-lg" disabled={!app.canRun} onclick={() => app.startTranslate({ resume: !!app.resume })}>
-        <Icon name="play" size={18} /> {app.resume ? t('run.resume') : t('run.start')}
-      </button>
-      <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.goStep('review')}>
-        <Icon name="chevron-left" size={18} /> {t('step.review')}
-      </button>
+    <div class="action-bar">
+      <p class="note">{t('run.confirm.body')}</p>
+      <div class="buttons">
+        <button type="button" class="btn btn-secondary btn-lg" disabled={app.isBusy} onclick={() => app.goStep('review')}>
+          <Icon name="chevron-left" size={16} /> {t('step.review')}
+        </button>
+        <button type="button" class="btn btn-primary btn-lg" disabled={!app.canRun} onclick={() => app.startTranslate({ resume: !!app.resume })}>
+          <Icon name="play" size={16} /> {app.resume ? t('run.resume') : t('run.start')}
+        </button>
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
   .external-paths { padding-inline-start: 1em; margin: 0; overflow-wrap: anywhere; }
-  .edit-settings { display: block; margin-block-start: var(--space-1); }
+  .edit-settings { margin-inline-start: var(--space-2); }
+  .inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
   .live { padding: var(--space-5); display: grid; gap: var(--space-5); }
   .phases { display: flex; gap: var(--space-5); margin: 0; padding: 0; list-style: none; flex-wrap: wrap; }
   .phases li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-weight: 600; }
   .phases li.current { color: var(--text); }
   .phases li.done { color: var(--success-text); }
-  .dot { position: relative; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border-control); font-size: var(--text-xs); font-variant-numeric: tabular-nums; background: var(--bg-surface); }
+  .dot { position: relative; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border-control); font-size: var(--text-xs); font-variant-numeric: tabular-nums; background: var(--bg-surface); }
   li.done .dot { background: var(--success-solid); border-color: var(--success-solid); color: #fff; }
   li.current .dot { border-color: var(--accent); }
-  .ping { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .ping { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.3; scale: 0.8; } }
   .bar { display: grid; gap: var(--space-2); }
   .line { display: flex; align-items: baseline; gap: var(--space-3); }
   .strong { font-weight: 700; }
   .facts { display: flex; gap: var(--space-6); margin: 0; }
-  .facts dt { font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600; }
+  .facts dt { font-size: var(--text-sm); color: var(--text-secondary); font-weight: 500; }
   .facts dd { margin: 0; font-size: var(--text-xl); font-weight: 700; }
   .bad { color: var(--danger-text); }
-  .summary { padding: var(--space-5); }
-  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5) var(--space-5); margin: 0; }
-  .grid > div { min-width: 0; }
-  .grid .wide { grid-column: span 3; padding-top: var(--space-4); border-top: 1px solid var(--border); }
-  dt { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: var(--space-1); }
-  dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
   dd.warn { color: var(--warning-text); }
+  .backup { display: flex; align-items: center; gap: 6px; }
+  .backup :global(.icon) { color: var(--success-text); flex: none; }
   .sub { display: block; font-weight: 400; font-size: var(--text-sm); color: var(--text-secondary); margin-top: 2px; }
-  .policy { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); display: grid; gap: var(--space-3); background: var(--bg-surface); margin: 0; }
-  .policy legend { padding: 0 var(--space-2); font-size: var(--text-sm); font-weight: 700; }
+  .policy { min-width: 0; }
+  .policy legend { float: left; width: 100%; padding: 10px var(--space-4) 0; margin: 0; }
+  .policy legend + .row-item { clear: both; }
+  .policy .row-item { display: flex; align-items: center; gap: var(--space-2); }
+  .policy .row-item:first-of-type { border-top: 0; }
   .check span { font-weight: 500; }
-  .check input[type='radio'] { width: 18px; height: 18px; }
-  .confirm { font-size: var(--text-sm); max-width: 70ch; }
-  .cta { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
-  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid .wide { grid-column: span 2; } }
+  .check input[type='radio'] { width: 16px; height: 16px; margin: 0; }
 </style>

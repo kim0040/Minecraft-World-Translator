@@ -1,0 +1,100 @@
+/**
+ * The window around the page: title, theme, Dock/taskbar progress, menu commands and dropped
+ * folders. Every call is best effort. A browser preview has none of it, and a missing permission
+ * must never break the workflow, so failures are swallowed here and nowhere else.
+ */
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+type Unsubscribe = () => void;
+export type MenuAction = 'open-world' | 'settings' | 'find';
+
+export function inShell(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+export function isMac(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const data = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return /mac/i.test(data?.platform || navigator.platform || navigator.userAgent);
+}
+
+async function currentWindow() {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  return getCurrentWindow();
+}
+
+async function quietly(action: () => Promise<unknown>): Promise<void> {
+  if (!inShell()) return;
+  try {
+    await action();
+  } catch {
+    // Window chrome is decoration; the job continues without it.
+  }
+}
+
+// Window calls run one after another, so a slow early call can never overwrite a newer state
+// (a stale title, or progress arriving after the job already cleared it).
+let chain: Promise<void> = Promise.resolve();
+function queued(action: () => Promise<unknown>): Promise<void> {
+  chain = chain.then(() => quietly(action));
+  return chain;
+}
+
+export function setWindowTitle(title: string): Promise<void> {
+  document.title = title;
+  return queued(async () => (await currentWindow()).setTitle(title));
+}
+
+/** Dock (macOS) and taskbar (Windows) progress. `null` clears it. */
+export function setTaskProgress(percent: number | null, paused = false): Promise<void> {
+  return queued(async () => {
+    const { ProgressBarStatus } = await import('@tauri-apps/api/window');
+    const window = await currentWindow();
+    if (percent === null) await window.setProgressBar({ status: ProgressBarStatus.None });
+    else await window.setProgressBar({
+      status: paused ? ProgressBarStatus.Paused : percent <= 0 ? ProgressBarStatus.Indeterminate : ProgressBarStatus.Normal,
+      progress: Math.max(0, Math.min(100, Math.round(percent)))
+    });
+  });
+}
+
+/** Bounce the Dock icon / flash the taskbar once when a long job ends in the background. */
+export async function requestAttention(): Promise<void> {
+  if (typeof document !== 'undefined' && document.hasFocus()) return;
+  await quietly(async () => {
+    const { UserAttentionType } = await import('@tauri-apps/api/window');
+    await (await currentWindow()).requestUserAttention(UserAttentionType.Informational);
+  });
+}
+
+/** Native title bar and window background follow the app theme, so nothing flashes white. */
+export function setWindowTheme(choice: 'system' | 'light' | 'dark', background: string): Promise<void> {
+  return queued(async () => {
+    const window = await currentWindow();
+    await window.setTheme(choice === 'system' ? null : choice);
+    await window.setBackgroundColor(background);
+  });
+}
+
+export async function setMenuLabels(labels: { openWorld: string; settings: string; find: string }): Promise<void> {
+  await quietly(() => invoke('set_menu_labels', { labels }));
+}
+
+export async function onMenu(handler: (action: MenuAction) => void): Promise<Unsubscribe> {
+  return listen<MenuAction>('pomi-menu', ({ payload }) => handler(payload));
+}
+
+/** A folder (or a world's level.dat) dropped on the window. */
+export async function onDropPath(handler: (path: string) => void, hover: (over: boolean) => void): Promise<Unsubscribe> {
+  const stops = await Promise.all([
+    listen<{ paths?: string[] }>('tauri://drag-enter', () => hover(true)),
+    listen('tauri://drag-leave', () => hover(false)),
+    listen<{ paths?: string[] }>('tauri://drag-drop', ({ payload }) => {
+      hover(false);
+      const first = payload?.paths?.[0];
+      if (first) handler(first.replace(/[\\/]level\.dat$/i, ''));
+    })
+  ]);
+  return () => stops.forEach((stop) => stop());
+}

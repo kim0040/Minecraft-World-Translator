@@ -187,20 +187,21 @@
 </div>
 
 <style>
-  .viewport { position: relative; overflow: auto; height: 100%; min-height: 240px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); overscroll-behavior: contain; }
+  /* Columns follow the table's own width, not the window's: the detail pane takes 360px of it. */
+  .viewport { position: relative; overflow: auto; height: 100%; min-height: 240px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); overscroll-behavior: contain; container: candidates / inline-size; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--text-sm); }
-  th { position: sticky; top: 0; z-index: 2; height: 40px; padding: 0 var(--space-3); text-align: start; font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.04em; color: var(--text-secondary); background: var(--bg-sunken); border-bottom: 1px solid var(--border); }
+  th { position: sticky; top: 0; z-index: 2; height: 30px; padding: 0 var(--space-3); text-align: start; font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); background: var(--bg-sunken); border-bottom: 1px solid var(--border); }
   td { padding: 0 var(--space-3); border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; }
   tbody tr:not(.pad):not(.skeleton) { cursor: default; }
   tr.selected td { background: var(--bg-selected); }
   tr.excluded .src { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
   tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .c-include { width: 52px; text-align: center; padding: 0; }
-  .c-include input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; vertical-align: middle; }
+  .c-include { width: 44px; text-align: center; padding: 0; }
+  .c-include input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; vertical-align: middle; }
   .c-source { width: auto; }
-  .c-kind { width: 150px; }
-  .c-where { width: 210px; }
-  .c-state { width: 112px; }
+  .c-kind { width: 130px; }
+  .c-where { width: 190px; }
+  .c-state { width: 104px; }
   .src { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-line; }
   .kind, .where { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where { font-weight: 500; font-family: var(--font-mono); font-size: var(--text-xs); }
@@ -211,7 +212,8 @@
   @keyframes shimmer { to { background-position: -200% 0; } }
   .empty { position: absolute; inset: 40px 0 0; display: grid; place-content: center; text-align: center; gap: var(--space-1); padding: var(--space-5); }
   .strong { font-weight: 700; }
-  @media (max-width: 1100px) { .c-where { width: 170px; } .c-kind { width: 120px; } }
-  @media (max-width: 900px) { .c-where { display: none; } th.c-where { display: none; } .c-state { width: 96px; } }
-  @media (max-width: 520px) { .c-kind, .c-state { display: none; } .c-source { width: auto; } }
+  /* The source column always keeps at least ~280px; lower-value columns give way first. */
+  @container candidates (max-width: 760px) { .c-where { display: none; } .c-kind { width: 120px; } }
+  @container candidates (max-width: 480px) { .c-kind { display: none; } .c-state { width: 96px; } }
+  @container candidates (max-width: 400px) { .c-state { display: none; } }
 </style>

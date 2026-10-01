@@ -39,13 +39,13 @@
     { label: t('result.stat.files'), value: result?.changedFileCount ?? 0, tone: '' },
     { label: t('result.stat.requests'), value: result?.providerRequests ?? 0, tone: '' }
   ]);
-  const warnKnown = ['chunk_unreadable', 'file_unwritable', 'file_unreadable'];
+  const warnKnown = ['chunk_unreadable', 'file_unwritable', 'file_unreadable', 'command_unparsed'];
 </script>
 
 <div class="page">
-  <header class="page-head">
+  <header class="page-head with-actions">
     <h1>{t('result.title')}</h1>
-    <div><button type="button" class="btn btn-secondary" disabled={!!app.busy} onclick={exportReport}>{t('export.report')}</button><p class="hint">{t('export.reportHelp')}</p></div>
+    <div class="actions"><button type="button" class="btn btn-secondary btn-sm" title={t('export.reportHelp')} disabled={!!app.busy} onclick={exportReport}><Icon name="download" size={14} /> {t('export.report')}</button></div>
   </header>
 
   {#if result}
@@ -68,23 +68,21 @@
       {/snippet}
     </Callout>
 
-    <section class="stats" aria-label={t('result.title')}>
+    <section class="stats card" aria-label={t('result.title')}>
       {#each cards as card (card.label)}
-        <div class="card stat {card.tone}"><span class="v num">{formatNumber(card.value, app.locale)}</span><span class="l">{card.label}</span></div>
+        <div class="stat {card.tone}"><span class="v num">{formatNumber(card.value, app.locale)}</span><span class="l">{card.label}</span></div>
       {/each}
-      {#if usage && (usage.prompt_tokens || usage.completion_tokens)}
-        <div class="card stat wide">
-          <span class="v small num">{t('result.tokensValue', { input: formatCompact(usage.prompt_tokens ?? 0, app.locale), output: formatCompact(usage.completion_tokens ?? 0, app.locale) })}</span>
-          <span class="l">{t('result.stat.tokens')}</span>
-        </div>
-      {/if}
-      {#if usage?.cost_reported}
-        <div class="card stat wide">
-          <span class="v small num">{t('result.costValue', { cost: formatUsd(usage.cost ?? 0, app.locale) })}</span>
-          <span class="l">{t('result.stat.cost')}</span>
-        </div>
-      {/if}
     </section>
+    {#if (usage && (usage.prompt_tokens || usage.completion_tokens)) || usage?.cost_reported}
+      <dl class="group usage">
+        {#if usage && (usage.prompt_tokens || usage.completion_tokens)}
+          <div class="row-item"><dt class="k">{t('result.stat.tokens')}</dt><dd class="v num">{t('result.tokensValue', { input: formatCompact(usage.prompt_tokens ?? 0, app.locale), output: formatCompact(usage.completion_tokens ?? 0, app.locale) })}</dd></div>
+        {/if}
+        {#if usage?.cost_reported}
+          <div class="row-item"><dt class="k">{t('result.stat.cost')}</dt><dd class="v num">{t('result.costValue', { cost: formatUsd(usage.cost ?? 0, app.locale) })}</dd></div>
+        {/if}
+      </dl>
+    {/if}
 
     {#if result.warnings?.length}
       <Callout tone="warning" title={t('result.warnings')}>
@@ -131,16 +129,15 @@
 </div>
 
 <style>
-  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
-  .stat { padding: var(--space-4); display: grid; gap: 2px; }
-  .stat .v { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
-  .stat .v.small { font-size: var(--text-lg); letter-spacing: 0; }
+  /* One strip of numbers, divided by hairlines, instead of a dashboard of cards. */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); overflow: hidden; }
+  .stat { padding: var(--space-3) var(--space-4); display: grid; gap: 2px; align-content: start; border-inline-start: 1px solid var(--border); margin-inline-start: -1px; }
+  .stat .v { font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
   .stat .l { font-size: var(--text-sm); color: var(--text-secondary); }
   .stat.ok .v { color: var(--success-text); }
   .stat.bad .v { color: var(--danger-text); }
   .stat.warn .v { color: var(--warning-text); }
-  .stat.wide { grid-column: span 2; }
-  .samples { padding: var(--space-5); display: grid; gap: var(--space-3); }
+  .samples { padding: var(--space-4); display: grid; gap: var(--space-3); }
   .samples h2 { font-size: var(--text-lg); }
   table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
   th { text-align: start; font-size: var(--text-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); }

@@ -77,14 +77,12 @@
 
 <div class="page about">
   <header class="page-head">
-    <p class="eyebrow">{t('app.tagline')}</p>
     <h1>{t('about.title')}</h1>
-    <p class="lead">{t('about.lead')}</p>
   </header>
 
   <section class="hero card" aria-labelledby="identity-title">
     <div class="identity">
-      <img class="mascot" src="/images/pomi.png" alt="Pomi" width="128" height="128" />
+      <img class="mascot" src="/images/pomi.png" alt="Pomi" width="96" height="96" />
       <div class="identity-copy">
         <img class="wordmark" src="/images/wordmark.png" alt="PomiTranslate" width="220" height="64" />
         <h2 id="identity-title">{t('app.tagline')}</h2>
@@ -217,7 +215,7 @@
 
 <style>
   .about { max-width: 1040px; }
-  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.62fr); align-items: center; gap: var(--space-6); padding: var(--space-6); overflow: hidden; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.62fr); align-items: center; gap: var(--space-5); padding: var(--space-5); overflow: hidden; }
   .identity { display: flex; align-items: center; gap: var(--space-5); min-width: 0; }
   .mascot { width: clamp(88px, 13vw, 128px); height: auto; object-fit: contain; flex: none; }
   .identity-copy { display: grid; gap: var(--space-2); min-width: 0; }

@@ -6,7 +6,7 @@ import re
 import threading
 from typing import Any
 
-from mwt.reasoning import model_reasoning, normalize_reasoning, reasoning_payload
+from mwt.reasoning import gemini_reasoning, gemini_thinking_config, model_reasoning, normalize_reasoning, reasoning_payload
 from urllib import error, parse, request
 
 
@@ -189,9 +189,10 @@ def normalize_model_name(provider: str, model: str) -> str:
             "gpt35-turbo": "gpt-3.5-turbo",
         },
         "gemini": {
-            "pro": "gemini-pro",
-            "flash": "gemini-flash",
-            "ultra": "gemini-ultra",
+            # Google's moving aliases; the old gemini-pro/gemini-flash ids are no longer published.
+            "pro": "gemini-pro-latest",
+            "flash": "gemini-flash-latest",
+            "flash-lite": "gemini-flash-lite-latest",
         },
         "anthropic": {
             "claude3-opus": "claude-3-opus-20240229",
@@ -208,9 +209,6 @@ def normalize_model_name(provider: str, model: str) -> str:
     lower = cleaned.lower().replace(" ", "")
     if lower in provider_aliases:
         return provider_aliases[lower]
-
-    if provider == "gemini" and not cleaned.startswith("models/"):
-        pass
 
     return cleaned
 
@@ -371,6 +369,9 @@ def flatten_text_payload(content: Any) -> str:
     return ""
 
 
+GEMINI_MIN_OUTPUT_TOKENS = 32768
+
+
 class LLMProviderClient:
     request_count = 0
 
@@ -460,7 +461,7 @@ class LLMProviderClient:
             self.model = str(match["id"])
             self.model_info = match
             self.supports_json_response = _catalog_allows_json(match, self.provider)
-        if self.provider == "openrouter":
+        if self.provider in ("openrouter", "gemini"):
             try:
                 reasoning_payload(self.openrouter_reasoning, self.model_info)
             except ValueError as exc:
@@ -585,6 +586,10 @@ class LLMProviderClient:
             meta = response.get("usageMetadata")
             prompt = meta.get("promptTokenCount") if isinstance(meta, dict) else None
             completion = meta.get("candidatesTokenCount") if isinstance(meta, dict) else None
+            # Gemini bills thought tokens as output but reports them apart from the answer.
+            thoughts = meta.get("thoughtsTokenCount") if isinstance(meta, dict) else None
+            if isinstance(thoughts, int):
+                completion = (completion if isinstance(completion, int) else 0) + thoughts
         with cls._counter_lock:
             if cost is not None:
                 cls.usage["cost"] += cost
@@ -680,40 +685,54 @@ class LLMProviderClient:
         max_output_tokens: int,
     ) -> str:
         model_name = self.model if self.model.startswith("models/") else f"models/{self.model}"
-        query = parse.urlencode({"key": self.api_key})
+        # Thought tokens count against maxOutputTokens; a translation-sized cap would truncate a
+        # thinking model's answer, so leave room and pay only for what is generated.
         payload: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "generationConfig": {
                 "temperature": temperature,
-                "maxOutputTokens": max_output_tokens,
+                "maxOutputTokens": max(max_output_tokens, GEMINI_MIN_OUTPUT_TOKENS),
             },
         }
         if expect_json:
             payload["generationConfig"]["responseMimeType"] = "application/json"
+        thinking = gemini_thinking_config(self.openrouter_reasoning, self.model, self.model_info)
+        if thinking is not None:
+            payload["generationConfig"]["thinkingConfig"] = thinking
         response = self._request_json(
             "POST",
-            f"{self.base_url}/{model_name}:generateContent?{query}",
-            headers={"Content-Type": "application/json"},
+            f"{self.base_url}/{model_name}:generateContent",
+            headers=self._gemini_headers(),
             payload=payload,
         )
         candidates = response.get("candidates") or []
         if not candidates:
-            raise RuntimeError("Gemini returned no candidates.")
+            reason = (response.get("promptFeedback") or {}).get("blockReason")
+            raise RuntimeError(f"Gemini returned no candidates{f' ({reason})' if reason else ''}.")
         content = candidates[0].get("content", {})
         parts = content.get("parts") or []
-        return "\n".join(
+        text = "\n".join(
             part.get("text", "")
             for part in parts
-            if isinstance(part, dict) and isinstance(part.get("text"), str)
+            if isinstance(part, dict) and isinstance(part.get("text"), str) and not part.get("thought")
         ).strip()
+        finish = candidates[0].get("finishReason")
+        if finish == "MAX_TOKENS":
+            raise RuntimeError("Gemini stopped at the output token limit before finishing the answer.")
+        if not text and finish not in (None, "STOP"):
+            raise RuntimeError(f"Gemini returned no text (finish reason {finish}).")
+        return text
+
+    def _gemini_headers(self) -> dict[str, str]:
+        # A header keeps the key out of URLs, which proxies and request logs record.
+        return {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
 
     def _list_models_gemini(self) -> list[dict[str, Any]]:
-        query = parse.urlencode({"key": self.api_key, "pageSize": 1000})
         response = self._request_json(
             "GET",
-            f"{self.base_url}/models?{query}",
-            headers={"Content-Type": "application/json"},
+            f"{self.base_url}/models?{parse.urlencode({'pageSize': 1000})}",
+            headers=self._gemini_headers(),
         )
         data = response.get("models") or []
         models: list[dict[str, Any]] = []
@@ -735,6 +754,10 @@ class LLMProviderClient:
                 display_name=str(item.get("displayName") or model_id),
                 description=" | ".join(part for part in description_parts if part),
             )
+            thinking = gemini_reasoning(model_id, item.get("thinking"))
+            if thinking is not None:
+                record["reasoning"] = thinking
+                record["supported_parameters"] = [*record["supported_parameters"], "reasoning"]
             if record["text"]:
                 models.append(record)
         return models
