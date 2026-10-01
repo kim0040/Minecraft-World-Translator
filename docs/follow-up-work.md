@@ -1,15 +1,17 @@
 # 추후 작업 — 2026-10-01
 
-**Phase2 진행 중 / Phase3 미시작 / release-ready 아님.** 이 문서는 미완 작업의 기준 목록이다. 문서 정리와 현재 개선 저장은 checkpoint이며 Phase2 완료나 정식 배포를 뜻하지 않는다. 최신 구현은 [현재 상태](current-state.md), 범위별 증거는 [검증 이력](history/README.md)을 따른다.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님.** 이 문서는 미완 작업의 기준 목록이다. [최종 완료 증거](history/phase2-completion-2026-10-01.md)는 플랫폼·정식 배포 완료와 구분한다. 최신 구현은 [현재 상태](current-state.md), 범위별 증거는 [검증 이력](history/README.md)을 따른다.
+
+2026-10-01 사용자 요청에 따른 [잔여 작업·Minecraft 호환성 확대 계획](compatibility-roadmap-2026-10-01.md)은 현재 코드의 버전/형식 공백과 실행 순서·완료 조건을 정리한 제안이다. Phase2 완료 후 Phase3에서 SNBT 명령·최신 component·혼합 버전 검증을 우선한다. 초기 계획 작성 자체는 지원 범위나 Phase 상태를 변경하지 않았으며, 후속 구현·최종 검증으로 Phase2 개발 환경 gate를 완료했다. 후속 요청의 [샘플·시작 복구·실제 provider 검증](history/sample-startup-validation-2026-10-01.md)을 추가했으며 게임 버전 전체 지원은 선언하지 않는다.
 
 ## 다음 작업의 우선순위와 완료 조건
 
 | ID | 작업 | 현재 경계·선행 조건 | 완료 조건 |
 | --- | --- | --- | --- |
-| P2-API | 실제 provider 최소 E2E | 사용자 OpenRouter key/model 등록 완료. 실제 유료 번역은 미실행 | 합성 world에서 mock 성공 후 최소 실제 번역; endpoint·요청/tokens/실제 cost·usage 전후 기록, verified backup/restore와 world4+ZIP1 baseline hash 차이0 |
-| P2-START | startup 지연·무응답 복구 | 과거 지속 blank 원인은 확정되지 않음. 최근 cold restart Ready는 확인 | 무응답/지연 sidecar·저장소 fixture, handshake/bootstrap deadline·오류 안내·소유 process cleanup; native 재시작 증거. write 전체에 무조건 timeout을 적용하지 않음 |
-| P2-PARITY | legacy backup/checkpoint 대체 계약 | desktop은 앱 관리 backup/checkpoint; legacy off/suffix/path와 차이 | 사용자 범위 결정, 대체/미지원 명시, 필요한 migration·설명과 workflow 검증. parity 전 legacy 제거 금지 |
-| P2-FINAL | 최종 Phase2 gate | 최신 UX는 targeted PASS; 이전 전체 matrix는 다른 source | 최종 후보에 맞는 검사 선택·유효 PASS 재사용, 잔여 위험 검증, docs/diff/secret/artifact review 후 Phase 완료 commit/push |
+| P2-API 완료 | 실제 provider 최소 E2E | 최소 E2E PASS: 합성3문장/1요청, provider-reported $0.0001484, world4+ZIP1 hash 차이0 복원 | 합성 world에서 mock 성공 후 최소 실제 번역; endpoint·요청/tokens/실제 cost·usage 전후 기록, verified backup/restore와 world4+ZIP1 baseline hash 차이0 |
+| P2-START 완료 | startup 지연·무응답 복구 | 개발 환경 targeted/native PASS: hello30초/bootstrap60초 오류·cleanup·retry/cold Ready. 과거 blank 원인·clean-machine는 미확정 | 무응답/지연 sidecar·저장소 fixture, handshake/bootstrap deadline·오류 안내·소유 process cleanup; native 재시작 증거. write 전체에 무조건 timeout을 적용하지 않음 |
+| P2-PARITY 완료 | 문서화한 Legacy 대체 범위 | 항상 백업·앱 관리 backup/checkpoint 유지, off/suffix/path 차이 명시 | 기존 안전 구현의 범위·literal import·legacy restore 검증. 동등 옵션/100% parity 아님, Legacy 유지 |
+| P2-FINAL 완료 | 최종 Phase2 개발 환경 gate | Python20/frontend58/build/Rust28, browser86+수정 후 영향7 및 최종 native .mcc PASS | 검증·증거 재사용 경계 명시, docs/diff/secret/artifact review→완료 commit/push. 플랫폼/release gate 별도 |
 | LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. Cargo192 metadata 미확인, 모든 OS 고지 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
 | PLATFORM-01 | clean-machine·키체인 | macOS arm64 개발 앱·Local/Session 검증; OS keychain opt-in/Windows/Linux native 미완 | Python/Node/Rust 없는 각 목표 OS에서 설치·chooser·credential permission/import·restart·backup/restore 확인; macOS Intel 목표 결정 |
 | RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle이며 updater/release 미완 | 실제 credential 승인 후 signing/notarization, updater signature/rollback·data 유지·진행 중 write 처리 검증 |
@@ -17,6 +19,12 @@
 
 ## 이번에 완료한 범위
 
+- [x] 신규 .mcc 생성 경계·백업·중간 write 실패·recovery roundtrip와 물리 파일 집계 수정. 최종 native 변경2/API0/원래2파일 복원 hash 차이0.
+- [x] Legacy 대체 범위와 최종 개발 환경 gate 정리. SourceOverrides 오류 해소 시 입력창 닫힘 수정, Python20/frontend58/browser 영향7 PASS.
+
+- [x] 실제 샘플6개에서9435청크 읽기·NBT byte-identical·원본 보존. Roguefire 복사본12후보 쓰기/reopen/전체117파일 복원 hash 차이0. 공개5개는 후보0으로 쓰기 검증 대상이 아님.
+- [x] startup 절대 deadline·오류·재시도와 무응답 native cleanup, frontend58/browser-startup5/Rust28/build 및 Python 영향 검사.
+- [x] 합성3문장 실제 OpenRouter 번역1회, 입력391/출력108 tokens, provider 비용$0.0001484, 실제 backup/restore world4+ZIP1 hash 차이0.
 - [x] 승인된 추론/설정 여섯 UI/UX 개선과 고정 sidebar/savebar.
 - [x] 모델 공개 조회와 설정 저장 분리, default/disable/custom·지원 강도·캐시/오류 상태.
 - [x] 관련 frontend28/browser30(29+1)/Rust24·Python provider 두 파일·최종 build·native 저장/재시작/기본값 복원. [정확한 범위](history/settings-ux-2026-10-01.md)
@@ -25,7 +33,7 @@
 - [x] README 서비스 소개·사용법·실제 UI 화면, contributor·MIT·면책/개인정보·제3자 검토 문서.
 - [x] 과거 인계를 history로 이동하고 현재 상태와 미완 작업을 분리; runtime/world/DB/key/report 생성물 Git 제외.
 
-이전 전체19 Python/50 frontend/71 browser PASS는 UX 이전 소스의 이력이다. 위 targeted PASS를 전체 matrix·actual provider·release-ready로 확대하지 않는다. 실제 key 등록과 공개 models GET은 유료 번역 품질·정확한 청구의 검증을 대신하지 않는다.
+이전 전체19 Python/50 frontend/71 browser PASS는 UX 이전 소스의 이력이다. 위 targeted PASS를 전체 matrix·actual provider·release-ready로 확대하지 않는다. 실제 최소 E2E와 공개 models GET은 전체 번역 품질·모든 제공사·최종 청구서 검증을 대신하지 않는다.
 
 ## Phase 3 — 미시작
 
@@ -49,8 +57,8 @@
 
 ## 실행·비용·배포 경계
 
-원본 sample 쓰기 금지. 합성 또는 복사본에서 SHA-256 baseline을 기록하고 쓰기·복원 전후를 비교한다. 추가 실제 API 비용은 현재 $0이다. 실제 E2E의 기존 허용 예산은 추가 총 $1 이하(목표 $0.01–$0.10)이며 mock 먼저·최소 호출 원칙을 따른다. 이 문서 정리는 유료 실행을 새로 시작하는 요청이 아니다.
+원본 sample 쓰기 금지. 합성 또는 복사본에서 SHA-256 baseline을 기록하고 쓰기·복원 전후를 비교한다. 추가 실제 API 비용은 이번 제공사 응답 기준 $0.0001484다. 실제 E2E의 기존 허용 예산은 추가 총 $1 이하(목표 $0.01–$0.10)이며 mock 먼저·최소 호출 원칙을 따른다. 최소 E2E는 완료했고 같은 입력의 유료 호출을 반복하지 않는다.
 
-[CI 정책](ci-policy.md)에 따라 일반 문서/UI 변경은 Python CI를 시작하지 않으며 installer는 manual/tag이다. 이번 사용자 요청에 따른 진행 저장은 `[skip ci]` checkpoint로 기록한다. Phase2 완료 push와 구분한다. 공개 release·서명 자격·사용자 world upload는 별도 확인 없이 하지 않는다.
+[CI 정책](ci-policy.md)에 따라 일반 문서/UI 변경은 Python CI를 시작하지 않으며 installer는 manual/tag이다. 이전 진행 저장은 `[skip ci]` checkpoint였다. 이번 Phase2 완료 push의 Python/CI 변경은 자동 core 검사의 대상이며 installer/release dispatch는 하지 않는다. 공개 release·서명 자격·사용자 world upload는 별도 확인 없이 하지 않는다.
 
 맵 재배포·상표·의존성 권리는 [면책 안내](disclaimer.md)와 [라이선스 검토](legal/license-review.md)를 따른다. 미검증을 완료라고 쓰지 않고 충돌을 발견하면 기록·해결한 뒤 해당 배포를 재개한다.

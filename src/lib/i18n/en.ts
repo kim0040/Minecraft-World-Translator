@@ -1,6 +1,10 @@
 import type { MessageKey } from './ko';
 
 export const en: Record<MessageKey, string> = {
+  'startup.failed': 'The app could not get ready',
+  'startup.help': 'Try again. If this keeps happening, restart the app and check that the drive containing your recent world is connected.',
+  'error.CORE_HANDSHAKE_TIMEOUT': 'The translation core did not start within the time limit.',
+  'error.BOOTSTRAP_TIMEOUT': 'Loading recent world and backup information took too long and was stopped.',
   "settings.reasoning.custom": "Custom",
   "settings.reasoning.strength": "Reasoning effort",
   "settings.reasoning.unspecified": "Unspecified (model decides)",

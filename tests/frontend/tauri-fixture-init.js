@@ -4,6 +4,7 @@
   const listeners = new Map();
   let callbackId = 0;
   let eventId = 0;
+  let bootstrapAttempts = 0;
 
   const candidates = [
     { id: 'welcome', source: 'Welcome to Roguefire', kind: 'sign', kinds: { sign: 3 }, occurrences: 3, locations: [{ holder: 'minecraft:oak_sign', pos: [12, 64, -8], chunk: [0, -1], detail: 'front:1' }] },
@@ -150,6 +151,14 @@
     window.__pomiRequests.push({ type, provider: body.provider, publicCatalog: body.publicCatalog });
     const current = scenario();
     if (type === 'app.bootstrap') {
+      bootstrapAttempts++;
+      if (bootstrapAttempts === 1 && ['startup-handshake', 'startup-bootstrap', 'startup-stopped'].includes(current)) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        throw current === 'startup-handshake' ? 'CORE_HANDSHAKE_TIMEOUT'
+          : current === 'startup-bootstrap' ? 'BOOTSTRAP_TIMEOUT'
+          : 'Translation core stopped before it returned a result';
+      }
+      if (current === 'startup-delay') await new Promise((resolve) => setTimeout(resolve, 500));
       const empty = current === 'empty';
       const resumed = ['scanned', 'review', 'run', 'run-progress', 'result-success', 'result-failed', 'dark-review'].includes(current);
       const resultScenarios = ['result-partial', 'result-failed', 'result-needs_retry', 'result-cancelled', 'result-invalidated', 'result-unsupported'];
@@ -229,7 +238,10 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         return true;
       }
-      if (command === 'plugin:event|listen') { const id = ++eventId; listeners.set(id, { id, event: args.event, handler: args.handler }); return id; }
+      if (command === 'plugin:event|listen') {
+        if (scenario() === 'startup-listeners') return new Promise(() => {});
+        const id = ++eventId; listeners.set(id, { id, event: args.event, handler: args.handler }); return id;
+      }
       if (command === 'plugin:event|unlisten') { listeners.delete(args.eventId); return null; }
       if (command === 'plugin:dialog|open') return window.__pomiDialogFiles ?? null;
       if (command === 'credential_status') return { stored: new URLSearchParams(location.search).get('missingKey') !== '1', mode: credentialModes.get(args.provider) || 'local' };

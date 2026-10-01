@@ -873,11 +873,16 @@ class WorldTranslator(TextExtractionMixin):
 
     def refresh_report_counts(self) -> None:
         self.report["changed_file_count"] = len(
-            [item for item in self.report["changed_files"] if item.get("changed_chunks", 0) > 0]
-        ) + len({
+            {
+                path
+                for item in self.report["changed_files"]
+                if item.get("changed_chunks", 0) > 0
+                for path in item.get("written_files", [item["file"]])
+            } | {
             item["zip_path"] for item in self.report["resource_packs"]
             if item.get("translated_files", 0) > 0
-        })  # A ZIP is one changed file, even when several language entries are written.
+            }
+        )  # Count physical region/.mcc/ZIP paths; old checkpoints fall back to region.
         self.report["candidate_file_count"] = len(
             [item for item in self.report["changed_files"] if item.get("candidates", 0) > 0]
         ) + len({
@@ -1434,6 +1439,7 @@ class WorldTranslator(TextExtractionMixin):
         changed_chunks = 0
         unique_texts: dict[str, None] = {}
         candidate_count = 0
+        written_files: list[str] = []
         for chunk, root, refs, occurrences in self._chunk_refs(region, path, {"unreadable_chunks": 0}):
             texts = list(dict.fromkeys(text for text, _ in occurrences))
             unique_texts.update(dict.fromkeys(texts))
@@ -1446,6 +1452,7 @@ class WorldTranslator(TextExtractionMixin):
                 region.replace_nbt(chunk.index, self.dump_nbt_bytes(root))
 
         if changed_chunks > 0:
+            data, mcc_files = region.build()
             world_dir = Path(self.config["world_dir"]).resolve()
             if self._run_backup is None:
                 self._run_backup = BackupSet.new(world_dir, store=self._backup_store(), external_files=self._external_backup_files())
@@ -1457,23 +1464,27 @@ class WorldTranslator(TextExtractionMixin):
                 mcc_path = external_chunk_path(path, chunk.index)
                 if mcc_path.is_file():
                     backup.add(mcc_path)
+                elif chunk.index in mcc_files:
+                    backup.record_new_external_chunk(mcc_path)
             backup.verify()
             backup.publish_latest()
             self.report["backup_set_id"] = backup.backup_id
-            data, mcc_files = region.build()
-            written = [path]
-            self._write_world_bytes(path, data)
+            # Publish payloads before the region points at a newly created .mcc.
             for index, payload in mcc_files.items():
                 mcc_path = external_chunk_path(path, index)
                 self._write_world_bytes(mcc_path, payload)
-                written.append(mcc_path)
-            backup.mark_written(written)
+                backup.mark_written([mcc_path])
+                written_files.append(str(mcc_path))
+            self._write_world_bytes(path, data)
+            backup.mark_written([path])
+            written_files.append(str(path))
 
         return {
             "file": str(path),
             "changed_chunks": changed_chunks,
             "unique_texts": len(unique_texts),
             "candidates": candidate_count,
+            "written_files": written_files,
         }
 
     def _translation_stats(self, ordered: list[str]) -> dict[str, Any]:

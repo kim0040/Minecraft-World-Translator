@@ -1,6 +1,10 @@
 import type { MessageKey } from './ko';
 
 export const ja: Record<MessageKey, string> = {
+  'startup.failed': 'アプリの準備ができませんでした',
+  'startup.help': 'もう一度お試しください。繰り返す場合はアプリを再起動し、最近のワールドがあるドライブの接続を確認してください。',
+  'error.CORE_HANDSHAKE_TIMEOUT': '翻訳コアが制限時間内に起動しませんでした。',
+  'error.BOOTSTRAP_TIMEOUT': '最近のワールドとバックアップ情報の読み込みに時間がかかりすぎたため中断しました。',
   "settings.reasoning.custom": "指定する",
   "settings.reasoning.strength": "推論の強度",
   "settings.reasoning.unspecified": "未指定（モデルに任せる）",

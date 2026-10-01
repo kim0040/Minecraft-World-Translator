@@ -4,6 +4,8 @@
 
 | 기록 | 읽는 이유 |
 | --- | --- |
+| [2026-10-01 Phase2 완료](phase2-completion-2026-10-01.md) | 최종20 Python/58 frontend·browser 실패 수정/영향7, 신규 .mcc 생성·복원·집계와 native hash, Legacy 대체 범위 |
+| [2026-10-01 실제 샘플·시작 복구·provider](sample-startup-validation-2026-10-01.md) | 샘플9435청크·복사본 restore, 최신 시작 deadline/retry와 실제 API 비용·native 복원 |
 | [2026-10-01 문서·라이선스 정리](docs-refresh-2026-10-01.md) | 소개·면책·Git 제외·진행 저장과 다국어 README 보강 범위 |
 | [2026-10-01 설정·추론 UI/UX](settings-ux-2026-10-01.md) | 최신 관련 검사·native·패키지 hash와 미검증 경계 |
 | [2026-10-01 재개](phase2-resume-2026-10-01.md) | executor와 외부 ZIP 집계/restore, startup 조사 이력 |

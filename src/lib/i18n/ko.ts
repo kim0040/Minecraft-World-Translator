@@ -1,6 +1,10 @@
 // Korean is the source of truth. en.ts and ja.ts are typed against these keys, so a missing
 // translation is a compile error, not a blank label.
 export const ko = {
+  'startup.failed': '앱을 준비하지 못했습니다',
+  'startup.help': '다시 시도해 주세요. 문제가 반복되면 앱을 다시 시작하고 최근 월드가 있는 저장 장치의 연결을 확인해 주세요.',
+  'error.CORE_HANDSHAKE_TIMEOUT': '번역 코어가 제한 시간 안에 시작되지 않았습니다.',
+  'error.BOOTSTRAP_TIMEOUT': '최근 월드와 백업 정보를 불러오는 시간이 너무 오래 걸려 중단했습니다.',
   "settings.reasoning.custom": "직접 설정",
   "settings.reasoning.strength": "추론 강도",
   "settings.reasoning.unspecified": "강도 미지정 (모델에 맡김)",

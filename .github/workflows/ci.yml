@@ -68,6 +68,8 @@ jobs:
         run: python tests/test_world_path_boundary.py
       - name: Explicit external ZIP scan and restore
         run: python tests/test_desktop_external_packs.py
+      - name: New external chunk creation and recovery
+        run: python tests/test_external_chunk_restore.py
       - name: Cancellation usage reporting
         run: python tests/test_cancelled_usage.py
       - name: Failure reporting and retry

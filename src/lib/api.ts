@@ -258,7 +258,9 @@ export function callBackend<T>(type: string, payload: Record<string, unknown> = 
       // Rust reports transport and shell failures as text. The queue prevents normal UI requests
       // from reaching its single-process BUSY guard.
       const text = cause instanceof Error ? cause.message : String(cause);
-      throw new BackendError(text, /still running/i.test(text) ? 'BUSY' : 'TRANSPORT');
+      const code = ['CORE_HANDSHAKE_TIMEOUT', 'BOOTSTRAP_TIMEOUT'].includes(text)
+        ? text : /still running/i.test(text) ? 'BUSY' : 'TRANSPORT';
+      throw new BackendError(text, code);
     }
     if (response.id !== id) throw new BackendError('The translation core answered a different request.', 'TRANSPORT');
     if (response.type === 'response.error') {

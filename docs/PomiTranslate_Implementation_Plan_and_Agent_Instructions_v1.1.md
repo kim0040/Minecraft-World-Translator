@@ -6,7 +6,7 @@
 
 ## 현재 작업 상태 — 2026-10-01
 
-**Phase2 진행 중 / Phase3 미시작 / release-ready 아님.** 현재 구현은 [current-state](current-state.md), 미완 gate와 완료 조건은 [follow-up-work](follow-up-work.md), 최신 추론/설정 검증은 [UI/UX 이력](history/settings-ux-2026-10-01.md)을 따른다. 사용자 OpenRouter key/model 등록과 승인된 여섯 UI/UX 개선은 완료했다. 실제 유료 번역의 usage-cost-restore, legacy 대체 계약, startup·플랫폼·정식 배포/라이선스 gate는 남아 있다. 추가 API 비용$0.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님.** 현재 구현은 [current-state](current-state.md), 미완 gate는 [follow-up-work](follow-up-work.md), 최신 최종 증거는 [Phase2 완료 기록](history/phase2-completion-2026-10-01.md)을 따른다. 실제 OpenRouter 최소 E2E·startup 복구·Legacy 대체 범위·최종 .mcc 생성/복원/물리 집계와 관련 gate를 완료했다. provider-reported 추가 API 비용$0.0001484이며 최종 수동 gate의 추가 비용은0이다. 플랫폼·정식 배포/라이선스 gate는 남아 있다.
 
 이번 서비스 소개·사용 안내·합성 screenshot·면책·제3자 검토 정리와 진행 저장은 사용자 요청의 checkpoint다. 과거 key 대기·테스트 수·HEAD를 현재 상태로 복사하지 않는다.
 아래 9월28~30일 관측은 역사 기록/장기 계획이며 현재 완료 증거가 아니다. 사용자 결정인 local encrypted credential 기본·keychain opt-in, 웹 선검증 후 native 최종 gate, Phase별 검증→commit→push 순서를 유지한다.

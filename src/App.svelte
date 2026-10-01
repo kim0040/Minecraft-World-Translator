@@ -48,6 +48,14 @@
           <span class="spin" aria-hidden="true"><Icon name="refresh" size={24} /></span>
           <span>{t('common.loading')}</span>
         </div>
+      {:else if app.startupFailed}
+        <Callout tone="danger" title={t('startup.failed')} role="alert">
+          <p>{app.banner?.message}</p>
+          <p>{t('startup.help')}</p>
+          {#snippet actions()}
+            <button type="button" class="btn btn-primary" onclick={() => app.boot()}>{t('common.retry')}</button>
+          {/snippet}
+        </Callout>
       {:else}
         {#if app.banner}
           <div class="banner">

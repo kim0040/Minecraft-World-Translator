@@ -54,6 +54,7 @@ function numberOr(value: unknown, fallback: number): number {
 
 export class AppState {
   ready = $state(false);
+  startupFailed = $state(false);
   page = $state<Page>('workspace');
   step = $state<Step>('world');
   busy = $state<Busy>('');
@@ -99,6 +100,8 @@ export class AppState {
   private toastSerial = 0;
   private estimateRevision = 0;
   private unsubscribe: (() => void)[] = [];
+  private listenersStarted = false;
+  private destroyed = false;
 
   // --- derived numbers used across screens ---------------------------------------------------
 
@@ -188,16 +191,27 @@ export class AppState {
   // --- start-up ----------------------------------------------------------------------------
 
   async boot(): Promise<void> {
+    if (this.busy || (this.ready && !this.startupFailed) || this.destroyed) return;
     this.busy = 'loading';
-    try {
-      this.unsubscribe.push(await onProgress((event) => this.handleProgress(event)));
-      this.unsubscribe.push(await onCloseBlocked(() => { this.notify(t('app.closeBlocked'), 'info', 10000); }));
-      this.unsubscribe.push(await onZoomFailed(() => { this.notify(t('app.zoomFailed'), 'error'); }));
-    } catch {
-      // Outside the desktop shell there are no events. The app still works without live progress.
+    this.ready = false;
+    this.banner = null;
+    this.startupFailed = false;
+    if (!this.listenersStarted) {
+      this.listenersStarted = true;
+      // A stalled event subscription must not prevent the initial backend request.
+      for (const listening of [
+        onProgress((event) => this.handleProgress(event)),
+        onCloseBlocked(() => { this.notify(t('app.closeBlocked'), 'info', 10000); }),
+        onZoomFailed(() => { this.notify(t('app.zoomFailed'), 'error'); })
+      ]) {
+        void listening.then((stop) => {
+          if (this.destroyed) stop(); else this.unsubscribe.push(stop);
+        }).catch(() => {});
+      }
     }
     try {
       const boot = await callBackend<BootstrapPayload>('app.bootstrap');
+      if (this.destroyed) return;
       this.notices = boot.notices;
       this.settings = { ...defaultSettings(), ...boot.settings };
       this.settings.batch_size = numberOr(boot.settings.batch_size, 40);
@@ -222,6 +236,7 @@ export class AppState {
       this.applyResume(boot.resume);
 
     } catch (cause) {
+      this.startupFailed = true;
       this.fail(cause);
     } finally {
       this.busy = '';
@@ -230,6 +245,7 @@ export class AppState {
   }
 
   destroy(): void {
+    this.destroyed = true;
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
   }
@@ -252,7 +268,7 @@ export class AppState {
   }
 
   goStep(step: Step): void {
-    if (!this.stepReached[step] || this.isBusy) return;
+    if (!this.ready || this.startupFailed || !this.stepReached[step] || this.isBusy) return;
     this.page = 'workspace';
     this.step = step;
   }

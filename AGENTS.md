@@ -4,7 +4,7 @@
 
 1. 사용자 최신 요청과 상위 AGENTS.md.
 2. `docs/verification-policy.md` — 검증 선택·증거 재사용·중단 규칙.
-3. `docs/history/phase2-resume-2026-10-01.md`, `docs/current-state.md`, `docs/follow-up-work.md` (이전 중단 이력: `docs/history/phase2-pause-2026-10-01.md`).
+3. `docs/history/phase2-completion-2026-10-01.md`, `docs/current-state.md`, `docs/follow-up-work.md` (이전 중단 이력: `docs/history/phase2-pause-2026-10-01.md`).
 4. `docs/PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md`.
 
 ## 실행 계약
@@ -22,11 +22,11 @@
 
 ## 현재 재개 상태
 
-2026-10-01 승인된 설정·추론 UI/UX 여섯 개선을 완료했다. 최신 증거는 `docs/history/settings-ux-2026-10-01.md`다. Phase2 진행 중/Phase3 미시작, 추가 API 비용$0. 관련 frontend28/browser30(29+1)/Rust24·Python provider 두 파일·build·native 저장/재시작/기본값 복원 PASS. 전체 matrix는 UX 이전 결과를 최신 PASS로 복사하지 않는다. 사용자의 OpenRouter key/model 직접 등록은 완료됐다. 실제 유료 provider usage-cost-restore, legacy 대체 계약, 과거 blank/clean-machine startup과 최종 gate가 남아 있다.
+2026-10-01 Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님. 최신 증거는 `docs/history/phase2-completion-2026-10-01.md`, 샘플 provenance/실제 API는 `docs/history/sample-startup-validation-2026-10-01.md`다. Python20/frontend58/build/Rust28, browser87 중86 PASS와 결함 수정 후 영향7 PASS, 최종 native 신규 .mcc 생성·변경2/API0/원래2파일 hash 복원0. 공개5 region+실제 복사본9435청크 보존, Roguefire12후보 쓰기/117파일 복원0, 실제 OpenRouter1요청 비용$0.0001484는 해당 범위로 재사용했다. Desktop 항상 백업·앱 관리 backup/checkpoint의 대체 차이를 문서화하며 Legacy 유지, 100% parity 주장 금지. 새 marker 백업schema3는 최신 reader로 복원하고 일반schema2 호환 유지. Phase2 검증·review→완료 commit/push 후 COMP-01 SNBT부터 진행한다. 게임 로드/경계 버전 실제 텍스트/clean-machine/다른 OS/keychain/license/signing/updater는 남아 있다.
 
 ## 문서 정리 후 진입점
 
-사용자 문서: README.md / docs/user-guide.md / docs/privacy.md / docs/disclaimer.md. 작업 상태: docs/current-state.md / docs/follow-up-work.md. 이력: docs/history/. 라이선스: THIRD_PARTY_NOTICES.md / docs/legal/. 소개용 합성 screenshot은 docs/images/에서 의도적으로 추적하며 일반 output·report·world·DB·key는 제외한다. 현재 진행 저장은 사용자 승인 checkpoint이고 Phase2 완료가 아니다.
+사용자 문서: README.md / docs/user-guide.md / docs/privacy.md / docs/disclaimer.md. 작업 상태: docs/current-state.md / docs/follow-up-work.md. 이력: docs/history/. 라이선스: THIRD_PARTY_NOTICES.md / docs/legal/. 소개용 합성 screenshot은 docs/images/에서 의도적으로 추적하며 일반 output·report·world·DB·key는 제외한다. 과거 진행 저장은 checkpoint이며 최신 Phase2 완료 판정은 완료 기록을 따른다.
 
 2026-10-01 다국어 README(ko/en/ja/zh)와 user-guide를 보강했다. 제품 동작·Phase 상태는 바뀌지 않았다. [기록](docs/history/docs-refresh-2026-10-01.md)
 

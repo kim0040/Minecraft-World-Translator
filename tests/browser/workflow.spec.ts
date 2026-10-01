@@ -99,6 +99,8 @@ test('story preset preserves file rules and invalid saved translation input bloc
   await page.locator('#source-overrides').fill('{broken');
   await expect(page.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
   await page.locator('#source-overrides').fill('{}');
+  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
+  await page.locator('#source-overrides').fill('{"Fixture source":"새 직접 번역"}');
   await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
 });
 

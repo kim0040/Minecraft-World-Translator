@@ -17,6 +17,7 @@
       : app.busy === 'translate' ? t('status.translating')
       : app.busy === 'restore' ? t('status.restoring')
       : app.busy ? t('status.working')
+      : app.startupFailed ? t('startup.failed')
       : t('status.ready')
   );
   let now = $state(Date.now());
@@ -46,7 +47,7 @@
         type="button"
         class="nav"
         class:active={app.page === item.page}
-        disabled={app.busy === 'settings'}
+        disabled={app.busy === 'settings' || !app.ready || app.startupFailed}
         aria-label={t(item.label)}
         aria-current={app.page === item.page ? 'page' : undefined}
         title={app.railCollapsed ? t(item.label) : undefined}

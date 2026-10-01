@@ -29,7 +29,7 @@
 - `pnpm verify:plan`: check/frontend/browser-smoke 명령과 source fingerprint만 표시. **테스트 실행 없음**.
 - `node scripts/verify.mjs <profile...>`: 선택 profile 계획만. `--run`을 붙일 때 실행.
 - `pnpm verify:ui`: check + frontend + 6개 주요 browser smoke. scope가 더 좁으면 직접 해당 unit/test file 또는 Playwright `--grep`만 실행한다. UI-only에도 이 묶음을 항상 전부 요구하지 않는다.
-- `pnpm verify:final`: check/frontend/Python19/Rust/browser 전체. **Phase 완료 후보에서만**. Native/paid API/installer는 포함하지 않는다.
+- `pnpm verify:final`: check/frontend/Python20/Rust/browser 전체. **Phase 완료 후보에서만**. Native/paid API/installer는 포함하지 않는다.
 - profiles: `check`, `frontend`, `browser-smoke`, `browser-layout`, `browser-final`, `python-final`, `rust-final`.
 - `--force`: toolchain/browser/환경/dependencies 변경, 남은 구체적 위험 또는 최종 cold check 때문에 기존 PASS 재사용을 배제해야 할 때만.
 - `pnpm desktop:dev:ui`: 이미 필요한 sidecar가 준비된 UI-only native dev. Python 변경 뒤에는 이 명령으로 stale sidecar를 검증하지 않는다.

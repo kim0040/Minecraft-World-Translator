@@ -3,6 +3,7 @@ mod document_export;
 mod provider_boundary;
 mod settings_transaction;
 mod sidecar_paths;
+mod startup;
 mod zoom_menu;
 
 use std::{fs, path::PathBuf, sync::Mutex};
@@ -268,6 +269,9 @@ async fn exchange_sidecar(
     state: &ActiveSidecar,
     mut request: Value,
 ) -> Result<Value, String> {
+    let deadlines = startup::StartupDeadlines::new(
+        request.get("type").and_then(Value::as_str).unwrap_or(""),
+    );
     let id = request
         .get("id")
         .and_then(Value::as_str)
@@ -325,7 +329,11 @@ async fn exchange_sidecar(
     let mut saw_hello = false;
     let mut stdout_buffer = Vec::<u8>::new();
     let result: Result<Value, String> = 'events: loop {
-        match receiver.recv().await {
+        let event = match deadlines.receive(saw_hello, receiver.recv()).await {
+            Ok(event) => event,
+            Err(code) => break Err(code.into()),
+        };
+        match event {
             Some(CommandEvent::Stdout(bytes)) => {
                 stdout_buffer.extend_from_slice(&bytes);
                 if stdout_buffer.len() > 8 * 1024 * 1024 {

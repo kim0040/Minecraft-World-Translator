@@ -191,6 +191,11 @@ class BackupSet:
         if payload.get("verified") is not True:
             raise BackupError("Backup manifest is not verified")
         for entry in self._validated_manifest_entries(payload):
+            if entry.get("restoreAction") == "remove_created":
+                source = self._target(entry)
+                if entry["path"] not in self._written and source.exists():
+                    raise BackupError("A new external chunk target already exists")
+                continue
             copied = self.root / entry["path"]
             if not copied.is_file() or file_sha256(copied) != entry["sha256"]:
                 raise BackupError(f"Backup verification failed for {entry['path']}")
@@ -199,6 +204,23 @@ class BackupSet:
             source = self._target(entry)
             if file_sha256(source) != entry["sha256"]:
                 raise BackupError(f"Backup verification failed for {entry['path']}")
+
+    def record_new_external_chunk(self, path: Path) -> None:
+        """Record absence before creation so restore can recover, then remove, this file."""
+        path = Path(os.path.abspath(path))
+        if not path.resolve().is_relative_to(self.world_dir):
+            raise BackupError("New external chunks must be inside the selected world")
+        relative = path.relative_to(self.world_dir).as_posix()
+        if any(entry["path"] == relative for entry in self.entries):
+            return
+        entry = {"path": relative, "sha256": hashlib.sha256(b"").hexdigest(),
+                 "size": "0", "restoreAction": "remove_created"}
+        candidate = self._validated_manifest_entries({"files": [*self.entries, entry]})[-1]
+        target = self._target(candidate)
+        if target.exists():
+            raise BackupError("A new external chunk target already exists")
+        self.entries.append(candidate)
+        self._write_manifest()
 
     def mark_written(self, paths: list[Path]) -> None:
         """Remember files this run has already replaced so later verifies do not expect the pre-write bytes."""
@@ -213,9 +235,11 @@ class BackupSet:
         if not payload.get("verified") or not entries:
             raise BackupError("Refusing to restore an unverified backup set")
         for entry in entries:
-            source = self.root / entry["path"]
             # Validate every destination before creating recovery files or replacing any file.
             self._target(entry)
+            if entry.get("restoreAction") == "remove_created":
+                continue
+            source = self.root / entry["path"]
             if not source.is_file() or file_sha256(source) != entry["sha256"]:
                 raise BackupError(f"Refusing to restore an unverified backup of {entry['path']}")
 
@@ -227,9 +251,16 @@ class BackupSet:
                 recovery.add(current)
         if recovery.entries:
             recovery.publish_latest()
-        for entry in entries:
-            source = self.root / entry["path"]
+        ordered = sorted(entries, key=lambda entry: 2 if entry.get("restoreAction") == "remove_created"
+                         else 0 if entry["path"].endswith(".mcc") else 1)
+        for entry in ordered:
             destination = self._target(entry)
+            if entry.get("restoreAction") == "remove_created":
+                # The recovery set above includes the current bytes, even if Minecraft
+                # edited them since translation. Restore returns to the pre-write absence.
+                destination.unlink(missing_ok=True)
+                continue
+            source = self.root / entry["path"]
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination.with_name(f".{destination.name}.pomi-restore-{uuid.uuid4().hex}.tmp")
             try:
@@ -253,7 +284,13 @@ class BackupSet:
     def _target(self, entry: dict[str, str]) -> Path:
         selected = entry.get("externalTarget")
         if selected is None:
-            return self.world_dir / entry["path"]
+            target = self.world_dir / entry["path"]
+            if entry.get("restoreAction") == "remove_created":
+                if any(part.is_symlink() for part in [target, *target.parents] if part.is_relative_to(self.world_dir)):
+                    raise BackupError("New external chunk restore target cannot be a symbolic link")
+                if target.exists() and not target.is_file():
+                    raise BackupError("New external chunk restore target is not a regular file")
+            return target
         path = Path(selected)
         if (selected not in self.external_files or path.is_symlink() or not path.is_file()
                 or str(path.resolve(strict=True)) != selected
@@ -292,6 +329,13 @@ class BackupSet:
             backup_path = (self.root / Path(*relative.parts)).resolve()
             external_target = raw.get("externalTarget")
             external_parent = raw.get("externalParentId")
+            action = raw.get("restoreAction")
+            if action is not None and (
+                action != "remove_created" or external_target is not None
+                or not re.fullmatch(r"c\.-?\d+\.-?\d+\.mcc", relative.name)
+                or digest != hashlib.sha256(b"").hexdigest() or size != "0"
+            ):
+                raise BackupError("Backup restore action is invalid")
             if external_target is not None:
                 if (not isinstance(external_target, str) or not Path(external_target).is_absolute()
                         or Path(external_target).suffix.lower() != ".zip"
@@ -306,15 +350,24 @@ class BackupSet:
                 raise BackupError("Backup manifest path escapes its allowed root")
             seen.add(relative_text)
             entry = {"path": relative_text, "sha256": digest, "size": size}
+            if action is not None:
+                entry["restoreAction"] = action
             if external_target is not None:
                 entry.update(externalTarget=external_target, externalParentId=external_parent)
             entries.append(entry)
+        for entry in entries:
+            if entry.get("restoreAction") == "remove_created":
+                path = PurePosixPath(entry["path"])
+                _, x, z, _ = path.name.split(".")
+                region = str(path.with_name(f"r.{int(x) // 32}.{int(z) // 32}.mca"))
+                if not any(item["path"] == region and "restoreAction" not in item for item in entries):
+                    raise BackupError("New external chunk has no backed-up region")
         return entries
 
     def _write_manifest(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         document = {
-            "schemaVersion": 2,
+            "schemaVersion": 3 if any("restoreAction" in entry for entry in self.entries) else 2,
             "backupSetId": self.backup_id,
             "createdAt": datetime.now(timezone.utc).isoformat(),
             "verified": True,

@@ -4,7 +4,9 @@
 
   let { overrides = $bindable({}), invalid = $bindable(false) }: { overrides?: Record<string, string>; invalid?: boolean } = $props();
   let text = $state('');
+  let expanded = $state(false);
   let lastSerialized = '';
+  $effect(() => { if (invalid) expanded = true; });
   $effect(() => {
     const next = JSON.stringify(overrides, null, 2);
     if (next !== lastSerialized) { text = next; lastSerialized = next; invalid = false; }
@@ -20,7 +22,7 @@
   }
 </script>
 
-<details open={invalid}>
+<details bind:open={expanded}>
   <summary>{t('settings.overrides.title')}</summary>
   <div class="field">
     <label for="source-overrides" class="label">{t('settings.overrides.label')}</label>
