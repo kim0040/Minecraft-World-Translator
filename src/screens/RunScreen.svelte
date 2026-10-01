@@ -55,7 +55,7 @@
   );
   const costText = $derived.by(() => {
     if (app.manualOnly || estimate?.requests === 0) return t('run.cost.free');
-    if (!estimate) return t('run.cost.unknown');
+    if (!estimate) return app.estimateLoading ? t('run.cost.calculating') : t('run.cost.unknown');
     if (!estimate.cost) return t('run.cost.unknown');
     return t('run.cost.band', { low: formatUsd(estimate.cost.low, app.locale), high: formatUsd(estimate.cost.high, app.locale) });
   });
@@ -96,11 +96,10 @@
         </div>
       </div>
 
+      <!-- Always laid out, so the cancel button does not move when translation starts. -->
       <dl class="facts">
-        {#if p.phase === 'translate'}
-          <div><dt>{t('run.progress.requestsLabel')}</dt><dd class="num">{t('run.progress.requests', { done: p.requests, total: p.requestsEstimate || estimate?.requests || 0 })}</dd></div>
-          <div><dt>{t('result.stat.failed')}</dt><dd class="num" class:bad={p.failed > 0}>{p.failed}</dd></div>
-        {/if}
+        <div><dt>{t('run.progress.requestsLabel')}</dt><dd class="num">{p.phase === 'translate' ? t('run.progress.requests', { done: p.requests, total: p.requestsEstimate || estimate?.requests || 0 }) : '–'}</dd></div>
+        <div><dt>{t('result.stat.failed')}</dt><dd class="num" class:bad={p.failed > 0}>{p.phase === 'translate' ? p.failed : '–'}</dd></div>
       </dl>
 
       {#if p.retry}
@@ -147,7 +146,7 @@
         <div class="row-item"><dt class="k">{t('run.summary.language')}</dt><dd class="v">{app.settings.target_language}</dd></div>
         <div class="row-item"><dt class="k">{t('run.summary.model')}</dt><dd class="v" class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
         {#if REASONING_PROVIDERS.includes(app.settings.provider) && !app.manualOnly}
-          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline">{reasoning}<button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
+          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline"><span class="text">{reasoning}</span><button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
         {/if}
       </dl>
     </section>
@@ -157,13 +156,14 @@
       <dl class="group">
         <div class="row-item"><dt class="k">{t('run.summary.texts')}</dt><dd class="v num">{formatNumber(app.outgoingCount, app.locale)}</dd></div>
         <div class="row-item"><dt class="k">{t('run.summary.manual')}</dt><dd class="v num">{formatNumber(app.manualCount, app.locale)}</dd></div>
-        <div class="row-item"><dt class="k">{t('run.summary.requests')}</dt><dd class="v num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : t('common.unknown')}</dd></div>
+        <div class="row-item"><dt class="k">{t('run.summary.requests')}</dt><dd class="v num">{app.manualOnly ? '0' : estimate ? formatNumber(estimate.requests, app.locale) : app.estimateLoading ? t('run.cost.calculating') : t('common.unknown')}</dd></div>
         <div class="row-item">
           <dt class="k">{t('run.summary.cost')}</dt>
           <dd class="v num">{costText}
-            {#if estimate && estimate.requests > 0}
-              <span class="sub">{t('run.summary.tokens', { input: formatCompact(estimate.inputTokens, app.locale), output: formatCompact(estimate.outputTokens, app.locale) })}</span>
-              <span class="sub">{estimate.cost ? t('run.cost.note') : t('run.cost.unknownWhy')}</span>
+            <!-- While a new estimate is on its way its lines keep their place, so nothing below jumps. -->
+            {#if (estimate && estimate.requests > 0) || (!estimate && app.estimateLoading && !app.manualOnly)}
+              <span class="sub">{estimate ? t('run.summary.tokens', { input: formatCompact(estimate.inputTokens, app.locale), output: formatCompact(estimate.outputTokens, app.locale) }) : '\u00a0'}</span>
+              <span class="sub">{estimate ? (estimate.cost ? t('run.cost.note') : t('run.cost.unknownWhy')) : '\u00a0'}</span>
               {#if REASONING_PROVIDERS.includes(app.settings.provider) && app.settings.openrouter_reasoning !== 'disabled'}<span class="sub">{t('run.reasoning.cost')}</span>{/if}
             {/if}
           </dd>
@@ -197,8 +197,10 @@
 
 <style>
   .external-paths { padding-inline-start: 1em; margin: 0; overflow-wrap: anywhere; }
-  .edit-settings { margin-inline-start: var(--space-2); }
-  .inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+  /* The edit button keeps its line when the summary text changes length, so the rows below stay put. */
+  .inline { display: flex; align-items: center; gap: var(--space-2); }
+  .inline > .text { flex: 1 1 auto; min-width: 0; }
+  .edit-settings { flex: none; }
   .live { padding: var(--space-5); display: grid; gap: var(--space-5); }
   .phases { display: flex; gap: var(--space-5); margin: 0; padding: 0; list-style: none; flex-wrap: wrap; }
   .phases li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-weight: 600; }
@@ -207,8 +209,8 @@
   .dot { position: relative; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border-control); font-size: var(--text-xs); font-variant-numeric: tabular-nums; background: var(--bg-surface); }
   li.done .dot { background: var(--success-solid); border-color: var(--success-solid); color: #fff; }
   li.current .dot { border-color: var(--accent); }
-  .ping { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: 0.3; scale: 0.8; } }
+  .ping { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pomi-pulse 1.2s ease-in-out infinite; }
+  @keyframes pomi-pulse { 50% { opacity: 0.3; scale: 0.8; } }
   .bar { display: grid; gap: var(--space-2); }
   .line { display: flex; align-items: baseline; gap: var(--space-3); }
   .strong { font-weight: 700; }

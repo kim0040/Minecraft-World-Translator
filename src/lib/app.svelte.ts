@@ -94,6 +94,8 @@ export class AppState {
   excluded = new SvelteSet<string>();
   overrides = $state<Record<string, string>>({});
   estimate = $state<Estimate | null>(null);
+  /** True while a newer estimate is on its way, so screens can say "calculating" instead of "unknown". */
+  estimateLoading = $state(false);
   failurePolicy = $state<'stop' | 'skip'>('stop');
 
   progress = $state<JobProgress>(emptyProgress());
@@ -321,6 +323,7 @@ export class AppState {
 
   private resetJob(): void {
     this.estimateRevision++;
+    this.estimateLoading = false;
     this.scan = null;
     this.candidates.reset('');
     this.excluded.clear();
@@ -440,6 +443,7 @@ export class AppState {
     const planId = this.scan.scanPlanId;
     const signature = this.estimateSignature();
     this.estimate = null;
+    this.estimateLoading = true;
     try {
       const estimate = await callBackend<Estimate>('estimate.get', {
         scanPlanId: planId,
@@ -449,6 +453,8 @@ export class AppState {
       if (revision === this.estimateRevision && signature === this.estimateSignature()) this.estimate = estimate;
     } catch {
       // An unavailable estimate stays unknown; stale costs must not describe new choices.
+    } finally {
+      if (revision === this.estimateRevision) this.estimateLoading = false;
     }
   }
 

@@ -16,7 +16,7 @@
 
 <style>
   .bar { height: 10px; border-radius: var(--radius-full); background: var(--bg-sunken); overflow: hidden; border: 1px solid var(--border); }
-  .fill { height: 100%; border-radius: var(--radius-full); background: var(--accent); transition: width 240ms var(--ease); }
+  .fill { height: 100%; border-radius: var(--radius-full); background: var(--accent); transition: width var(--dur-slow) var(--ease); }
   .indeterminate { width: 32%; animation: slide 1.3s var(--ease) infinite; }
   @keyframes slide { from { translate: -100% 0; } to { translate: 320% 0; } }
 </style>

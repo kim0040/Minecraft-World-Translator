@@ -167,7 +167,7 @@
 {/if}
 
 <style>
-  .review { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: var(--space-3); height: 100%; min-height: 460px; }
+  .review { animation: pomi-enter var(--dur-base) var(--ease-out) backwards; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: var(--space-3); height: 100%; min-height: 460px; }
   .head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
   h1 { font-size: var(--text-2xl); }
   .lead { color: var(--text-secondary); margin-top: var(--space-1); }
@@ -179,7 +179,7 @@
   .sort { flex: 0 0 auto; }
   .sort .select { width: auto; min-width: 200px; }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--border-control); background: var(--bg-surface); color: var(--text); font-size: var(--text-sm); font-weight: 600; transition: background-color 120ms var(--ease), border-color 120ms var(--ease); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--border-control); background: var(--bg-surface); color: var(--text); font-size: var(--text-sm); font-weight: 600; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
   .chip .n { color: var(--text-secondary); font-weight: 500; }
   .chip[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
   .chip[aria-pressed='true'] .n { color: inherit; }

@@ -161,7 +161,7 @@ export const ja: Record<MessageKey, string> = {
   'world.blocked.missing': '指定されたフォルダーが見つかりません。',
   'world.blocked.unsafe_path': 'ワールド外を指すデータやシンボリックリンクのリソースパックは処理できません。ワールド内に通常のファイルをコピーしてください。',
   'world.blocked.unknown': '安全に処理できない未対応の形式が含まれているため、処理を中断しました。',
-  'world.continue': 'スキャンへ進む',
+  'world.continue': 'スキャン結果を見る',
   'world.resumeFound': '中断された前回の作業が見つかりました',
 
   'scan.title': 'ワールドスキャン',
@@ -575,4 +575,7 @@ export const ja: Record<MessageKey, string> = {
   'run.summaryTitle': "翻訳設定",
   'run.workTitle': "作業範囲と費用",
   'run.progress.requestsLabel': "API リクエスト",
+  'world.scanNote': "スキャンはワールドファイルを読み取るだけで、APIは呼び出しません。",
+  'world.scanKept': "このワールドのスキャン結果が残っています。再スキャンはスキャン画面から行えます。",
+  'run.cost.calculating': "計算中…",
 };

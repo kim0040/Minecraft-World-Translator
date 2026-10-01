@@ -230,7 +230,7 @@
   .restoring p { font-size: var(--text-sm); }
 
   .list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin: var(--space-2) 0 var(--space-3); }
-  .section-title { font-size: var(--text-lg); }
+  .list-heading > .section-title { margin: 0; }
   .backup-list { display: grid; gap: var(--space-3); list-style: none; margin: 0; padding: 0; }
   .backup-card { display: grid; gap: var(--space-4); padding: var(--space-5); }
   .backup-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }

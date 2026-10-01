@@ -81,13 +81,6 @@
         <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.chooseWorld()}>
           <Icon name="folder" size={16} /> {t('world.open')}
         </button>
-        <span class="spacer"></span>
-        <button type="button" class="btn btn-secondary" disabled={blockers.length > 0} onclick={() => app.goStep('scan')}>
-          {t('world.continue')}
-        </button>
-        <button type="button" class="btn btn-primary btn-lg" disabled={blockers.length > 0 || app.isBusy} onclick={startScan}>
-          <Icon name="search" size={16} /> {t('world.startScan')}
-        </button>
       </div>
     </section>
   {:else}
@@ -165,6 +158,23 @@
       </ul>
     {/if}
   </section>
+
+  {#if app.worldDir && app.inspection?.validJavaWorld}
+    <div class="action-bar">
+      <p class="note">{app.scan ? t('world.scanKept') : t('world.scanNote')}</p>
+      <div class="buttons">
+        {#if app.scan}
+          <button type="button" class="btn btn-primary btn-lg" disabled={blockers.length > 0} onclick={() => app.goStep('scan')}>
+            {t('world.continue')} <Icon name="chevron-right" size={16} />
+          </button>
+        {:else}
+          <button type="button" class="btn btn-primary btn-lg" disabled={blockers.length > 0 || app.isBusy} onclick={startScan}>
+            <Icon name="search" size={16} /> {t('world.startScan')}
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -176,15 +186,12 @@
   .path { font-size: var(--text-sm); color: var(--text-secondary); margin-top: 2px; }
   .facts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
   .plain { margin: 0; padding-inline-start: 18px; }
-  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-top: 1px solid var(--border); margin-top: var(--space-1); padding-top: var(--space-4); }
-  .spacer { flex: 1; }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .small { font-size: var(--text-sm); }
-  .section-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-  .section-row .section-title { margin-bottom: 0; }
   .found { display: grid; gap: var(--space-2); }
   .tiles { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-2); }
   .tile { width: 100%; min-width: 0; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: var(--space-2); text-align: start;
-    background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color 100ms var(--ease), background-color 100ms var(--ease); }
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
   .tile.current { border-color: var(--accent); background: var(--bg-selected); }
   .tile:disabled { opacity: 0.6; }
   @media (hover: hover) { .tile:not(:disabled):hover { border-color: var(--border-strong); } }
@@ -197,11 +204,10 @@
   .art img { width: 72px; height: 72px; object-fit: contain; }
   .copy h2 { font-size: var(--text-xl); }
   .copy p { margin-top: var(--space-1); }
-  .section-title { font-size: var(--text-lg); margin-bottom: var(--space-3); }
   .worlds { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
   .world { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); min-width: 0; }
   .open { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 44px; padding: 6px var(--space-3);
-    min-width: 0; width: 100%; text-align: start; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color 120ms var(--ease), background-color 120ms var(--ease); }
+    min-width: 0; width: 100%; text-align: start; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
   .world.current .open { border-color: var(--accent); background: var(--bg-selected); }
   .open:disabled { opacity: 0.6; }
   .ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--text-secondary); }

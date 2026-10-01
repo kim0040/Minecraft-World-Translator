@@ -37,7 +37,7 @@
 
 | 영역 | 최신 증거 | 범위 |
 | --- | --- | --- |
-| 후속(2026-10-01) | Python22/Rust28/check·build/frontend58/browser94 PASS, 실제 Gemini 13요청 | [네이티브 UX·Gemini·SNBT](history/native-ux-and-compat-2026-10-01.md). Linux 환경, macOS native 미확인 |
+| 후속(2026-10-01) | Python22/Rust28/check·build/frontend58/browser98 PASS(부드러움·일관성 후속 포함), 실제 Gemini 실측 | [네이티브 UX·Gemini·SNBT](history/native-ux-and-compat-2026-10-01.md). Linux 환경, macOS native 미확인 |
 | Python | 최종20 suites PASS | 신규 .mcc 경계/복원/실패/물리 집계 및 기존 core/provider/JSONL |
 | Frontend | 전체11 files /58 PASS | startup4 포함 최신 frontend source |
 | Browser | 최종87 실행 중86 PASS/1 FAIL→수정 후 영향7 PASS | override 입력창 자동 닫힘과 오래된 Save 기대 수정. 영향 없는86 재사용; 단일 전체87 PASS 실행 아님 |

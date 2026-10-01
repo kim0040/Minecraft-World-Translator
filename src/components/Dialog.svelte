@@ -52,7 +52,9 @@
     overflow: auto; overscroll-behavior: contain; color: var(--text); background: var(--bg-surface);
     border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop);
   }
-  .dialog::backdrop { background: var(--scrim); }
+  /* A sheet appears the same way everywhere: the scrim fades, the panel fades in from 97%. */
+  .dialog[open] { animation: pomi-pop var(--dur-base) var(--ease-out); }
+  .dialog::backdrop { background: var(--scrim); animation: pomi-fade var(--dur-base) var(--ease-out); }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
   h2 { font-size: var(--text-xl); }
   .close { margin: -4px -8px 0 0; }

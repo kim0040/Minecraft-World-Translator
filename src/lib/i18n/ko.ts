@@ -162,7 +162,7 @@ export const ko = {
   'world.blocked.missing': '지정된 폴더를 찾을 수 없습니다.',
   'world.blocked.unsafe_path': '월드 밖을 가리키는 파일 경로나 심볼릭 링크 리소스팩은 처리할 수 없습니다. 월드 안의 일반 파일 복사본을 사용해 주세요.',
   'world.blocked.unknown': '안전하게 처리할 수 없는 미지원 형식이 포함되어 있어 작업을 중단했습니다.',
-  'world.continue': '스캔 단계로 이동',
+  'world.continue': '스캔 결과 보기',
   'world.resumeFound': '이전에 중단된 작업 기록이 있습니다',
 
   'scan.title': '월드 스캔',
@@ -576,6 +576,9 @@ export const ko = {
   'run.summaryTitle': "번역 설정",
   'run.workTitle': "작업 범위와 비용",
   'run.progress.requestsLabel': "API 요청",
+  'world.scanNote': "스캔은 월드 파일을 읽기만 하며 API를 호출하지 않습니다.",
+  'world.scanKept': "이 월드의 스캔 결과가 남아 있습니다. 다시 스캔하려면 스캔 화면에서 진행하세요.",
+  'run.cost.calculating': "계산 중…",
 } as const;
 
 export type MessageKey = keyof typeof ko;

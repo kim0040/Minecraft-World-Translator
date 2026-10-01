@@ -100,7 +100,7 @@
     display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
     border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text);
     font-size: var(--text-md); font-weight: 500; text-align: start;
-    transition: background-color 100ms var(--ease), color 100ms var(--ease);
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
   }
   .nav :global(.icon) { color: var(--accent-text); flex: none; }
   .nav.active { background: color-mix(in srgb, var(--text) 10%, transparent); font-weight: 600; }
@@ -114,8 +114,7 @@
   .status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sub { grid-column: 2; font-weight: 400; color: var(--text-secondary); font-size: var(--text-xs); }
   .dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--success-solid); }
-  .dot.busy { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: 0.35; } }
+  .dot.busy { background: var(--accent); animation: pomi-pulse-dot 1.4s ease-in-out infinite; }
   .rail .state { justify-content: center; padding: var(--space-2); }
   .rail .text, .rail .pomi { display: none; }
   .rail .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); }

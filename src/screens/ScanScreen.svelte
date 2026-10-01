@@ -182,7 +182,6 @@
   .stat { padding: var(--space-3) var(--space-4); display: grid; gap: 2px; border-inline-start: 1px solid var(--border); margin-inline-start: -1px; }
   .stat .v { font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
   .stat .l { font-size: var(--text-sm); color: var(--text-secondary); }
-  .section-title { font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-3); }
   .kinds { padding: var(--space-4) var(--space-5); }
   .kinds ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-2) var(--space-5); }
   .kinds li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }

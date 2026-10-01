@@ -216,7 +216,7 @@
   .notice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
   .notice-list li { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: var(--space-3); }
   .notice-list :global(.icon) { color: var(--accent-text); margin-top: 2px; }
-  .drop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, transparent); outline: 3px dashed var(--accent); outline-offset: -12px; pointer-events: none; }
+  .drop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, transparent); outline: 3px dashed var(--accent); outline-offset: -12px; pointer-events: none; animation: pomi-fade var(--dur-fast) var(--ease-out); }
   .drop-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-radius: var(--radius-xl); background: var(--bg-surface); color: var(--accent-text); font-weight: 600; box-shadow: var(--shadow-pop); }
 
   @media (max-width: 1000px) {

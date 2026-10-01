@@ -29,7 +29,13 @@
   /* space (4px grid) and shape */
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 28px; --space-7: 40px;
   --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 10px; --radius-full: 999px;
+  /* Motion: three durations for the whole app. Hover/press feedback is fast, things that appear
+     (screens, dialogs, toasts) use base, progress uses slow. Reduced motion turns all of it off. */
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 100ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
   --sidebar-width: 220px;
   --sidebar-rail: 60px;
   --toolbar-height: 52px;

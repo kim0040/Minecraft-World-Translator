@@ -198,6 +198,7 @@
     if (type === 'resume.status') return ok(request, ['result-cancelled', 'result-needs_retry'].includes(current) ? { ...resumePayload(), status: current.slice(7) } : { available: false });
     if (type === 'backups.list') return ok(request, { backups });
     if (type === 'estimate.get') {
+      if (new URLSearchParams(location.search).get('slowEstimate') === '1') await new Promise((resolve) => setTimeout(resolve, 600));
       const excluded = new Set([...(body.excludedCandidateIds || []), ...(body.overrideCandidateIds || [])]);
       const count = candidates.filter((row) => !excluded.has(row.id) && !settings.source_overrides?.[row.source]).length;
       return ok(request, { ...estimate, candidateCount: count, requests: Math.ceil(count / 40) });

@@ -161,7 +161,7 @@ export const en: Record<MessageKey, string> = {
   'world.blocked.missing': 'Specified world folder was not found.',
   'world.blocked.unsafe_path': 'World data outside this folder or a symlinked resource pack cannot be processed. Use regular file copies inside the world.',
   'world.blocked.unknown': 'This world contains an unsupported format that cannot be safely processed.',
-  'world.continue': 'Proceed to Scan',
+  'world.continue': 'View scan results',
   'world.resumeFound': 'Found a previously paused translation job',
 
   'scan.title': 'World Scan',
@@ -575,4 +575,7 @@ export const en: Record<MessageKey, string> = {
   'run.summaryTitle': "Translation setup",
   'run.workTitle': "Scope and cost",
   'run.progress.requestsLabel': "API requests",
+  'world.scanNote': "Scanning only reads the world files and makes no API calls.",
+  'world.scanKept': "This world's scan results are kept. To scan again, use the Scan screen.",
+  'run.cost.calculating': "Calculating…",
 };
