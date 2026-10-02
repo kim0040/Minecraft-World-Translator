@@ -37,7 +37,7 @@
 
 | 영역 | 최신 증거 | 범위 |
 | --- | --- | --- |
-| 후속(2026-10-02) | Python23/Rust29/check·build/frontend62/browser108 PASS: 도움말·시작 안내·라이선스 뷰어·업데이트·데이터 위치·초기화·설정 내구성 | [업데이트·데이터](updates-and-data.md). 실제 서명 release 업데이트·각 OS native 미확인 |
+| 후속(2026-10-02) | Python23/Rust30/check·build/frontend62/browser114 PASS: 도움말·시작 안내·라이선스 뷰어·업데이트·데이터 위치·초기화·설정 내구성, 라이트/다크/시스템 화면 모드(설정 타일·보기 메뉴·OS 변경 추적·시작 전 적용·전 화면 다크 axe) | [업데이트·데이터](updates-and-data.md). 실제 서명 release 업데이트·각 OS native 미확인 |
 | 후속(2026-10-01) | Python22/Rust28/check·build/frontend58/browser98 PASS(부드러움·일관성 후속 포함), 실제 Gemini 실측 | [네이티브 UX·Gemini·SNBT](history/native-ux-and-compat-2026-10-01.md). Linux 환경, macOS native 미확인 |
 | Python | 최종20 suites PASS | 신규 .mcc 경계/복원/실패/물리 집계 및 기존 core/provider/JSONL |
 | Frontend | 전체11 files /58 PASS | startup4 포함 최신 frontend source |

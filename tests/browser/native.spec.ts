@@ -52,7 +52,8 @@ test('menu commands open settings, open a world and focus search on review', asy
   const labels = await page.evaluate(() => ((window as any).__pomiChrome ?? []).filter((c: any) => c.command === 'set_menu_labels').at(-1)?.args.labels);
   expect(labels).toEqual({
     openWorld: '월드 열기…', settings: '설정…', find: '찾기…', help: 'PomiTranslate 도움말', tour: '시작 안내',
-    shortcuts: '단축키', licenses: '오픈소스 라이선스', report: '문제 신고…', updates: '업데이트 확인…'
+    shortcuts: '단축키', licenses: '오픈소스 라이선스', report: '문제 신고…', updates: '업데이트 확인…',
+    appearance: '화면 모드', themeSystem: '시스템', themeLight: '라이트', themeDark: '다크'
   });
 });
 

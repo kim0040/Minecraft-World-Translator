@@ -271,6 +271,7 @@ export class AppState {
 
   destroy(): void {
     this.destroyed = true;
+    if (this.prefsRetry) clearTimeout(this.prefsRetry);
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
   }
@@ -299,14 +300,29 @@ export class AppState {
     }
   }
 
-  /** Save app state. The change applies at once; a failed save keeps it for this session. */
+  private unsavedPrefs: Partial<AppPrefs> = {};
+  private prefsRetry: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Save app state. The change applies at once. While a scan, translation or restore holds the core
+   * the save cannot run, so it is kept and retried until it lands; otherwise the next launch would
+   * read the older value from the settings file.
+   */
   async setPrefs(changes: Partial<AppPrefs>): Promise<void> {
     this.prefs = { ...this.prefs, ...changes };
+    const pending = { ...this.unsavedPrefs, ...changes };
+    this.unsavedPrefs = {};
     try {
-      const saved = await callBackend<{ prefs: AppPrefs }>('prefs.set', { prefs: changes });
-      this.prefs = { ...this.prefs, ...saved.prefs, ...changes };
+      const saved = await callBackend<{ prefs: AppPrefs }>('prefs.set', { prefs: pending });
+      this.prefs = { ...this.prefs, ...saved.prefs, ...this.unsavedPrefs };
     } catch {
-      // The core may be busy with a job; the next change saves the whole state again.
+      this.unsavedPrefs = { ...pending, ...this.unsavedPrefs };
+      if (!this.prefsRetry && !this.destroyed) {
+        this.prefsRetry = setTimeout(() => {
+          this.prefsRetry = null;
+          if (Object.keys(this.unsavedPrefs).length) void this.setPrefs({});
+        }, 3000);
+      }
     }
   }
 
@@ -415,6 +431,11 @@ export class AppState {
 
   /** Commands from the native menu bar (or their shortcuts in a browser preview). */
   menu(action: MenuAction): void {
+    // The appearance applies at any time, even while the app is starting or busy.
+    if (action === 'theme-system' || action === 'theme-light' || action === 'theme-dark') {
+      this.setTheme(action.slice(6) as ThemeChoice);
+      return;
+    }
     if (!this.ready || this.startupFailed || this.busy === 'settings') return;
     if (action === 'settings') {
       this.goto('settings');

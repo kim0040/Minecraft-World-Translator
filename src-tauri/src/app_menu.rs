@@ -5,7 +5,7 @@
 //! as `pomi-menu`; the page decides whether it applies to the current screen.
 use serde::Deserialize;
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Emitter, Manager, State, Wry,
 };
 
@@ -18,6 +18,9 @@ pub const SHORTCUTS: &str = "pomi-shortcuts";
 pub const LICENSES: &str = "pomi-licenses";
 pub const REPORT: &str = "pomi-report";
 pub const UPDATES: &str = "pomi-updates";
+pub const THEME_SYSTEM: &str = "pomi-theme-system";
+pub const THEME_LIGHT: &str = "pomi-theme-light";
+pub const THEME_DARK: &str = "pomi-theme-dark";
 
 pub struct AppMenu {
     open_world: MenuItem<Wry>,
@@ -29,6 +32,8 @@ pub struct AppMenu {
     licenses: MenuItem<Wry>,
     report: MenuItem<Wry>,
     updates: MenuItem<Wry>,
+    appearance: Submenu<Wry>,
+    themes: [(&'static str, CheckMenuItem<Wry>); 3],
 }
 
 fn submenu(menu: &Menu<Wry>, names: &[&str]) -> Option<Submenu<Wry>> {
@@ -50,6 +55,23 @@ pub fn extend(app: &tauri::App, menu: &Menu<Wry>) -> tauri::Result<()> {
     let licenses = MenuItem::with_id(handle, LICENSES, "Open-Source Licenses", true, None::<&str>)?;
     let report = MenuItem::with_id(handle, REPORT, "Report a Problem…", true, None::<&str>)?;
     let updates = MenuItem::with_id(handle, UPDATES, "Check for Updates…", true, None::<&str>)?;
+    // View > Appearance: the same three choices as Settings, ticked to match the current one.
+    let themes = [
+        ("system", CheckMenuItem::with_id(handle, THEME_SYSTEM, "System", true, true, None::<&str>)?),
+        ("light", CheckMenuItem::with_id(handle, THEME_LIGHT, "Light", true, false, None::<&str>)?),
+        ("dark", CheckMenuItem::with_id(handle, THEME_DARK, "Dark", true, false, None::<&str>)?),
+    ];
+    let appearance = Submenu::with_items(handle, "Appearance", true, &[&themes[0].1, &themes[1].1, &themes[2].1])?;
+    match submenu(menu, &["View"]) {
+        Some(view) => {
+            view.prepend(&PredefinedMenuItem::separator(handle)?)?;
+            view.prepend(&appearance)?;
+        }
+        None => {
+            let view = Submenu::with_items(handle, "View", true, &[&appearance])?;
+            menu.append(&view)?;
+        }
+    }
 
     let file = match submenu(menu, &["File"]) {
         Some(file) => file,
@@ -125,7 +147,7 @@ pub fn extend(app: &tauri::App, menu: &Menu<Wry>) -> tauri::Result<()> {
         }
     }
 
-    app.manage(AppMenu { open_world, settings, find, help, tour, shortcuts, licenses, report, updates });
+    app.manage(AppMenu { open_world, settings, find, help, tour, shortcuts, licenses, report, updates, appearance, themes });
     Ok(())
 }
 
@@ -141,6 +163,9 @@ pub fn select(app: &AppHandle, id: &str) -> bool {
         LICENSES => "licenses",
         REPORT => "report",
         UPDATES => "updates",
+        THEME_SYSTEM => "theme-system",
+        THEME_LIGHT => "theme-light",
+        THEME_DARK => "theme-dark",
         _ => return false,
     };
     if let Some(window) = app.get_webview_window("main") {
@@ -167,6 +192,14 @@ pub struct MenuLabels {
     report: String,
     #[serde(default)]
     updates: String,
+    #[serde(default)]
+    appearance: String,
+    #[serde(default, rename = "themeSystem")]
+    theme_system: String,
+    #[serde(default, rename = "themeLight")]
+    theme_light: String,
+    #[serde(default, rename = "themeDark")]
+    theme_dark: String,
 }
 
 /// The page sends its own wording so the menu speaks the selected interface language.
@@ -188,6 +221,29 @@ pub fn set_menu_labels(menu: State<'_, AppMenu>, labels: MenuLabels) -> Result<(
         if !text.trim().is_empty() {
             item.set_text(text).map_err(|_| "Menu label could not be updated")?;
         }
+    }
+    let appearance = clean(&labels.appearance);
+    if !appearance.trim().is_empty() {
+        menu.appearance.set_text(appearance).map_err(|_| "Menu label could not be updated")?;
+    }
+    for ((_, item), text) in menu.themes.iter().zip([&labels.theme_system, &labels.theme_light, &labels.theme_dark]) {
+        let text = clean(text);
+        if !text.trim().is_empty() {
+            item.set_text(text).map_err(|_| "Menu label could not be updated")?;
+        }
+    }
+    Ok(())
+}
+
+/// Tick the current appearance. A menu click also toggles the clicked item, so this always resets
+/// all three from the page's choice.
+#[tauri::command]
+pub fn set_menu_theme(menu: State<'_, AppMenu>, choice: String) -> Result<(), String> {
+    if !["system", "light", "dark"].contains(&choice.as_str()) {
+        return Err("Unknown appearance".into());
+    }
+    for (name, item) in &menu.themes {
+        item.set_checked(*name == choice).map_err(|_| "Menu could not be updated")?;
     }
     Ok(())
 }

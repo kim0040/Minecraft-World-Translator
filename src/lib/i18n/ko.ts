@@ -697,6 +697,14 @@ export const ko = {
   'licenses.thirdParty': "포함된 구성 요소",
   'licenses.loading': "불러오는 중…",
   'licenses.failed': "라이선스 파일을 읽지 못했습니다. 저장소의 THIRD_PARTY_NOTICES.md를 참고해 주세요.",
+  'settings.app.subtitle': "화면 모드와 표시 언어",
+  'settings.app.appearance': "화면 모드",
+  'settings.theme.systemShort': "시스템",
+  'settings.theme.lightShort': "라이트",
+  'settings.theme.darkShort': "다크",
+  'settings.theme.instant': "고르는 즉시 적용되며, 저장 버튼을 누르지 않아도 다음 실행에 유지됩니다.",
+  'settings.theme.following': "운영체제 설정을 따릅니다 (지금: {mode}). 운영체제에서 바꾸면 앱도 바로 바뀝니다.",
+  'menu.appearance': "화면 모드",
 } as const;
 
 export type MessageKey = keyof typeof ko;

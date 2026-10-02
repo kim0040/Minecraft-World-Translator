@@ -7,7 +7,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Unsubscribe = () => void;
-export type MenuAction = 'open-world' | 'settings' | 'find' | 'help' | 'tour' | 'shortcuts' | 'licenses' | 'report' | 'updates';
+export type MenuAction = 'open-world' | 'settings' | 'find' | 'help' | 'tour' | 'shortcuts' | 'licenses' | 'report' | 'updates'
+  | 'theme-system' | 'theme-light' | 'theme-dark';
 
 export function inShell(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -80,10 +81,16 @@ export function setWindowTheme(choice: 'system' | 'light' | 'dark', background: 
 export type MenuLabels = {
   openWorld: string; settings: string; find: string;
   help: string; tour: string; shortcuts: string; licenses: string; report: string; updates: string;
+  appearance: string; themeSystem: string; themeLight: string; themeDark: string;
 };
 
 export async function setMenuLabels(labels: MenuLabels): Promise<void> {
   await quietly(() => invoke('set_menu_labels', { labels }));
+}
+
+/** Tick the matching item in View > Appearance. */
+export async function setMenuTheme(choice: 'system' | 'light' | 'dark'): Promise<void> {
+  await quietly(() => invoke('set_menu_theme', { choice }));
 }
 
 export async function onMenu(handler: (action: MenuAction) => void): Promise<Unsubscribe> {

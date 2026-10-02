@@ -295,11 +295,11 @@
       if (command === 'cancel_active') return true;
       if (command === 'sidecar_request') return sidecar(args.request);
       // Window chrome calls are decoration in the preview: accept and record them.
-      if (command.startsWith('plugin:window|') || command === 'set_menu_labels') { (window.__pomiChrome ||= []).push({ command, args }); return null; }
+      if (command.startsWith('plugin:window|') || command === 'set_menu_labels' || command === 'set_menu_theme') { (window.__pomiChrome ||= []).push({ command, args }); return null; }
       throw new Error(`Unsupported fixture command: ${command}`);
     }
   };
   if (scenario() !== 'first-run') localStorage.setItem('pomi.notice.v1', 'accepted');
   else localStorage.removeItem('pomi.notice.v1');
-  localStorage.setItem('pomi.theme.v1', scenario() === 'dark-review' ? 'dark' : 'light');
+  localStorage.setItem('pomi.theme.v1', new URLSearchParams(location.search).get('theme') || (scenario() === 'dark-review' ? 'dark' : 'light'));
 })();

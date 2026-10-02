@@ -53,8 +53,7 @@ for (const locale of ['en', 'ja']) {
   test(`${locale} review and settings fit a short narrow window in dark mode`, async ({ page }) => {
     await review(page);
     await page.getByRole('button', { name: '환경 설정', exact: true }).click();
-    await page.locator('#application-settings > summary').click();
-    await page.locator('#theme').selectOption('dark');
+    await page.locator('#application-settings').getByRole('radio', { name: '다크' }).check();
     await page.locator('#ui-language').selectOption(locale);
     await page.getByRole('button', { name: '저장', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', locale);

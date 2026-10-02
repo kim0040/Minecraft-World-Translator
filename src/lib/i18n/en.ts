@@ -696,4 +696,12 @@ export const en: Record<MessageKey, string> = {
   'licenses.thirdParty': "Included software",
   'licenses.loading': "Loading…",
   'licenses.failed': "The license file could not be read. See THIRD_PARTY_NOTICES.md in the repository.",
+  'settings.app.subtitle': "Appearance and interface language",
+  'settings.app.appearance': "Appearance",
+  'settings.theme.systemShort': "System",
+  'settings.theme.lightShort': "Light",
+  'settings.theme.darkShort': "Dark",
+  'settings.theme.instant': "Applies as soon as you pick it and is kept for the next launch without saving.",
+  'settings.theme.following': "Follows your system (now: {mode}). Change it in the system and the app follows at once.",
+  'menu.appearance': "Appearance",
 };

@@ -6,6 +6,7 @@ mod provider_boundary;
 mod settings_transaction;
 mod sidecar_paths;
 mod startup;
+mod startup_theme;
 mod updates;
 mod zoom_menu;
 
@@ -451,6 +452,7 @@ pub fn run() {
         .manage(credentials::Credentials::default())
         .setup(|app| {
             zoom_menu::install(app)?;
+            startup_theme::apply(app);
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -466,6 +468,7 @@ pub fn run() {
             operation_active,
             document_export::export_document,
             app_menu::set_menu_labels,
+            app_menu::set_menu_theme,
             desktop_links::open_external,
             desktop_links::data_locations,
             desktop_links::reveal_data_folder,

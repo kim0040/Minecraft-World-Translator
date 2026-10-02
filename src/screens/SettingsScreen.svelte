@@ -35,11 +35,20 @@
     { value: 'custom', label: 'settings.style.custom' as MessageKey }
   ];
 
-  const themes: { value: ThemeChoice; label: MessageKey }[] = [
-    { value: 'system', label: 'settings.theme.system' },
-    { value: 'light', label: 'settings.theme.light' },
-    { value: 'dark', label: 'settings.theme.dark' }
+  const themes: { value: ThemeChoice; short: MessageKey }[] = [
+    { value: 'system', short: 'settings.theme.systemShort' },
+    { value: 'light', short: 'settings.theme.lightShort' },
+    { value: 'dark', short: 'settings.theme.darkShort' }
   ];
+  // What "system" means right now, so the choice explains itself.
+  let systemDark = $state(typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $effect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia('(prefers-color-scheme: dark)');
+    const listener = () => { systemDark = query.matches; };
+    query.addEventListener('change', listener);
+    return () => query.removeEventListener('change', listener);
+  });
 
   const providerDefaults: Record<string, { baseUrl: string; wireFormat: string }> = {
     openai: { baseUrl: 'https://api.openai.com/v1', wireFormat: 'openai' },
@@ -369,10 +378,6 @@
     } finally { importing = false; }
   }
 
-  function setTheme(event: Event): void {
-    app.setTheme((event.currentTarget as HTMLSelectElement).value as ThemeChoice);
-  }
-
   function resetDraft(): void {
     draft = copySettings({ ...defaultSettings(), ui_language: app.locale, last_world_dir: app.worldDir });
     apiKey = '';
@@ -677,15 +682,25 @@
       </details>
     </section>
 
-    <section class="card settings-section" aria-labelledby="app-title">
-      <details class="advanced" id="application-settings">
-      <summary>
-        <span class="section-head compact">
-          <span class="section-icon" aria-hidden="true"><Icon name="sliders" size={20} /></span>
-          <span><strong id="app-title">{t('settings.app.title')}</strong><small>{t('settings.app.theme')}</small></span>
-        </span>
-        <Icon name="chevron-down" size={18} />
-      </summary>
+    <section class="card settings-section" id="application-settings" aria-labelledby="app-title">
+      <div class="section-head">
+        <span class="section-icon" aria-hidden="true"><Icon name="sliders" size={20} /></span>
+        <div><h2 id="app-title">{t('settings.app.title')}</h2><p>{t('settings.app.subtitle')}</p></div>
+      </div>
+      <!-- The mode applies the moment it is picked, like the system's own appearance setting. -->
+      <fieldset class="appearance" aria-describedby="theme-help">
+        <legend class="label">{t('settings.app.appearance')}</legend>
+        <div class="theme-options">
+          {#each themes as theme (theme.value)}
+            <label class="theme-option" class:selected={app.theme === theme.value}>
+              <input type="radio" name="theme" value={theme.value} checked={app.theme === theme.value} onchange={() => app.setTheme(theme.value)} />
+              <span class="preview {theme.value}" aria-hidden="true"><span class="bar"></span><span class="line"></span><span class="line short"></span></span>
+              <span class="name">{t(theme.short)}</span>
+            </label>
+          {/each}
+        </div>
+        <span id="theme-help" class="hint">{app.theme === 'system' ? t('settings.theme.following', { mode: t(systemDark ? 'settings.theme.darkShort' : 'settings.theme.lightShort') }) : t('settings.theme.instant')}</span>
+      </fieldset>
       <div class="fields two">
         <div class="field">
           <label class="label" for="ui-language">{t('settings.app.language')}</label>
@@ -695,14 +710,7 @@
             <option value="ja">{t('lang.ja')}</option>
           </select>
         </div>
-        <div class="field">
-          <label class="label" for="theme">{t('settings.app.theme')}</label>
-          <select id="theme" class="select" value={app.theme} onchange={setTheme}>
-            {#each themes as theme (theme.value)}<option value={theme.value}>{t(theme.label)}</option>{/each}
-          </select>
-        </div>
       </div>
-      </details>
     </section>
 
     <section class="card settings-section">
@@ -795,6 +803,31 @@
   .mode-option:has(input:disabled) { opacity: 0.6; cursor: default; }
   .mode-option input { accent-color: var(--accent); margin: 0; }
   .strength { max-width: 320px; }
+  .appearance { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--space-2); }
+  .appearance legend { margin-bottom: var(--space-2); }
+  .theme-options { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  .theme-option { position: relative; display: grid; justify-items: center; gap: 6px; padding: 6px; border-radius: var(--radius-lg); border: 2px solid transparent; }
+  /* The real radio covers the tile, so a click anywhere on it chooses, and the keyboard still works. */
+  .theme-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; z-index: 1; }
+  .theme-option.selected { border-color: var(--accent); }
+  .theme-option:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .theme-option .name { font-size: var(--text-sm); font-weight: 500; }
+  .theme-option.selected .name { font-weight: 600; color: var(--accent-text); }
+  /* Miniature windows: fixed colours on purpose, they show each mode whatever the current one is. */
+  .preview { width: 96px; height: 60px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); overflow: hidden; display: grid; grid-template-rows: 12px 1fr; align-content: start; gap: 6px; padding-bottom: 6px; }
+  .preview .bar { display: block; }
+  .preview .line { display: block; height: 6px; margin-inline: 10px; border-radius: 3px; }
+  .preview .line.short { width: 40%; }
+  .preview.light { background: #f9f8f7; }
+  .preview.light .bar { background: #e6e2dd; }
+  .preview.light .line { background: #d6d0c8; }
+  .preview.dark { background: #1d1914; }
+  .preview.dark .bar { background: #37322c; }
+  .preview.dark .line { background: #4a443d; }
+  .preview.system { background: linear-gradient(135deg, #f9f8f7 0 50%, #1d1914 50% 100%); }
+  .preview.system .bar { background: linear-gradient(135deg, #e6e2dd 0 50%, #37322c 50% 100%); }
+  .preview.system .line { background: #867b6f; }
+  .preview .bar + .line { background-color: #2c6cec; }
   /* A window footer, quiet until there is something to save. */
   .save-bar { position: sticky; inset-block-end: calc(-1 * var(--pane-pad-bottom, 0px)); z-index: 15; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3);
     margin: 0 calc(-1 * var(--pane-pad-x, 0px)) calc(-1 * var(--pane-pad-bottom, 0px)); padding: 10px var(--pane-pad-x, var(--space-4));

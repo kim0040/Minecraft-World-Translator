@@ -104,7 +104,9 @@
     void setMenuLabels({
       openWorld: t('menu.openWorld'), settings: t('menu.settings'), find: t('menu.find'),
       help: t('menu.help'), tour: t('menu.tour'), shortcuts: t('menu.shortcuts'),
-      licenses: t('menu.licenses'), report: t('menu.report'), updates: t('menu.updates')
+      licenses: t('menu.licenses'), report: t('menu.report'), updates: t('menu.updates'),
+      appearance: t('menu.appearance'), themeSystem: t('settings.theme.systemShort'),
+      themeLight: t('settings.theme.lightShort'), themeDark: t('settings.theme.darkShort')
     });
   });
 

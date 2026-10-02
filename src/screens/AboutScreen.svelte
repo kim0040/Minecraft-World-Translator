@@ -91,6 +91,7 @@
       <img class="mascot" src="/images/pomi.png" alt="Pomi" width="96" height="96" />
       <div class="identity-copy">
         <img class="wordmark" src="/images/wordmark.png" alt="PomiTranslate" width="220" height="64" />
+        <span class="dark-wordmark" role="img" aria-label="PomiTranslate">Pomi<span>Translate</span></span>
         <h2 id="identity-title">{t('app.tagline')}</h2>
         <p class="muted">{t('about.version', { version })}</p>
       </div>
@@ -232,6 +233,11 @@
   .mascot { width: clamp(88px, 13vw, 128px); height: auto; object-fit: contain; flex: none; }
   .identity-copy { display: grid; gap: var(--space-2); min-width: 0; }
   .wordmark { width: min(220px, 100%); height: auto; object-fit: contain; object-position: left center; }
+  /* The wordmark's ink is dark; on a dark surface the name is set in type instead, like the sidebar. */
+  .dark-wordmark { display: none; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; color: var(--text); line-height: 1.1; }
+  .dark-wordmark span { color: var(--accent-text); }
+  :global([data-theme='dark']) .wordmark { display: none; }
+  :global([data-theme='dark']) .dark-wordmark { display: block; }
   .identity-copy h2 { font-size: var(--text-lg); color: var(--text-secondary); font-weight: 600; }
   .hero-copy { color: var(--text-secondary); max-width: 34ch; }
   .columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); gap: var(--space-5); align-items: start; }

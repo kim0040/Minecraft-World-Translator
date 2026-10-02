@@ -696,4 +696,12 @@ export const ja: Record<MessageKey, string> = {
   'licenses.thirdParty': "同梱ソフトウェア",
   'licenses.loading': "読み込み中…",
   'licenses.failed': "ライセンスファイルを読み込めませんでした。リポジトリのTHIRD_PARTY_NOTICES.mdを参照してください。",
+  'settings.app.subtitle': "表示モードと表示言語",
+  'settings.app.appearance': "表示モード",
+  'settings.theme.systemShort': "システム",
+  'settings.theme.lightShort': "ライト",
+  'settings.theme.darkShort': "ダーク",
+  'settings.theme.instant': "選ぶとすぐに適用され、保存しなくても次回の起動時に保持されます。",
+  'settings.theme.following': "OSの設定に従います(現在: {mode})。OSで変更するとアプリもすぐに切り替わります。",
+  'menu.appearance': "表示モード",
 };
