@@ -12,7 +12,7 @@
 2. **PROVIDER-01 — Gemini 후속.** sidecar가 요청마다 새로 떠서 thinking 최저 단계 학습(`_GEMINI_LEVEL_FLOOR`)이 작업마다 초기화된다(작업당 거부 요청 1회, 동시 batch 수만큼 늘 수 있음). 모델 catalog 캐시에 저장하고, 비 OpenRouter 제공사의 날짜 명시 가격표 기반 비용 추정, 모델 목록에서 robotics/computer-use 등 번역 부적합 모델 정리.
 3. **COMP-02 → COMP-03 → COMP-04** ([호환성 계획](compatibility-roadmap-2026-10-01.md)): 최신 component(26.x object fallback, hover/book/sign), chunk별 DataVersion·coverage UI, 1.21.5+로 실제 생성한 맵의 번역·게임 로드 확인.
 4. **QUALITY-01 — 번역 품질.** 고유명사 유지/번역 일관성(실측: "Elder Mira"가 모델마다 다름), lite 모델 군더더기 글자(`§lcrypt`→`§lc지하실`) 같은 서식 인접 오류 감지, glossary·TM(Phase3 QUALITY).
-5. **UX-NATIVE-02**, 그다음 **CONTENT(datapack `.mcfunction`)**, **DATA/RECOVERY**, 마지막으로 **LEGAL-01 / PLATFORM-01 / RELEASE-01**.
+5. **UX-WEB-01**([알려진 UI/UX 문제](ux-issues.md)의 높음·중간 항목; U1 창 닫기는 UX-NATIVE-01과 함께), **UX-NATIVE-02**, 그다음 **CONTENT(datapack `.mcfunction`)**, **DATA/RECOVERY**, 마지막으로 **LEGAL-01 / PLATFORM-01 / RELEASE-01**.
 
 ## 다음 작업의 우선순위와 완료 조건
 
@@ -23,6 +23,7 @@
 | P2-PARITY 완료 | 문서화한 Legacy 대체 범위 | 항상 백업·앱 관리 backup/checkpoint 유지, off/suffix/path 차이 명시 | 기존 안전 구현의 범위·literal import·legacy restore 검증. 동등 옵션/100% parity 아님, Legacy 유지 |
 | P2-FINAL 완료 | 최종 Phase2 개발 환경 gate | Python20/frontend58/build/Rust28, browser86+수정 후 영향7 및 최종 native .mcc PASS | 검증·증거 재사용 경계 명시, docs/diff/secret/artifact review→완료 commit/push. 플랫폼/release gate 별도 |
 | UX-NATIVE-01 | 네이티브 UX 후속의 macOS 확인 | 2026-10-02까지 구현·Linux Rust30/browser114 PASS 기록. 이번 통합에서 재실행하지 않음. [기록](history/native-ux-and-compat-2026-10-01.md) | Python 변경이 있으므로 sidecar 재빌드 후 macOS dev app에서 overlay 타이틀바·신호등·드래그 영역, 메뉴 라벨/단축키, ⌘Q 보호(작업 중), 폴더 drop, saves 목록, Dock 진행률/attention, 다크 시작·OS 화면 모드 변경, 도움말·라이선스 메뉴, 외부 링크·데이터 폴더 열기, 초기화 후 재시작·백업 유지·키 삭제/유지를 확인하고 결함 수정 |
+| UX-WEB-01 | 남은 화면 UX 문제 | 2026-10-02 실사용 점검 후 미해결 14건(창 닫기 시 미저장 설정 손실, 키 저장 전 모델 선택 불가, 시작 실패 시 도움말 접근 불가, 긴 설정 화면, 좁은 창 상세 모달, 소개 화면 재캡처 등). [목록](ux-issues.md) | 목록의 높음·중간 항목 수정 → 해당 browser 시나리오 PASS, native 관련 항목은 UX-NATIVE-01에서 확인, 고친 항목은 목록에서 지우고 history에 기록 |
 | UX-NATIVE-02 | 남은 네이티브 다듬기 | 미착수 | 사이드바 vibrancy(투명 창 필요 여부 결정), 후보 행 우클릭 메뉴(포함/제외/직접 번역/복사), 창 크기·위치 기억, Windows Mica/타이틀바 확인 |
 | PROVIDER-01 | Gemini·비 OpenRouter 제공사 후속 | 2026-10-01 최신 모델 실측 완료: 3.8/3.7 flash·pro·`flash-latest`는 minimal 거부 → 자동 단계 상승 구현. 학습한 단계는 프로세스 메모리에만 있음 | 단계 학습을 catalog 캐시에 저장해 작업 간 재사용(동시 batch에서도 거부 1회 이하), Gemini/OpenAI/Anthropic 가격을 날짜·출처와 함께 추정에 반영(확인 불가 시 unknown), 번역 부적합 모델(robotics, computer-use 등) 목록 정리, 변경마다 최소 실제 호출로 확인 |
 | QUALITY-01 | 번역 품질 보강 | 서식 토큰 개수 검사·끝 `§r` 정리 완료. 고유명사 일관성·서식 인접 군더더기는 미검출 | 고유명사 처리 규칙/glossary와 연결, 서식 코드 바로 뒤 원문 잔여 글자 감지(경고 또는 재시도), 모델별 비교 fixture(합성)로 회귀 확인 |
