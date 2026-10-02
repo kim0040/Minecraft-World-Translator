@@ -30,7 +30,7 @@
 | LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. 2026-10-02 앱 안 고지 생성기(`pnpm licenses`, Rust 415/JS 21/Python 16, 데스크톱 build에서 플랫폼별 재생성)와 정보 화면 뷰어 추가. 법적 검토·MPL source 안내 확인·SBOM은 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
 | PLATFORM-01 | clean-machine·키체인 | macOS arm64 개발 앱·Local/Session 검증; OS keychain opt-in/Windows/Linux native 미완 | Python/Node/Rust 없는 각 목표 OS에서 설치·chooser·credential permission/import·restart·backup/restore 확인; macOS Intel 목표 결정 |
 | RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle. 2026-10-02 updater 연결(확인·서명 검증 설치·작업 중 거부·재시작), 키 없는 빌드는 알림+다운로드 페이지. **공개키 비어 있음, `latest.json` 게시 없음** ([업데이트·데이터](updates-and-data.md)) | 승인 후 updater 키 생성·공개키 commit·secret 등록, release에 서명 파일+`latest.json` 게시, 이전 버전→새 버전 설치·재시작·설정/키/백업 유지·작업 중 거부를 각 OS에서 확인. macOS 공증·Windows 코드서명 |
-| DOCS-01 | 문서·화면 유지 | 이번 서비스 소개·합성 screenshot·면책·개발 안내 정리 | 기능/지원/credential/가격 정책이 바뀔 때 소개·user-guide·privacy·support evidence와 화면을 같이 갱신; 목표를 검증된 기능으로 표시하지 않음 |
+| DOCS-01 | 문서·화면 유지 | 서비스 소개·면책·개발 안내 정리, 2026-10-02 README/사용 안내/개인정보/면책4언어·문자 에셋20개·UI ko/en/ja 소개 화면9장 현지화 ([관리](localization.md)) | 기능/지원/credential/가격 정책이 바뀔 때 4개 언어의 문구 catalog·사용자 문서·화면을 함께 갱신; 중국어 문서와 미제공 중국어 UI를 구분. 목표를 검증된 기능으로 표시하지 않음 |
 
 ## 이번에 완료한 범위
 

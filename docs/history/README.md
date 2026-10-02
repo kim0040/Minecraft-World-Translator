@@ -4,6 +4,7 @@
 
 | 기록 | 읽는 이유 |
 | --- | --- |
+| [2026-10-02 문서·에셋 현지화](localization-2026-10-02.md) | 사용자 문서4언어·문자 에셋20개·UI 언어별 합성 소개 화면9장, 재생성·hash·검증 경계 |
 | [2026-10-02 main 통합·잔여 대조](main-integration-2026-10-02.md) | 작업 브랜치 7개 commit 통합, 구현 완료/검증 대기 구분과 최신 backlog |
 | [2026-10-02 도움말·업데이트·데이터 보존](../updates-and-data.md) | 도움말·시작 안내·앱 안 라이선스·Minecraft 고지 원문, updater(서명 키 있을 때만 설치)·외부 링크 허용 목록·데이터 위치·두 단계 초기화·설정 fsync/사본/손상 복구, 이어서 라이트/다크/시스템 화면 모드. Python23/Rust30/frontend62/browser114. 서명 release 업데이트·각 OS native 미확인 |
 | [2026-10-01 네이티브 UX·Gemini·SNBT](native-ux-and-compat-2026-10-01.md) | COMP-01 SNBT, Gemini thinking/사용량, 네이티브 셸·메뉴·드래그·saves 목록, Python22/Rust28/browser94, 실제 Gemini 13요청 + 최신 모델(3.8 flash·3.5 lite·3.1 pro·latest 별칭) 배치·E2E. macOS native 미확인 |

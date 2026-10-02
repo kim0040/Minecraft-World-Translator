@@ -2,9 +2,11 @@
 
 **World Translator for Minecraft** — 마인크래프트 Java Edition 월드의 텍스트를 번역하는 데스크톱 앱
 
-<img src="../assets/brand/wordmark/logo_wordmark_v1.png" alt="PomiTranslate" width="340" />
+<img src="../assets/brand/social/og_default_ko_v1.png" alt="PomiTranslate — 먼저 스캔하고 검토하고 백업한 뒤 번역하세요" width="900" />
 
 [English](../README.md) | 한국어 | [日本語](README.ja.md) | [简体中文](README.zh.md)
+
+앱 표시 언어는 **한국어·영어·일본어**입니다. 중국어 간체는 문서로 제공하며, **번역 도착 언어**는 UI 언어와 별도로 원하는 언어명을 입력할 수 있습니다.
 
 해외 어드벤처 맵을 플레이하다 보면 표지판과 책, 아이템 설명이 읽히지 않아 흐름이 끊길 때가 있습니다. PomiTranslate는 그 텍스트를 원하는 언어로 바꿔 주는 데스크톱 앱입니다. 월드를 먼저 스캔해 번역할 문장을 확인하고, 필요한 문장만 골라 직접 번역하거나 선택한 AI 제공사로 번역한 다음, 검증된 백업과 함께 월드에 적용합니다.
 
@@ -33,24 +35,24 @@ PomiTranslate는 월드를 앱 안으로 복사하지 않고 선택한 폴더를
 
 ### 번역할 문장을 직접 검토
 
-![후보 검색·유형 필터·직접 번역 편집 화면](images/review.png)
+![후보 검색·유형 필터·직접 번역 편집 화면](images/locales/ko/review.png)
 
 검색과 유형·상태 필터로 문장을 찾고, 번역에서 제외하거나 직접 번역문을 입력할 수 있습니다. 같은 원문이 어디에 쓰였는지도 함께 확인합니다. `§` 서식 코드와 `%s`, `{0}` 같은 자리표시자는 게임 안에서 그대로 표시되도록 유지합니다.
 
 ### 모델과 추론 방식 설정
 
-![제공사·모델·추론 방식·키 저장 상태 화면](images/settings.png)
+![제공사·모델·추론 방식·키 저장 상태 화면](images/locales/ko/settings.png)
 
 OpenRouter 추론은 **모델 기본값 / 추론 끄기 / 직접 설정** 중에서 고릅니다. 모델 지원 정보 조회와 설정 저장을 분리했고, 화면 아래에는 저장·변경 취소 영역을 고정했습니다.
 
 <details>
 <summary>실행 전 확인 화면</summary>
 
-![추론·요청 수·예상 비용과 외부 전송 확인 화면](images/run.png)
+![추론·요청 수·예상 비용과 외부 전송 확인 화면](images/locales/ko/run.png)
 
 </details>
 
-화면은 현재 제품 UI를 **합성 데이터**로 실행해 캡처했습니다. 표시된 모델·월드·비용은 소개용 예시이며 실제 사용량이나 해당 모델의 지원 보장이 아닙니다. [화면 정보](images/README.md)
+화면은 현재 Svelte 제품 UI의 **한국어 화면**을 Chromium에서 **합성 데이터**로 실행해 캡처했습니다. 영어·일본어 문서는 각각 해당 UI 언어의 화면을 사용합니다. 네이티브 설치 검증은 아닙니다. 표시된 모델·월드·비용은 소개용 예시이며 실제 사용량이나 해당 모델의 지원 보장이 아닙니다. [화면 정보](images/README.md)
 
 ## 주요 기능
 
@@ -138,20 +140,9 @@ API 키의 데스크톱 기본 저장 방식은 **로컬 암호화 SQLite + 별�
 
 맵·리소스팩·번역본의 제3자 권리는 소프트웨어 라이선스와 별개입니다. 원작자의 허락 없이 재배포하지 마세요.
 
-<details>
-<summary>English safety notice</summary>
-
-Back up your world before translating. PomiTranslate writes to the world files you select.
-
-Text you choose to translate is sent to the API provider you select and may incur charges.
-
-PomiTranslate has no purchase, subscription, or in-app payment.
-
-</details>
-
 ## 개발과 검증 상태
 
-macOS Apple Silicon 개발 앱에서 월드 선택부터 스캔·검토·실행·결과·복원까지 주요 흐름을 확인했고, 합성 fixture로 형식별 읽기·쓰기를 검사합니다. 최신 소스 기준으로 관련 frontend·browser·Rust 검사와 provider Python 검사가 통과했으며, unsigned debug 앱 번들을 생성했습니다. 실제 OpenRouter 키와 모델 등록, 공개 모델 조회까지 확인했지만 **실제 유료 번역 E2E는 아직 실행하지 않았습니다.**
+macOS Apple Silicon 개발 앱에서 월드 선택부터 스캔·검토·실행·결과·복원까지 주요 흐름을 확인했고, 합성 fixture로 형식별 읽기·쓰기를 검사합니다. 기존 구현 기록에는 관련 frontend·browser·Rust 및 provider Python 검사와 unsigned debug 앱 번들이 있으며, 각 기록의 소스·환경 범위를 따릅니다. 합성 데이터의 제한된 실제 OpenRouter·DeepSeek 번역과 쓰기·hash 일치 복원을 확인했습니다. 모든 제공사의 가격·번역 품질 검증이나 최신 네이티브 UI 검증을 뜻하지는 않습니다.
 
 Phase 2 데스크톱 기능·macOS arm64 개발 환경 gate는 완료됐고 Phase 3가 진행 중이며, release-ready는 아닙니다. 서명·notarization·updater, Windows/Linux clean-machine 설치, macOS Intel, OS 키체인 opt-in의 native 검증은 남아 있습니다. 정확한 검사 범위와 잔여 gate는 [현재 상태](current-state.md)와 [추후 작업](follow-up-work.md)에서 관리합니다.
 

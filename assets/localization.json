@@ -1,0 +1,289 @@
+{
+  "version": 1,
+  "locales": {
+    "en": {
+      "name": "English",
+      "social": {
+        "description": "A desktop app for translating text inside Minecraft worlds.",
+        "descriptor": [
+          "Translate the text in your",
+          "Minecraft world."
+        ],
+        "tagline": [
+          "Scan first. Review. Back up.",
+          "Then translate."
+        ]
+      },
+      "cards": {
+        "scan_first": {
+          "title": "Scan first",
+          "description": "Preview text candidates before changing anything. A scan makes no API calls and does not write to the world.",
+          "body": [
+            [
+              "Preview text candidates before",
+              "you change anything."
+            ],
+            [
+              "A scan makes no API calls and",
+              "does not write to the world."
+            ]
+          ]
+        },
+        "backup_first": {
+          "title": "Back up first",
+          "description": "Keep an independent copy of important worlds outside the app. PomiTranslate verifies its backup before writing.",
+          "body": [
+            [
+              "Keep an independent world copy",
+              "outside the app."
+            ],
+            [
+              "PomiTranslate verifies its backup",
+              "before writing to the world."
+            ]
+          ]
+        },
+        "api_notice": {
+          "title": "Before using an API",
+          "description": "Selected source text and your instructions are sent to your chosen provider. AI API use may cost money under that provider's terms.",
+          "body": [
+            [
+              "Selected source text and your",
+              "instructions go to your chosen provider."
+            ],
+            [
+              "AI API use may cost money.",
+              "Check the provider's terms and rates."
+            ]
+          ]
+        },
+        "unsupported": {
+          "title": "Unsupported compression",
+          "description": "PomiTranslate stops before writing a region that uses unsupported compression. That region remains unchanged.",
+          "body": [
+            [
+              "PomiTranslate stops before writing",
+              "a region with unsupported compression."
+            ],
+            [
+              "That region remains unchanged."
+            ]
+          ]
+        }
+      }
+    },
+    "ko": {
+      "name": "한국어",
+      "social": {
+        "description": "Minecraft 월드 속 글을 번역하는 데스크톱 앱입니다.",
+        "descriptor": [
+          "Minecraft 월드 속 글을",
+          "원하는 언어로 번역하세요."
+        ],
+        "tagline": [
+          "먼저 스캔하고 검토한 뒤",
+          "백업하고 번역하세요."
+        ]
+      },
+      "cards": {
+        "scan_first": {
+          "title": "먼저 스캔하세요",
+          "description": "변경 전에 번역 후보를 확인하세요. 스캔은 API를 호출하지 않으며 월드 파일을 수정하지 않습니다.",
+          "body": [
+            [
+              "변경 전에 번역 후보를",
+              "먼저 확인하세요."
+            ],
+            [
+              "스캔은 API를 호출하지 않으며",
+              "월드 파일을 수정하지 않습니다."
+            ]
+          ]
+        },
+        "backup_first": {
+          "title": "먼저 백업하세요",
+          "description": "중요한 월드는 앱 밖에 독립된 복사본으로 보관하세요. PomiTranslate는 쓰기 전에 앱 백업을 검증합니다.",
+          "body": [
+            [
+              "중요한 월드는 앱 밖에",
+              "독립된 복사본으로 보관하세요."
+            ],
+            [
+              "PomiTranslate는 월드에 쓰기 전에",
+              "앱 백업을 검증합니다."
+            ]
+          ]
+        },
+        "api_notice": {
+          "title": "API 전송 전에 확인하세요",
+          "description": "선택한 원문과 번역 지시사항은 고른 제공사로 전송됩니다. AI API 사용료가 발생할 수 있으니 제공사의 요금 정책을 확인하세요.",
+          "body": [
+            [
+              "선택한 원문과 번역 지시사항은",
+              "고른 제공사로 전송됩니다."
+            ],
+            [
+              "AI API 사용료가 발생할 수 있습니다.",
+              "제공사의 요금 정책을 확인하세요."
+            ]
+          ]
+        },
+        "unsupported": {
+          "title": "미지원 압축은 쓰지 않습니다",
+          "description": "지원하지 않는 압축을 사용한 리전은 쓰기 전에 작업을 멈춥니다. 해당 리전은 변경하지 않습니다.",
+          "body": [
+            [
+              "지원하지 않는 압축을 사용한 리전은",
+              "쓰기 전에 작업을 멈춥니다."
+            ],
+            [
+              "해당 리전은 변경하지 않습니다."
+            ]
+          ]
+        }
+      }
+    },
+    "ja": {
+      "name": "日本語",
+      "social": {
+        "description": "Minecraft ワールド内の文字を翻訳するデスクトップアプリです。",
+        "descriptor": [
+          "Minecraft ワールド内の文字を",
+          "読みたい言語に翻訳します。"
+        ],
+        "tagline": [
+          "まずスキャンして確認。",
+          "バックアップしてから翻訳。"
+        ]
+      },
+      "cards": {
+        "scan_first": {
+          "title": "まずスキャン",
+          "description": "変更前に翻訳候補を確認できます。スキャンでは API を呼び出さず、ワールドも変更しません。",
+          "body": [
+            [
+              "変更前に翻訳候補を",
+              "確認できます。"
+            ],
+            [
+              "スキャンでは API を呼び出さず、",
+              "ワールドも変更しません。"
+            ]
+          ]
+        },
+        "backup_first": {
+          "title": "まずバックアップ",
+          "description": "大切なワールドはアプリの外にも独立したコピーを保管してください。PomiTranslate は書き込み前にアプリ内のバックアップを検証します。",
+          "body": [
+            [
+              "大切なワールドはアプリの外にも",
+              "独立したコピーを保管してください。"
+            ],
+            [
+              "PomiTranslate は書き込み前に",
+              "アプリ内のバックアップを検証します。"
+            ]
+          ]
+        },
+        "api_notice": {
+          "title": "API 利用前に確認",
+          "description": "選択した原文と翻訳指示は、選んだプロバイダーへ送信されます。AI API の利用には料金がかかる場合があるため、料金体系を確認してください。",
+          "body": [
+            [
+              "選択した原文と翻訳指示は",
+              "選んだプロバイダーへ送信されます。"
+            ],
+            [
+              "AI API の利用には料金がかかる場合があります。",
+              "プロバイダーの料金を確認してください。"
+            ]
+          ]
+        },
+        "unsupported": {
+          "title": "未対応の圧縮形式",
+          "description": "未対応の圧縮形式を使うリージョンは、書き込み前に処理を停止します。そのリージョンは変更しません。",
+          "body": [
+            [
+              "未対応の圧縮形式を使うリージョンは",
+              "書き込み前に処理を停止します。"
+            ],
+            [
+              "そのリージョンは変更しません。"
+            ]
+          ]
+        }
+      }
+    },
+    "zh": {
+      "name": "简体中文",
+      "documentOnlyNote": "此处提供中文文档，应用界面提供韩语、英语和日语。",
+      "social": {
+        "description": "用于翻译 Minecraft 世界内文本的桌面应用。",
+        "descriptor": [
+          "翻译 Minecraft 世界中的文字。"
+        ],
+        "tagline": [
+          "先扫描、确认并备份，",
+          "再开始翻译。"
+        ]
+      },
+      "cards": {
+        "scan_first": {
+          "title": "先扫描确认",
+          "description": "先查看待翻译文本，再决定如何处理。扫描不会调用 API，也不会修改世界文件。",
+          "body": [
+            [
+              "先查看待翻译文本，",
+              "再决定如何处理。"
+            ],
+            [
+              "扫描不会调用 API，",
+              "也不会修改世界文件。"
+            ]
+          ]
+        },
+        "backup_first": {
+          "title": "先备份世界",
+          "description": "请在应用外另存一份重要世界的独立副本。PomiTranslate 会在写入前验证应用备份。",
+          "body": [
+            [
+              "请在应用外另存一份",
+              "重要世界的独立副本。"
+            ],
+            [
+              "PomiTranslate 会在写入前",
+              "验证应用备份。"
+            ]
+          ]
+        },
+        "api_notice": {
+          "title": "使用 API 前请确认",
+          "description": "所选原文和翻译说明会发送给你选择的提供商。使用 AI API 可能产生费用，请先查看提供商的收费规则。",
+          "body": [
+            [
+              "所选原文和翻译说明会发送给",
+              "你选择的 API 提供商。"
+            ],
+            [
+              "使用 AI API 可能产生费用。",
+              "请查看提供商的收费规则。"
+            ]
+          ]
+        },
+        "unsupported": {
+          "title": "不支持的压缩格式",
+          "description": "遇到使用不支持压缩格式的区域时，PomiTranslate 会在写入前停止。该区域不会被修改。",
+          "body": [
+            [
+              "遇到使用不支持压缩格式的区域时，",
+              "PomiTranslate 会在写入前停止。"
+            ],
+            [
+              "该区域不会被修改。"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

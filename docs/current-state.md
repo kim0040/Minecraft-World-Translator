@@ -36,6 +36,8 @@
 
 ## 문서·라이선스 정리
 
+2026-10-02 현지화 후속: 영어·한국어·일본어·중국어 간체 README/사용 안내/개인정보/면책을 같은 진입점으로 연결했다. 문자 에셋은 4개 언어의 공유4+안내16을 공통 catalog/SVG/PNG로 관리하며, 현재 UI 언어 ko/en/ja의 소개 화면9장을 합성 데이터로 다시 캡처했다. 중국어는 문서만 제공하며 영어 UI 화면을 명시한다. 타입 검사0오류/0경고·i18n3 PASS·문서 링크/이미지 hash/시각 검토는 이 범위의 결과이며 Phase3·native·release 완료 검증이 아니다. [문구·에셋 관리](localization.md) · [작업 기록](history/localization-2026-10-02.md)
+
 서비스 소개와 사용법은 root README(영어 메인)와 [한국어판](README.ko.md), 자세한 실행·복원은 user-guide, 비용·키 저장은 privacy, 개인 프로젝트/보증·책임 제한은 disclaimer로 구분했다. 기여자는 김현민(mini0227kim@gmail.com)이다. 기존 MIT를 유지하고 제3자 metadata 검토·미확인 플랫폼/배포 고지를 legal 문서와 LEGAL-01에 기록했다. 날짜별 기록은 history, 의도적인 합성 소개 화면은 images에서 관리한다. 2026-10-01 다국어 README(ko/en/ja/zh)를 같은 범위로 맞추고 user-guide에 설정·결과·CLI·문제 해결을 보강했고, 2026-10-02 메인 README를 영어로 전환하고 한국어판을 docs/README.ko.md로 옮기며 개인 프로젝트 배경 안내를 기여자 절로 이동했다. [2026-10-01 기록](history/docs-refresh-2026-10-01.md) · [2026-10-02 기록](history/readme-restructure-2026-10-02.md) 이번 문서 작업으로 유료 API·전체 matrix·installer 빌드를 실행하지 않았다.
 
 ## 검증 기록과 적용 범위

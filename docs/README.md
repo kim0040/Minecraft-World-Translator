@@ -7,6 +7,14 @@
 - [日本語の紹介](README.ja.md)
 - [简体中文介绍](README.zh.md)
 
+| 문서 | English | 한국어 | 日本語 | 简体中文 |
+| --- | --- | --- | --- | --- |
+| 사용 안내 | [Guide](user-guide.en.md) | [사용 안내](user-guide.md) | [ガイド](user-guide.ja.md) | [使用指南](user-guide.zh.md) |
+| 데이터·키 | [Privacy](privacy.en.md) | [개인정보](privacy.md) | [データ・キー](privacy.ja.md) | [数据与密钥](privacy.zh.md) |
+| 면책·권리 | [Disclaimer](disclaimer.en.md) | [면책](disclaimer.md) | [免責・権利](disclaimer.ja.md) | [免责声明](disclaimer.zh.md) |
+
+제품 UI는 **ko/en/ja**이며 중국어 간체는 문서·안내 이미지로 제공합니다. 번역 도착 언어는 별도 입력값입니다. 개발·상태·지원 표·법적 검토 문서는 한국어로 유지합니다. [언어·문구·에셋 관리](localization.md)
+
 ## 사용자
 
 - [서비스 소개와 화면](README.ko.md)

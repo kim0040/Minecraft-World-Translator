@@ -1,4 +1,9 @@
 (() => {
+  // Documentation previews use the same UI with an explicit, validated locale.
+  const requestedLocale = new URLSearchParams(location.search).get('locale');
+  const previewLocale = ['ko', 'en', 'ja'].includes(requestedLocale) ? requestedLocale : 'ko';
+  const previewLanguages = { ko: '한국어', en: 'English', ja: '日本語' };
+  const previewTranslations = { ko: '잃어버린 열쇠 상점', en: 'The Lost Key Shop', ja: '失われた鍵の店' };
   window.__pomiRequests = [];
   const callbacks = new Map();
   const listeners = new Map();
@@ -41,10 +46,10 @@
   const credentialModes = new Map();
   const settings = {
     provider: 'openrouter', model: new URLSearchParams(location.search).get('model') || 'xiaomi/mimo-v2.6-flash', base_url: '', wire_format: 'openai',
-    target_language: '한국어', style_preset: 'neutral', style_prompt: '', custom_system_prompt: '',
+    target_language: previewLanguages[previewLocale], style_preset: 'neutral', style_prompt: '', custom_system_prompt: '',
     temperature: 0.3, batch_size: 40, request_timeout: 120, rpm_limit: 0, tpm_limit: 0,
     max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false,
-    skip_target_language_text: true, ui_language: 'ko', last_world_dir: worldDir
+    skip_target_language_text: true, ui_language: previewLocale, last_world_dir: worldDir
   };
   const estimate = {
     candidateCount: candidates.length, requests: 1, sourceChars: 180, inputTokens: 720,
@@ -81,7 +86,7 @@
     return {
       available: true, scanPlanId: scan.scanPlanId, fingerprint: scan.fingerprint,
       candidateCount: candidates.length, occurrenceCount: scan.occurrenceCount, kinds: scan.kinds, coverage: scan.coverage, candidates: candidates.slice(0, 200), excludedCandidateIds: ['tellraw'],
-      candidateOverrides: { shop: '잃어버린 열쇠 상점' }, savedAt: 1790672400,
+      candidateOverrides: { shop: previewTranslations[previewLocale] }, savedAt: 1790672400,
       status: 'needs_retry', translatedCount: 2
     };
   }

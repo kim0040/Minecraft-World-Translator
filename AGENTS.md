@@ -37,3 +37,5 @@ Phase2 이력은 `docs/history/phase2-completion-2026-10-01.md`와 `docs/history
 2026-10-02 메인 README를 영어로 전환하고 한국어판을 docs/README.ko.md로 옮겼다. 개인 프로젝트 배경 안내는 기여자 절에서 다룬다. 제품 동작·Phase 상태는 바뀌지 않았다. [기록](docs/history/readme-restructure-2026-10-02.md)
 
 원격 URL은 2026-10-01 기존/새 주소의 동일 main SHA를 확인한 `https://github.com/kim0040/PomiTranslate.git`다. 원격 rename을 새로 실행한 것이 아니다. 로컬 checkout 폴더와 내부 mwt 이름은 유지한다.
+
+2026-10-02 현지화: README/사용 안내/개인정보/면책은 ko/en/ja/zh 문서를 제공한다. UI 언어는 여전히 ko/en/ja이며 zh는 영어 UI 화면을 사용하는 문서 언어다. [현지화 관리](docs/localization.md)의 catalog·SVG/PNG 생성·언어별 screenshot/manifest를 함께 갱신한다. 제품명·공식 부제·license 원문은 공통으로 보존한다. [작업 기록](docs/history/localization-2026-10-02.md)

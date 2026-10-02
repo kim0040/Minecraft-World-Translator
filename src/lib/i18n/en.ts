@@ -271,7 +271,7 @@ export const en: Record<MessageKey, string> = {
   'review.nothingIncluded': 'No sentences are selected for translation. Please include at least one sentence.',
   'review.state.included.label': 'Included',
   'review.state.excluded.label': 'Excluded',
-  'review.state.manual.label': 'Manual Translation',
+  'review.state.manual.label': 'Manual',
   'review.rowLabel': '{source}, {kind}, {places}',
 
   'run.title': 'Prepare & Run Translation',
