@@ -736,9 +736,12 @@ def _bootstrap_payload(data_dir: Path, requested_world: str = "", *, check_keyri
     world = Path(selected).expanduser() if selected else None
     inspection = _world_inspection(world, recursive_blockers=False) if world else None
     valid_world = bool(world and inspection and inspection.get("validJavaWorld"))
+    from mwt.userdata import load_app_prefs
+
     return {
         "notices": payload(),
         **settings,
+        "prefs": load_app_prefs(data_dir),
         "worlds": list_recent_worlds(data_dir),
         "worldInspection": inspection,
         "backups": list_backup_sets(world, _backup_stores(world, data_dir)) if valid_world else [],
@@ -764,6 +767,19 @@ def handle(message: dict, report_dir: Path, data_dir: Path, cancel_path: Path | 
                 ),
             }
         )
+        return
+    if kind == "prefs.set":
+        from mwt.userdata import remember_app_prefs
+
+        prefs = remember_app_prefs(body.get("prefs"), data_dir)
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": {"prefs": prefs}})
+        return
+    if kind == "app.reset":
+        from mwt.userdata import reset_user_data
+
+        if body.get("confirm") != "reset":
+            raise ValueError("Reset needs an explicit confirmation")
+        emit({"v": 1, "id": request_id, "type": "response.ok", "payload": reset_user_data(data_dir)})
         return
     if kind == "notices.get":
         emit({"v": 1, "id": request_id, "type": "response.ok", "payload": payload()})

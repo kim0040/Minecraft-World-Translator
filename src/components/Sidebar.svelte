@@ -4,12 +4,17 @@
   import { formatDuration } from '../lib/format';
   import Icon, { type IconName } from './Icon.svelte';
 
-  const items: { page: Page; icon: IconName; label: 'nav.workspace' | 'nav.backups' | 'nav.settings' | 'nav.about' }[] = [
+  const items: { page: Page; icon: IconName; label: 'nav.workspace' | 'nav.backups' | 'nav.settings' | 'nav.help' | 'nav.about' }[] = [
     { page: 'workspace', icon: 'language', label: 'nav.workspace' },
     { page: 'backups', icon: 'archive', label: 'nav.backups' },
     { page: 'settings', icon: 'sliders', label: 'nav.settings' },
+    { page: 'help', icon: 'help', label: 'nav.help' },
     { page: 'about', icon: 'info', label: 'nav.about' }
   ];
+  function showUpdate(): void {
+    app.helpSection = 'updates';
+    app.goto('settings');
+  }
 
   const status = $derived(
     app.cancelling ? t('status.cancelling')
@@ -61,6 +66,9 @@
   </nav>
 
   <div class="foot">
+    {#if app.updateAvailable && !app.railCollapsed}
+      <button type="button" class="update" onclick={showUpdate}><Icon name="download" size={14} /> {t('update.sidebar', { version: app.update?.version ?? '' })}</button>
+    {/if}
     <div class="state" role="status" aria-live="polite">
       <img class="pomi" src="/images/pomi.png" alt="" width="32" height="32" />
       <div class="text">
@@ -96,6 +104,7 @@
   .rail .wordmark { display: none; }
   .rail .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; }
   nav { display: grid; gap: 2px; }
+  .update { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; padding: 0 var(--space-2); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-soft-text); font-size: var(--text-sm); font-weight: 600; animation: pomi-fade var(--dur-base) var(--ease-out); }
   .nav {
     display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
     border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text);

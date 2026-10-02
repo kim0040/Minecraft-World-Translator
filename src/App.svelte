@@ -3,7 +3,7 @@
   import { app } from './lib/app.svelte';
   import { t, type MessageKey } from './lib/i18n/index.svelte';
   import { applyTheme, storedTheme, watchSystemTheme } from './lib/theme';
-  import { inShell, isMac, onDropPath, onMenu, requestAttention, setMenuLabels, setTaskProgress, setWindowTitle } from './lib/native';
+  import { inShell, isMac, onDropPath, onMenu, openExternal, requestAttention, setMenuLabels, setTaskProgress, setWindowTitle } from './lib/native';
   import { baseName } from './lib/format';
   import Sidebar from './components/Sidebar.svelte';
   import Stepper from './components/Stepper.svelte';
@@ -19,6 +19,9 @@
   import BackupsScreen from './screens/BackupsScreen.svelte';
   import SettingsScreen from './screens/SettingsScreen.svelte';
   import AboutScreen from './screens/AboutScreen.svelte';
+  import HelpScreen from './screens/HelpScreen.svelte';
+  import Tour from './components/Tour.svelte';
+  import LicensesDialog from './components/LicensesDialog.svelte';
 
   let pane: HTMLElement | undefined = $state();
   let dropping = $state(false);
@@ -45,17 +48,27 @@
     // In a browser preview the menu bar does not exist, so its shortcuts are handled here.
     const shortcuts = (event: KeyboardEvent) => {
       if (inShell() || !(event.metaKey || event.ctrlKey) || event.altKey) return;
-      const action = event.key === 'o' ? 'open-world' : event.key === ',' ? 'settings' : event.key === 'f' ? 'find' : null;
+      const action = event.key === 'o' ? 'open-world' : event.key === ',' ? 'settings' : event.key === 'f' ? 'find' : event.key === '?' ? 'help' : null;
       if (!action) return;
       event.preventDefault();
       app.menu(action);
     };
+    // A web link opens in the system browser (or mail app), never inside the app window.
+    const links = (event: MouseEvent) => {
+      const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]');
+      const href = anchor?.getAttribute('href') ?? '';
+      if (!/^(https:|mailto:)/i.test(href)) return;
+      event.preventDefault();
+      void openExternal(href).catch((cause) => app.fail(cause));
+    };
     if (inShell()) document.addEventListener('contextmenu', contextMenu);
+    if (inShell()) document.addEventListener('click', links);
     document.addEventListener('keydown', shortcuts);
     return () => {
       stopTheme();
       stops.forEach((stop) => stop());
       document.removeEventListener('contextmenu', contextMenu);
+      document.removeEventListener('click', links);
       document.removeEventListener('keydown', shortcuts);
       app.destroy();
     };
@@ -88,10 +101,14 @@
   });
 
   $effect(() => {
-    void setMenuLabels({ openWorld: t('menu.openWorld'), settings: t('menu.settings'), find: t('menu.find') });
+    void setMenuLabels({
+      openWorld: t('menu.openWorld'), settings: t('menu.settings'), find: t('menu.find'),
+      help: t('menu.help'), tour: t('menu.tour'), shortcuts: t('menu.shortcuts'),
+      licenses: t('menu.licenses'), report: t('menu.report'), updates: t('menu.updates')
+    });
   });
 
-  const pageTitles: Record<string, MessageKey> = { backups: 'nav.backups', settings: 'nav.settings', about: 'nav.about' };
+  const pageTitles: Record<string, MessageKey> = { backups: 'nav.backups', settings: 'nav.settings', about: 'nav.about', help: 'nav.help' };
 </script>
 
 <a class="skip" href="#main-content">{t('app.skip')}</a>
@@ -150,6 +167,8 @@
           <BackupsScreen />
         {:else if app.page === 'settings'}
           <SettingsScreen />
+        {:else if app.page === 'help'}
+          <HelpScreen />
         {:else}
           <AboutScreen />
         {/if}
@@ -166,10 +185,19 @@
       <li><Icon name="language" size={19} /> <span>{t('notice.item2')}</span></li>
       <li><Icon name="info" size={19} /> <span>{t('notice.item3')}</span></li>
     </ul>
+    <p class="required" lang="en">NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.</p>
     {#snippet actions()}
       <button type="button" class="btn btn-primary btn-lg" data-autofocus onclick={() => app.acceptNotice()}>{t('notice.accept')}</button>
     {/snippet}
   </Dialog>
+{/if}
+
+{#if app.showTour && !app.showNotice && app.ready}
+  <Tour />
+{/if}
+
+{#if app.showLicenses}
+  <LicensesDialog onClose={() => (app.showLicenses = false)} />
 {/if}
 
 {#if dropping}
@@ -215,6 +243,7 @@
   .notice-brand img { width: 72px; height: 72px; object-fit: contain; outline: 1px solid var(--image-outline); outline-offset: -1px; border-radius: var(--radius-xl); }
   .notice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
   .notice-list li { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: var(--space-3); }
+  .required { font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); letter-spacing: 0.01em; }
   .notice-list :global(.icon) { color: var(--accent-text); margin-top: 2px; }
   .drop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, transparent); outline: 3px dashed var(--accent); outline-offset: -12px; pointer-events: none; animation: pomi-fade var(--dur-fast) var(--ease-out); }
   .drop-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-radius: var(--radius-xl); background: var(--bg-surface); color: var(--accent-text); font-weight: 600; box-shadow: var(--shadow-pop); }

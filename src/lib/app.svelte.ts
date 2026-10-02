@@ -19,9 +19,10 @@ import {
   type Settings,
   type TranslationResult,
   type DiscoveredWorld,
+  type AppPrefs,
   type WorldInspection
 } from './api';
-import type { MenuAction } from './native';
+import { checkForUpdate, installUpdate, onUpdateProgress, openExternal, type MenuAction, type UpdateInfo } from './native';
 import { resourcePackOptions } from './resource-pack';
 import { CandidateSource } from './candidates.svelte';
 import { hasMessage, setLocale, t, type Locale, type MessageKey } from './i18n/index.svelte';
@@ -29,7 +30,7 @@ import { applyTheme, type ThemeChoice } from './theme';
 import { emptyProgress, reduceProgress, type JobProgress } from './workflow';
 import { normalizedScanOptions, scanOptionsSignature } from './settings';
 
-export type Page = 'workspace' | 'backups' | 'settings' | 'about';
+export type Page = 'workspace' | 'backups' | 'settings' | 'about' | 'help';
 export type Step = 'world' | 'scan' | 'review' | 'run' | 'result';
 export type Busy = '' | 'loading' | 'scan' | 'translate' | 'restore' | 'models' | 'prompt' | 'settings' | 'usage';
 export type Tone = 'info' | 'success' | 'error';
@@ -45,6 +46,14 @@ export const defaultSettings = (): Settings => ({
 });
 
 const NOTICE_KEY = 'pomi.notice.v1';
+const PROVIDERS = ['openai', 'gemini', 'anthropic', 'openrouter', 'comet', 'custom'];
+export const ISSUES_URL = 'https://github.com/kim0040/PomiTranslate/issues/new';
+const DAY = 24 * 60 * 60;
+export const DEFAULT_PREFS: AppPrefs = {
+  theme: 'system', notice_accepted: false, tutorial_seen: false,
+  update_auto_check: true, update_last_check: 0, update_skipped_version: ''
+};
+export type UpdateState = 'idle' | 'checking' | 'installing' | 'error';
 const RESUMABLE = ['cancelled', 'needs_retry', 'failed'];
 /** Settings that change which text a scan finds. Changing one makes a reviewed scan stale. */
 const SCOPE_KEYS: (keyof Settings)[] = ['target_language', 'resource_pack_enabled', 'skip_target_language_text'];
@@ -64,6 +73,16 @@ export class AppState {
   theme = $state<ThemeChoice>('system');
   notices = $state<Notices | null>(null);
   showNotice = $state(false);
+  /** App state saved with the settings file; the web view's storage is only a fast copy. */
+  prefs = $state<AppPrefs>({ ...DEFAULT_PREFS });
+  showTour = $state(false);
+  showLicenses = $state(false);
+  /** A section of the help page to bring into view (set by the Help menu). */
+  helpSection = $state('');
+  update = $state<UpdateInfo | null>(null);
+  updateState = $state<UpdateState>('idle');
+  updateError = $state('');
+  updateProgress = $state<{ downloaded: number; total: number | null } | null>(null);
   banner = $state<{ tone: 'error' | 'warning'; message: string } | null>(null);
   toasts = $state<{ id: number; tone: Tone; message: string }[]>([]);
   railCollapsed = $state(false);
@@ -237,7 +256,7 @@ export class AppState {
       this.worldDir = boot.settings.last_world_dir || '';
       this.inspection = boot.worldInspection;
       this.backups = boot.backups;
-      this.showNotice = localStorage.getItem(NOTICE_KEY) !== 'accepted';
+      this.applyPrefs(boot);
       if (this.worldDir && this.inspection?.validJavaWorld) this.step = 'scan';
       this.applyResume(boot.resume);
 
@@ -256,14 +275,129 @@ export class AppState {
     this.unsubscribe = [];
   }
 
+  /**
+   * Read the saved app state. A build before this one kept the theme and the notice answer only in
+   * the web view's storage; when the settings file has none yet, that answer is carried over once.
+   */
+  private applyPrefs(boot: BootstrapPayload): void {
+    const saved = { ...DEFAULT_PREFS, ...(boot.prefs ?? {}) };
+    if (!boot.settings.app_prefs) {
+      let acceptedBefore = false;
+      try { acceptedBefore = localStorage.getItem(NOTICE_KEY) === 'accepted'; } catch { /* no storage */ }
+      const carried: Partial<AppPrefs> = {};
+      if (acceptedBefore) Object.assign(carried, { notice_accepted: true, tutorial_seen: true });
+      if (this.theme !== 'system') carried.theme = this.theme;
+      Object.assign(saved, carried);
+      if (Object.keys(carried).length) void this.setPrefs(carried);
+    }
+    this.prefs = saved;
+    if (saved.theme !== this.theme) this.setThemeOnly(saved.theme);
+    this.showNotice = !saved.notice_accepted;
+    this.showTour = saved.notice_accepted && !saved.tutorial_seen;
+    if (saved.update_auto_check && Date.now() / 1000 - saved.update_last_check > DAY) {
+      setTimeout(() => void this.checkUpdates(false), 4000);
+    }
+  }
+
+  /** Save app state. The change applies at once; a failed save keeps it for this session. */
+  async setPrefs(changes: Partial<AppPrefs>): Promise<void> {
+    this.prefs = { ...this.prefs, ...changes };
+    try {
+      const saved = await callBackend<{ prefs: AppPrefs }>('prefs.set', { prefs: changes });
+      this.prefs = { ...this.prefs, ...saved.prefs, ...changes };
+    } catch {
+      // The core may be busy with a job; the next change saves the whole state again.
+    }
+  }
+
   acceptNotice(): void {
-    localStorage.setItem(NOTICE_KEY, 'accepted');
+    try { localStorage.setItem(NOTICE_KEY, 'accepted'); } catch { /* the settings file is the record */ }
     this.showNotice = false;
+    if (!this.prefs.tutorial_seen) this.showTour = true;
+    void this.setPrefs({ notice_accepted: true });
+  }
+
+  finishTour(): void {
+    this.showTour = false;
+    if (!this.prefs.tutorial_seen) void this.setPrefs({ tutorial_seen: true });
+  }
+
+  private setThemeOnly(choice: ThemeChoice): void {
+    this.theme = choice;
+    applyTheme(choice);
   }
 
   setTheme(choice: ThemeChoice): void {
-    this.theme = choice;
-    applyTheme(choice);
+    this.setThemeOnly(choice);
+    void this.setPrefs({ theme: choice });
+  }
+
+  // --- updates -----------------------------------------------------------------------------
+
+  /** Check the release feed. A manual check reports every outcome; an automatic one stays quiet. */
+  async checkUpdates(manual = true): Promise<void> {
+    if (this.updateState === 'checking' || this.updateState === 'installing') return;
+    this.updateState = 'checking';
+    this.updateError = '';
+    try {
+      const info = await checkForUpdate();
+      this.update = info;
+      this.updateState = 'idle';
+      void this.setPrefs({ update_last_check: Math.floor(Date.now() / 1000) });
+      if (!manual && info.status === 'available' && info.version !== this.prefs.update_skipped_version) {
+        this.notify(t('update.availableToast', { version: info.version ?? '' }), 'info', 9000);
+      }
+    } catch (cause) {
+      this.updateState = manual ? 'error' : 'idle';
+      this.updateError = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  get updateAvailable(): boolean {
+    return this.update?.status === 'available' && this.update.version !== this.prefs.update_skipped_version;
+  }
+
+  async installUpdate(): Promise<void> {
+    if (this.isBusy || this.updateState === 'installing') return;
+    this.updateState = 'installing';
+    this.updateError = '';
+    this.updateProgress = { downloaded: 0, total: null };
+    let stop: (() => void) | null = null;
+    try {
+      stop = await onUpdateProgress((downloaded, total) => { this.updateProgress = { downloaded, total }; }).catch(() => null);
+      await installUpdate();
+    } catch (cause) {
+      this.updateState = 'error';
+      this.updateError = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      stop?.();
+    }
+  }
+
+  skipUpdate(): void {
+    if (this.update?.version) void this.setPrefs({ update_skipped_version: this.update.version });
+  }
+
+  // --- reset -------------------------------------------------------------------------------
+
+  /**
+   * Return to first launch. Removes preferences, recent worlds, model lists and unfinished jobs, and
+   * the saved API keys when asked. World backups stay, so every world can still be restored.
+   */
+  async resetApp(clearKeys: boolean): Promise<boolean> {
+    if (this.isBusy) return false;
+    try {
+      await callBackend('app.reset', { confirm: 'reset' });
+      if (clearKeys) for (const provider of PROVIDERS) await callBackend('credentials.delete', { provider });
+      try {
+        localStorage.removeItem(NOTICE_KEY);
+        localStorage.removeItem('pomi.theme.v1');
+      } catch { /* nothing cached */ }
+      return true;
+    } catch (cause) {
+      this.fail(cause);
+      return false;
+    }
   }
 
   // --- navigation --------------------------------------------------------------------------
@@ -288,6 +422,19 @@ export class AppState {
       if (this.isBusy) return;
       this.page = 'workspace';
       void this.chooseWorld();
+    } else if (action === 'help' || action === 'shortcuts') {
+      this.helpSection = action === 'shortcuts' ? 'shortcuts' : '';
+      this.goto('help');
+    } else if (action === 'tour') {
+      this.showTour = true;
+    } else if (action === 'licenses') {
+      this.showLicenses = true;
+    } else if (action === 'report') {
+      void openExternal(ISSUES_URL).catch((cause) => this.fail(cause));
+    } else if (action === 'updates') {
+      this.helpSection = 'updates';
+      this.goto('settings');
+      void this.checkUpdates(true);
     } else if (action === 'find') {
       if (this.page !== 'workspace' || this.step !== 'review') return;
       const search = document.getElementById('review-search') as HTMLInputElement | null;

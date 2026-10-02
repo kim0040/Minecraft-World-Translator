@@ -80,3 +80,5 @@ jobs:
         run: python tests/test_snbt_commands.py
       - name: Launcher world discovery is read-only
         run: python tests/test_world_discovery.py
+      - name: Saved data survives damage and reset keeps backups
+        run: python tests/test_user_data_durability.py

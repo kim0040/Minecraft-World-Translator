@@ -183,9 +183,20 @@ export type ResumeStatus = {
   backupSetId?: string;
 };
 
+/** App state kept with the settings file (not in the web view's storage, which cleaners can clear). */
+export type AppPrefs = {
+  theme: 'system' | 'light' | 'dark';
+  notice_accepted: boolean;
+  tutorial_seen: boolean;
+  update_auto_check: boolean;
+  update_last_check: number;
+  update_skipped_version: string;
+};
+
 export type BootstrapPayload = {
   notices: Notices;
-  settings: Settings;
+  settings: Settings & { app_prefs?: Partial<AppPrefs> };
+  prefs?: AppPrefs;
   apiKeyStored: boolean;
   credentialMode?: CredentialMode;
   worlds: RecentWorld[];

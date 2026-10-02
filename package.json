@@ -13,6 +13,8 @@
     "test:frontend": "vitest run tests/frontend",
     "build": "pnpm check && vite build",
     "sidecar:build": "node scripts/build-sidecar.mjs",
+    "licenses": "node scripts/generate-licenses.mjs",
+    "licenses:check": "node scripts/generate-licenses.mjs --check",
     "desktop:dev": "pnpm sidecar:build && tauri dev",
     "desktop:build": "pnpm sidecar:build:clean && tauri build",
     "tauri": "tauri",

@@ -5,10 +5,12 @@
   let {
     title,
     dismissible = true,
+    size = 'normal',
+    tone = 'normal',
     onClose,
     children,
     actions
-  }: { title: string; dismissible?: boolean; onClose: () => void; children?: Snippet; actions?: Snippet } = $props();
+  }: { title: string; dismissible?: boolean; size?: 'normal' | 'wide'; tone?: 'normal' | 'danger'; onClose: () => void; children?: Snippet; actions?: Snippet } = $props();
 
   let dialog: HTMLDialogElement | undefined = $state();
   const titleId = `dialog-${Math.random().toString(36).slice(2, 8)}`;
@@ -19,7 +21,8 @@
     if (!node) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     node.showModal();
-    queueMicrotask(() => node.querySelector<HTMLElement>('[data-autofocus], button, input, select, textarea')?.focus());
+    // The marked control wins over the close button that comes first in the markup.
+    queueMicrotask(() => (node.querySelector<HTMLElement>('[data-autofocus]') ?? node.querySelector<HTMLElement>('button, input, select, textarea'))?.focus());
     return () => {
       if (node.open) node.close();
       previous?.focus();
@@ -32,7 +35,7 @@
   }
 </script>
 
-<dialog bind:this={dialog} class="dialog" aria-labelledby={titleId} oncancel={handleCancel}>
+<dialog bind:this={dialog} class="dialog" class:wide={size === 'wide'} class:danger={tone === 'danger'} aria-labelledby={titleId} oncancel={handleCancel}>
   <div class="head">
     <h2 id={titleId}>{title}</h2>
     {#if dismissible}
@@ -54,6 +57,10 @@
   }
   /* A sheet appears the same way everywhere: the scrim fades, the panel fades in from 97%. */
   .dialog[open] { animation: pomi-pop var(--dur-base) var(--ease-out); }
+  .dialog.wide { width: min(760px, calc(100% - 32px)); height: min(720px, calc(100dvh - 32px)); }
+  .dialog.wide[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .dialog.wide .body { min-height: 0; overflow: auto; }
+  .dialog.danger h2 { color: var(--danger-text); }
   .dialog::backdrop { background: var(--scrim); animation: pomi-fade var(--dur-base) var(--ease-out); }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
   h2 { font-size: var(--text-xl); }

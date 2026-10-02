@@ -4,13 +4,15 @@
 
 월드 선택·스캔·검토는 로컬에서 처리합니다. AI 번역을 실행하면 번역 대상으로 선택한 원문, 도착 언어와 번역 지시 등 요청 내용이 **선택한 API 제공사 또는 Custom endpoint**로 전송됩니다. 서버 이름·책·표지판 등에 개인정보가 있다면 번역 대상으로 보내지 않도록 검토하세요. 제공사의 보관·학습·삭제 정책은 해당 서비스의 정책을 따릅니다.
 
+**업데이트 확인**은 GitHub(`github.com/kim0040/PomiTranslate`)의 최신 버전 정보(`latest.json`)만 받아 옵니다. 월드, 키, 사용 기록, 설치 식별자는 보내지 않으며, 환경 설정 → 업데이트에서 하루 한 번 자동 확인을 끌 수 있습니다. 도움말·정보 화면의 웹 링크는 정해진 주소(GitHub, minecraft.net, 제공사 키 발급 페이지, 문의 메일)만 기본 브라우저로 엽니다.
+
 모델 지원 정보와 사용량 조회도 선택한 제공사로 네트워크 요청을 보냅니다. OpenRouter의 공개 모델 catalog 조회에는 키와 월드 텍스트를 보내지 않습니다. 사용량 조회·다른 제공사의 인증 요청에는 저장된 키를 사용합니다. 번역 지시문 다듬기는 별도의 AI 요청입니다.
 
 데스크톱 앱은 UI용 localhost 서버를 열지 않고 JSONL sidecar를 사용합니다. 개발 Vite 서버와 legacy Web UI는 별도이며 같은 실행 구조로 소개하지 않습니다.
 
 ## 저장하는 데이터
 
-설정, 최근 월드 경로, 모델 cache, scan plan·checkpoint, 번역 보고서와 백업은 앱 데이터에 남을 수 있습니다. 경로·원문·번역문이 포함될 수 있으므로 이를 진단 자료나 공개 저장소에 그대로 올리지 마세요. 현재 별도의 일반 데이터 삭제 화면이나 암호화된 portable export는 제공하지 않습니다.
+설정, 최근 월드 경로, 모델 cache, scan plan·checkpoint, 번역 보고서와 백업은 앱 데이터에 남을 수 있습니다. 경로·원문·번역문이 포함될 수 있으므로 이를 진단 자료나 공개 저장소에 그대로 올리지 마세요. 환경 설정 → **초기화**로 설정·최근 월드·이어서 할 작업·모델 목록과 (선택 시) 저장된 API 키를 지울 수 있습니다. 월드 백업은 초기화로 지우지 않으며, 지우려면 데이터 폴더를 직접 삭제합니다. 도움말의 **진단 정보 복사**는 앱 버전·OS·화면 언어·제공사/모델 이름만 담고 경로·월드 이름·키는 넣지 않습니다. 암호화된 portable export는 제공하지 않습니다. 업데이트·청소 도구와 데이터의 관계는 [업데이트·데이터 보존](updates-and-data.md)을 따릅니다.
 
 공개 Python 설정 경로는 macOS `~/Library/Application Support/PomiTranslate`, Windows `%APPDATA%/PomiTranslate`, Linux `$XDG_DATA_HOME/PomiTranslate` 또는 `~/.local/share/PomiTranslate`입니다. native vault는 Tauri app-data 경로의 `credentials/credentials.sqlite`와 `credential-key/master.key`를 사용합니다. 격리 Eval identifier는 별도 root를 사용하므로 일반 앱과 데이터를 혼용하지 않습니다.
 

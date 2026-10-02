@@ -8,9 +8,11 @@ vi.mock('../../src/lib/api', async () => ({
 import { AppState, defaultSettings } from '../../src/lib/app.svelte';
 import { BackendError } from '../../src/lib/api';
 
+// A current install: app state already lives in the settings file, so start-up reads it and saves nothing.
+const prefs = { theme: 'system' as const, notice_accepted: true, tutorial_seen: true, update_auto_check: true, update_last_check: Date.now() / 1000, update_skipped_version: '' };
 const payload = () => ({
   notices: { firstLaunch: '', about: '', backupWarning: '', apiWarning: '' },
-  settings: defaultSettings(), apiKeyStored: false, worlds: [], worldInspection: null,
+  settings: { ...defaultSettings(), app_prefs: prefs }, prefs, apiKeyStored: false, worlds: [], worldInspection: null,
   backups: [], resume: { available: false }
 });
 
@@ -18,6 +20,36 @@ beforeEach(() => {
   backend.mockReset();
   listen.mockReset().mockResolvedValue(() => {});
   vi.stubGlobal('localStorage', { getItem: () => 'accepted' });
+});
+
+describe('app state from an earlier version', () => {
+  it('carries the notice answer from web storage into the settings file once, without the tour', async () => {
+    backend.mockImplementation(async (type: string) => type === 'app.bootstrap'
+      ? { ...payload(), settings: defaultSettings(), prefs: { ...prefs, notice_accepted: false, tutorial_seen: false } }
+      : { prefs: { ...prefs } });
+    const app = new AppState();
+    await app.boot();
+    expect(backend).toHaveBeenCalledWith('prefs.set', { prefs: { notice_accepted: true, tutorial_seen: true } });
+    expect(app.showNotice).toBe(false);
+    expect(app.showTour).toBe(false);
+    app.destroy();
+  });
+
+  it('a fresh install shows the notice first and the tour after it', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} });
+    backend.mockImplementation(async (type: string) => type === 'app.bootstrap'
+      ? { ...payload(), settings: { ...defaultSettings(), app_prefs: {} }, prefs: { ...prefs, notice_accepted: false, tutorial_seen: false } }
+      : { prefs: { ...prefs } });
+    const app = new AppState();
+    await app.boot();
+    expect(app.showNotice).toBe(true);
+    expect(app.showTour).toBe(false);
+    app.acceptNotice();
+    expect(app.showTour).toBe(true);
+    app.finishTour();
+    expect(backend).toHaveBeenCalledWith('prefs.set', { prefs: { tutorial_seen: true } });
+    app.destroy();
+  });
 });
 
 describe('startup recovery', () => {

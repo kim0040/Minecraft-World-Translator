@@ -50,7 +50,10 @@ test('menu commands open settings, open a world and focus search on review', asy
   await emit(page, 'pomi-menu', 'find');
   await expect(page.locator('#review-search')).toBeFocused();
   const labels = await page.evaluate(() => ((window as any).__pomiChrome ?? []).filter((c: any) => c.command === 'set_menu_labels').at(-1)?.args.labels);
-  expect(labels).toEqual({ openWorld: '월드 열기…', settings: '설정…', find: '찾기…' });
+  expect(labels).toEqual({
+    openWorld: '월드 열기…', settings: '설정…', find: '찾기…', help: 'PomiTranslate 도움말', tour: '시작 안내',
+    shortcuts: '단축키', licenses: '오픈소스 라이선스', report: '문제 신고…', updates: '업데이트 확인…'
+  });
 });
 
 test('a folder dropped on the window opens as the selected world', async ({ page }) => {

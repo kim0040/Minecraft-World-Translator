@@ -3,10 +3,16 @@
   import Icon from '../components/Icon.svelte';
   import { t, type MessageKey } from '../lib/i18n/index.svelte';
 
-  // Keep this in sync with package.json and src-tauri/tauri.conf.json until the
-  // app exposes a runtime version through a capability-safe API.
-  const APP_VERSION = '0.1.0';
-  const REPOSITORY_URL = 'https://github.com/kim0040/Minecraft-World-Translator';
+  import { onMount } from 'svelte';
+  import { app } from '../lib/app.svelte';
+  import { appVersion } from '../lib/native';
+  import { APP_VERSION } from '../lib/version';
+
+  const REPOSITORY_URL = 'https://github.com/kim0040/PomiTranslate';
+  // Required wording from the Minecraft Usage Guidelines, shown verbatim in every language.
+  const UNOFFICIAL = 'NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.';
+  let version = $state(APP_VERSION);
+  onMount(() => { void appVersion(APP_VERSION).then((value) => (version = value)); });
   const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`;
   const SUPPORT_MATRIX_URL = `${REPOSITORY_URL}/blob/main/docs/support-matrix.md`;
   const EULA_URL = 'https://www.minecraft.net/en-us/eula';
@@ -86,7 +92,7 @@
       <div class="identity-copy">
         <img class="wordmark" src="/images/wordmark.png" alt="PomiTranslate" width="220" height="64" />
         <h2 id="identity-title">{t('app.tagline')}</h2>
-        <p class="muted">{t('about.version', { version: APP_VERSION })}</p>
+        <p class="muted">{t('about.version', { version })}</p>
       </div>
     </div>
     <p class="hero-copy">{t('about.lead')}</p>
@@ -148,6 +154,7 @@
 
     <div class="side-stack">
       <Callout tone="warning" title={t('notice.title')}>
+        <p class="required" lang="en">{UNOFFICIAL}</p>
         <p>{t('about.unofficial')}</p>
         <p>{t('notice.item1')}</p>
         <p>{t('notice.item2')}</p>
@@ -169,9 +176,14 @@
         <nav class="link-list" aria-label={t('about.source')}>
           <a class="link-row" href={REPOSITORY_URL} target="_blank" rel="noreferrer">
             <Icon name="language" size={19} />
-            <span><strong>GitHub</strong><small class="mono">kim0040/Minecraft-World-Translator</small></span>
+            <span><strong>GitHub</strong><small class="mono">kim0040/PomiTranslate</small></span>
             <Icon name="chevron-right" size={17} />
           </a>
+          <button type="button" class="link-row" onclick={() => (app.showLicenses = true)}>
+            <Icon name="shield" size={19} />
+            <span><strong>{t('about.licenses')}</strong><small>{t('about.licensesHint')}</small></span>
+            <Icon name="chevron-right" size={17} />
+          </button>
           <a class="link-row" href={LICENSE_URL} target="_blank" rel="noreferrer">
             <Icon name="shield" size={19} />
             <span><strong>MIT License</strong><small>LICENSE</small></span>
@@ -203,7 +215,7 @@
         <h2 id="diagnostics-title">{t('about.diagnostics')}</h2>
         <p class="muted">{t('about.diagnosticsLead')}</p>
       </div>
-      <span class="pill">{t('about.version', { version: APP_VERSION })}</span>
+      <span class="pill">{t('about.version', { version })}</span>
     </div>
     <dl>
       <div><dt>{t('about.platform')}</dt><dd>{diagnostics.platform}</dd></div>
@@ -245,6 +257,8 @@
   .side-stack :global(.callout-body) { display: grid; gap: var(--space-2); }
   .keychain-note { margin-top: var(--space-4); padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--text-secondary); font-size: var(--text-sm); }
   .link-list { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+  .required { font-weight: 700; color: var(--text); letter-spacing: 0.01em; }
+  button.link-row { width: 100%; background: transparent; font: inherit; text-align: start; }
   .link-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); text-decoration: none; }
   .link-row:hover { background: var(--bg-hover); border-color: var(--border-strong); }
   .link-row > :global(.icon:first-child) { color: var(--accent-text); }

@@ -163,7 +163,9 @@
       const resumed = ['scanned', 'review', 'run', 'run-progress', 'result-success', 'result-failed', 'dark-review'].includes(current);
       const resultScenarios = ['result-partial', 'result-failed', 'result-needs_retry', 'result-cancelled', 'result-invalidated', 'result-unsupported'];
       return ok(request, {
-        notices: { firstLaunch: '', about: '', backupWarning: '', apiWarning: '' }, settings: { ...settings, last_world_dir: empty ? '' : worldDir },
+        notices: { firstLaunch: '', about: '', backupWarning: '', apiWarning: '' },
+        settings: { ...settings, last_world_dir: empty ? '' : worldDir, ...(current === 'first-run' ? { app_prefs: {} } : {}) },
+        ...(current === 'first-run' ? { prefs: { theme: 'system', notice_accepted: false, tutorial_seen: false, update_auto_check: true, update_last_check: 0, update_skipped_version: '' } } : {}),
         apiKeyStored: true, credentialMode: 'local', worlds: empty ? [] : [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }],
         worldInspection: empty ? null : inspection, backups: empty ? [] : backups,
         resume: resumed || resultScenarios.includes(current) ? resumePayload() : { available: false }
@@ -182,6 +184,15 @@
       }
       credentialModes.set(body.provider, body.credentialMode || 'local');
       return ok(request, { settings: { ...settings }, apiKeyStored: true, credentialMode: body.credentialMode || 'local' });
+    }
+    if (type === 'prefs.set') {
+      window.__pomiPrefs = { ...(window.__pomiPrefs || {}), ...(body.prefs || {}) };
+      return ok(request, { prefs: { theme: 'system', notice_accepted: false, tutorial_seen: false, update_auto_check: true, update_last_check: 0, update_skipped_version: '', ...window.__pomiPrefs } });
+    }
+    if (type === 'app.reset') {
+      if (body.confirm !== 'reset') return { v: 1, id: request.id, type: 'response.error', error: { code: 'INVALID_REQUEST', message: 'Reset needs an explicit confirmation' } };
+      sessionStorage.setItem('pomi.fixture.reset', 'true');
+      return ok(request, { removed: ['settings.json', 'scans', 'jobs', 'models'], kept: ['backups'] });
     }
     if (type === 'world.inspect') return ok(request, inspection);
     if (type === 'worlds.discover') {
@@ -228,7 +239,11 @@
       return ok(request, resultPayload(current.startsWith('result-') ? current.slice('result-'.length) : 'completed'));
     }
     if (type === 'restore.start') return ok(request, { status: 'restored', recoverySetId: 'recovery-before-restore' });
-    if (type === 'credentials.delete') return ok(request, { deleted: true });
+    if (type === 'credentials.delete') {
+      const cleared = JSON.parse(sessionStorage.getItem('pomi.fixture.cleared') || '[]');
+      sessionStorage.setItem('pomi.fixture.cleared', JSON.stringify([...cleared, body.provider]));
+      return ok(request, { deleted: true });
+    }
     return ok(request, {});
   }
 
@@ -260,6 +275,23 @@
       if (command === 'credential_status') return { stored: new URLSearchParams(location.search).get('missingKey') !== '1', mode: credentialModes.get(args.provider) || 'local' };
       if (command === 'credential_import') return { stored: true, mode: 'local' };
       if (command === 'operation_active') return false;
+      if (command === 'open_external') { (window.__pomiOpened ||= []).push(args.url); return null; }
+      if (command === 'data_locations') return { data: '/Users/fixture/Library/Application Support/PomiTranslate', app: '/Users/fixture/Library/Application Support/app.pomitranslate.desktop' };
+      if (command === 'reveal_data_folder') { window.__pomiRevealed = (window.__pomiRevealed || 0) + 1; return null; }
+      if (command === 'plugin:app|version') return '0.1.0';
+      if (command === 'update_check') {
+        window.__pomiUpdateChecks = (window.__pomiUpdateChecks || 0) + 1;
+        const mode = new URLSearchParams(location.search).get('update') || 'current';
+        if (mode === 'offline') throw 'UPDATE_UNREACHABLE';
+        const releaseUrl = 'https://github.com/kim0040/PomiTranslate/releases/latest';
+        if (mode === 'current') return { status: 'current', currentVersion: '0.1.0', canInstall: true, releaseUrl };
+        return { status: 'available', currentVersion: '0.1.0', version: '0.2.0', notes: 'Faster scans.\nFixes.', date: '2026-10-20', canInstall: mode !== 'unsigned', releaseUrl };
+      }
+      if (command === 'update_install') {
+        window.__pomiInstalled = true;
+        emit('pomi-update-progress', { downloaded: 512, total: 1024 });
+        return new Promise(() => {}); // the real app restarts here
+      }
       if (command === 'cancel_active') return true;
       if (command === 'sidecar_request') return sidecar(args.request);
       // Window chrome calls are decoration in the preview: accept and record them.
@@ -267,6 +299,7 @@
       throw new Error(`Unsupported fixture command: ${command}`);
     }
   };
-  localStorage.setItem('pomi.notice.v1', 'accepted');
+  if (scenario() !== 'first-run') localStorage.setItem('pomi.notice.v1', 'accepted');
+  else localStorage.removeItem('pomi.notice.v1');
   localStorage.setItem('pomi.theme.v1', scenario() === 'dark-review' ? 'dark' : 'light');
 })();

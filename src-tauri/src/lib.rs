@@ -1,10 +1,12 @@
 mod app_menu;
 mod credentials;
+mod desktop_links;
 mod document_export;
 mod provider_boundary;
 mod settings_transaction;
 mod sidecar_paths;
 mod startup;
+mod updates;
 mod zoom_menu;
 
 use std::{fs, path::PathBuf, sync::Mutex};
@@ -29,6 +31,8 @@ struct ActiveSidecar {
 
 const ALLOWED_REQUESTS: &[&str] = &[
     "app.bootstrap",
+    "app.reset",
+    "prefs.set",
     "notices.get",
     "settings.get",
     "settings.import_legacy",
@@ -402,6 +406,22 @@ fn operation_active(state: State<'_, ActiveSidecar>) -> bool {
 }
 
 #[tauri::command]
+async fn update_check(app: tauri::AppHandle) -> Result<updates::UpdateInfo, String> {
+    updates::check(&app).await
+}
+
+/// Installing replaces the program, so it owns the same gate as a scan or a write: it cannot start
+/// during a job, a job cannot start during it, and quitting is held until it ends.
+#[tauri::command]
+async fn update_install(app: tauri::AppHandle, state: State<'_, ActiveSidecar>) -> Result<(), String> {
+    let _gate = state
+        .request_gate
+        .try_lock()
+        .map_err(|_| "UPDATE_BUSY")?;
+    updates::install(&app).await
+}
+
+#[tauri::command]
 fn cancel_active(state: State<'_, ActiveSidecar>) -> Result<bool, String> {
     let active = state
         .process
@@ -425,6 +445,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ActiveSidecar::default())
         .manage(credentials::Credentials::default())
         .setup(|app| {
@@ -443,7 +465,12 @@ pub fn run() {
             credential_import,
             operation_active,
             document_export::export_document,
-            app_menu::set_menu_labels
+            app_menu::set_menu_labels,
+            desktop_links::open_external,
+            desktop_links::data_locations,
+            desktop_links::reveal_data_folder,
+            update_check,
+            update_install
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -519,6 +546,8 @@ mod tests {
             "backups.list",
             "restore.start",
             "models.list",
+            "prefs.set",
+            "app.reset",
         ] {
             assert!(is_allowed_request(kind), "{kind} must be allowed");
         }
@@ -552,6 +581,8 @@ mod tests {
         // Reading a world, plan or settings preview never needs the key.
         for kind in [
             "settings.import_legacy",
+            "prefs.set",
+            "app.reset",
             "scan.start",
             "candidates.page",
             "estimate.get",

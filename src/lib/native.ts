@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Unsubscribe = () => void;
-export type MenuAction = 'open-world' | 'settings' | 'find';
+export type MenuAction = 'open-world' | 'settings' | 'find' | 'help' | 'tour' | 'shortcuts' | 'licenses' | 'report' | 'updates';
 
 export function inShell(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -77,7 +77,12 @@ export function setWindowTheme(choice: 'system' | 'light' | 'dark', background: 
   });
 }
 
-export async function setMenuLabels(labels: { openWorld: string; settings: string; find: string }): Promise<void> {
+export type MenuLabels = {
+  openWorld: string; settings: string; find: string;
+  help: string; tour: string; shortcuts: string; licenses: string; report: string; updates: string;
+};
+
+export async function setMenuLabels(labels: MenuLabels): Promise<void> {
   await quietly(() => invoke('set_menu_labels', { labels }));
 }
 
@@ -97,4 +102,66 @@ export async function onDropPath(handler: (path: string) => void, hover: (over: 
     })
   ]);
   return () => stops.forEach((stop) => stop());
+}
+
+/**
+ * Open a web page or the contact address in the system's own browser or mail app. The shell only
+ * accepts known addresses; a browser preview falls back to a new tab.
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (!inShell()) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  await invoke('open_external', { url });
+}
+
+export type DataLocations = { data: string; app: string };
+
+export async function dataLocations(): Promise<DataLocations | null> {
+  if (!inShell()) return null;
+  try {
+    return await invoke<DataLocations>('data_locations');
+  } catch {
+    return null;
+  }
+}
+
+export async function revealDataFolder(): Promise<void> {
+  await invoke('reveal_data_folder');
+}
+
+export async function appVersion(fallback: string): Promise<string> {
+  if (!inShell()) return fallback;
+  try {
+    const { getVersion } = await import('@tauri-apps/api/app');
+    return await getVersion();
+  } catch {
+    return fallback;
+  }
+}
+
+export type UpdateInfo = {
+  status: 'available' | 'current';
+  currentVersion: string;
+  version?: string | null;
+  notes?: string | null;
+  date?: string | null;
+  canInstall: boolean;
+  releaseUrl: string;
+};
+
+/** Ask the release feed for a newer version. Rejects with a short code (UPDATE_*) on failure. */
+export async function checkForUpdate(): Promise<UpdateInfo> {
+  if (!inShell()) throw new Error('UPDATE_UNAVAILABLE_IN_PREVIEW');
+  return invoke<UpdateInfo>('update_check');
+}
+
+/** Download, verify and install, then the app restarts. Rejects with a short code (UPDATE_*). */
+export async function installUpdate(): Promise<void> {
+  await invoke('update_install');
+}
+
+export async function onUpdateProgress(handler: (downloaded: number, total: number | null) => void): Promise<Unsubscribe> {
+  return listen<{ downloaded: number; total: number | null }>('pomi-update-progress', ({ payload }) => handler(payload.downloaded, payload.total ?? null));
 }

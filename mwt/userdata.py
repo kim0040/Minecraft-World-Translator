@@ -6,8 +6,10 @@ deletes it. API keys are not written here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import sys
 import time
 from contextlib import contextmanager
@@ -36,15 +38,43 @@ def settings_path(root: Path | None = None) -> Path:
     return user_data_dir(root) / "settings.json"
 
 
-def load_user_settings(root: Path | None = None) -> dict:
-    path = settings_path(root)
-    if not path.is_file():
-        return {}
+def _backup_path(root: Path | None = None) -> Path:
+    return user_data_dir(root) / "settings.backup.json"
+
+
+def _read_settings_file(path: Path) -> dict | None:
+    """The parsed document, or None when the file is missing, unreadable or not an object."""
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(loaded, dict):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _keep_damaged_copy(path: Path) -> None:
+    """Leave a damaged settings file where a person can find it, instead of overwriting it later."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return
+    digest = hashlib.sha256(raw).hexdigest()[:10]
+    copy = path.with_name(f"settings.damaged-{digest}.json")
+    if not copy.exists():
+        try:
+            copy.write_bytes(raw)
+        except OSError:
+            pass
+
+
+def load_user_settings(root: Path | None = None) -> dict:
+    """Saved preferences. A damaged or missing file falls back to the copy written with it."""
+    path = settings_path(root)
+    loaded = _read_settings_file(path) if path.exists() else None
+    if loaded is None:
+        if path.exists():
+            _keep_damaged_copy(path)
+        loaded = _read_settings_file(_backup_path(root)) if _backup_path(root).exists() else None
+    if loaded is None:
         return {}
     return {key: value for key, value in loaded.items() if str(key).lower() not in SECRET_FIELDS}
 
@@ -88,11 +118,35 @@ def _settings_lock(root: Path | None):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def _write_user_settings(current: dict, root: Path | None) -> None:
-    path = settings_path(root)
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+def durable_write_text(path: Path, text: str) -> None:
+    """Replace a file so that a crash or power loss leaves either the old or the new content.
+
+    The data reaches the disk before the rename, and the rename reaches the disk before return.
+    """
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temporary, path)
+    if sys.platform != "win32":
+        try:
+            directory = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(directory)
+        except OSError:
+            pass
+        finally:
+            os.close(directory)
+
+
+def _write_user_settings(current: dict, root: Path | None) -> None:
+    text = json.dumps(current, ensure_ascii=False, indent=2)
+    # The copy is written first and holds the same content, so a damaged main file loses nothing.
+    durable_write_text(_backup_path(root), text)
+    durable_write_text(settings_path(root), text)
 
 
 def restore_user_settings(previous: dict, expected: dict, root: Path | None = None) -> dict:
@@ -166,9 +220,7 @@ def remember_model_catalog(provider: str, models: list[dict], root: Path | None 
     path = _catalog_path(provider, root)
     path.parent.mkdir(parents=True, exist_ok=True)
     document = {"schema": SCHEMA, "provider": provider, "models": models}
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, path)
+    durable_write_text(path, json.dumps(document, ensure_ascii=False, indent=2))
 
 
 def load_model_catalog(provider: str, root: Path | None = None) -> list[dict]:
@@ -245,3 +297,93 @@ def public_settings_from_config(config: dict) -> dict:
         ),
         "last_world_dir": config.get("world_dir", ""),
     }
+
+
+# --- app preferences and reset ------------------------------------------------------------------
+
+APP_PREF_DEFAULTS: dict = {
+    "theme": "system",
+    "notice_accepted": False,
+    "tutorial_seen": False,
+    "update_auto_check": True,
+    "update_last_check": 0,
+    "update_skipped_version": "",
+}
+
+
+def _valid_pref(key: str, value):
+    if key == "theme":
+        if value not in {"system", "light", "dark"}:
+            raise ValueError("theme must be system, light or dark")
+        return value
+    if key in {"notice_accepted", "tutorial_seen", "update_auto_check"}:
+        if not isinstance(value, bool):
+            raise ValueError(f"{key} must be true or false")
+        return value
+    if key == "update_last_check":
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ValueError("update_last_check must be a timestamp")
+        return float(value)
+    if key == "update_skipped_version":
+        if not isinstance(value, str) or len(value) > 40:
+            raise ValueError("update_skipped_version must be a short version string")
+        return value
+    raise ValueError(f"Unknown app preference: {key}")
+
+
+def load_app_prefs(root: Path | None = None) -> dict:
+    """Window and onboarding state kept with the settings, so a cleared web cache cannot reset it."""
+    saved = load_user_settings(root).get("app_prefs")
+    prefs = dict(APP_PREF_DEFAULTS)
+    if isinstance(saved, dict):
+        for key, value in saved.items():
+            try:
+                prefs[key] = _valid_pref(str(key), value)
+            except ValueError:
+                continue
+    return prefs
+
+
+def remember_app_prefs(updates: dict, root: Path | None = None) -> dict:
+    if not isinstance(updates, dict):
+        raise ValueError("prefs must be an object")
+    checked = {str(key): _valid_pref(str(key), value) for key, value in updates.items()}
+    with _settings_lock(root):
+        current = load_user_settings(root)
+        merged = load_app_prefs(root)
+        merged.update(checked)
+        current["app_prefs"] = merged
+        current["schema"] = SCHEMA
+        _write_user_settings(current, root)
+    return load_app_prefs(root)
+
+
+# What a reset removes. Backups are never in this list: they are the only way back for a world.
+RESET_FILES = ("settings.json", "settings.backup.json", "settings.json.tmp", "settings.backup.json.tmp")
+RESET_DIRS = ("models", "scans", "jobs")
+
+
+def reset_user_data(root: Path | None = None) -> dict:
+    """Return the app to first launch: preferences, recent worlds, model lists and unfinished jobs.
+
+    World backups and copies of damaged settings stay. Nothing outside this folder is touched,
+    and a link inside it is removed as a link, never followed.
+    """
+    base = user_data_dir(root)
+    removed: list[str] = []
+    with _settings_lock(root):
+        for name in RESET_FILES:
+            target = base / name
+            if target.is_symlink() or target.is_file():
+                target.unlink()
+                removed.append(name)
+        for name in RESET_DIRS:
+            target = base / name
+            if target.is_symlink():
+                target.unlink()
+                removed.append(name)
+            elif target.is_dir():
+                shutil.rmtree(target)
+                removed.append(name)
+    kept = [name for name in ("backups",) if (base / name).is_dir()]
+    return {"removed": removed, "kept": kept}

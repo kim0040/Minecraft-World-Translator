@@ -8,7 +8,7 @@
 
 [네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)과 최신 Gemini 실측 뒤 남은 작업의 권장 순서다. 아래 표의 ID와 완료 조건이 기준이다.
 
-1. **UX-NATIVE-01 — macOS 실제 확인(사용자 로컬 필요).** Linux에서는 컴파일·fixture로만 확인했다. `pnpm sidecar:build` → `pnpm desktop:dev`로 overlay 타이틀바·메뉴·⌘Q·drop·saves 목록·Dock 진행률·다크 시작을 본다. 결함은 native-only 재현 후 수정.
+1. **UX-NATIVE-01 — macOS 실제 확인(사용자 로컬 필요).** Linux에서는 컴파일·fixture로만 확인했다. `pnpm sidecar:build` → `pnpm desktop:dev`로 overlay 타이틀바·메뉴(도움말 메뉴·업데이트 확인 포함)·⌘Q·drop·saves 목록·Dock 진행률·다크 시작·외부 링크가 브라우저로 열리는지·데이터 폴더 열기·초기화 후 재시작을 본다. 결함은 native-only 재현 후 수정.
 2. **PROVIDER-01 — Gemini 후속.** sidecar가 요청마다 새로 떠서 thinking 최저 단계 학습(`_GEMINI_LEVEL_FLOOR`)이 작업마다 초기화된다(작업당 거부 요청 1회, 동시 batch 수만큼 늘 수 있음). 모델 catalog 캐시에 저장하고, 비 OpenRouter 제공사의 날짜 명시 가격표 기반 비용 추정, 모델 목록에서 robotics/computer-use 등 번역 부적합 모델 정리.
 3. **COMP-02 → COMP-03 → COMP-04** ([호환성 계획](compatibility-roadmap-2026-10-01.md)): 최신 component(26.x object fallback, hover/book/sign), chunk별 DataVersion·coverage UI, 1.21.5+로 실제 생성한 맵의 번역·게임 로드 확인.
 4. **QUALITY-01 — 번역 품질.** 고유명사 유지/번역 일관성(실측: "Elder Mira"가 모델마다 다름), lite 모델 군더더기 글자(`§lcrypt`→`§lc지하실`) 같은 서식 인접 오류 감지, glossary·TM(Phase3 QUALITY).
@@ -27,12 +27,14 @@
 | PROVIDER-01 | Gemini·비 OpenRouter 제공사 후속 | 2026-10-01 최신 모델 실측 완료: 3.8/3.7 flash·pro·`flash-latest`는 minimal 거부 → 자동 단계 상승 구현. 학습한 단계는 프로세스 메모리에만 있음 | 단계 학습을 catalog 캐시에 저장해 작업 간 재사용(동시 batch에서도 거부 1회 이하), Gemini/OpenAI/Anthropic 가격을 날짜·출처와 함께 추정에 반영(확인 불가 시 unknown), 번역 부적합 모델(robotics, computer-use 등) 목록 정리, 변경마다 최소 실제 호출로 확인 |
 | QUALITY-01 | 번역 품질 보강 | 서식 토큰 개수 검사·끝 `§r` 정리 완료. 고유명사 일관성·서식 인접 군더더기는 미검출 | 고유명사 처리 규칙/glossary와 연결, 서식 코드 바로 뒤 원문 잔여 글자 감지(경고 또는 재시도), 모델별 비교 fixture(합성)로 회귀 확인 |
 | COMP-02–06 | 호환성 확대 | COMP-01 완료. 나머지는 [호환성 계획](compatibility-roadmap-2026-10-01.md) | 계획 문서의 각 완료 조건 |
-| LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. Cargo192 metadata 미확인, 모든 OS 고지 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
+| LEGAL-01 | 배포물 라이선스·고지 | source MIT 유지. 2026-10-02 앱 안 고지 생성기(`pnpm licenses`, Rust 415/JS 21/Python 16, 데스크톱 build에서 플랫폼별 재생성)와 정보 화면 뷰어 추가. 법적 검토·MPL source 안내 확인·SBOM은 미완 | target별 포함 목록·SBOM·전체 license/NOTICE·MPL source 안내·Python/native library 고지를 package에 동봉. 충돌 미해결이면 해당 배포 보류 |
 | PLATFORM-01 | clean-machine·키체인 | macOS arm64 개발 앱·Local/Session 검증; OS keychain opt-in/Windows/Linux native 미완 | Python/Node/Rust 없는 각 목표 OS에서 설치·chooser·credential permission/import·restart·backup/restore 확인; macOS Intel 목표 결정 |
-| RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle이며 updater/release 미완 | 실제 credential 승인 후 signing/notarization, updater signature/rollback·data 유지·진행 중 write 처리 검증 |
+| RELEASE-01 | 서명·업데이트·설치 배포 | unsigned 개발 bundle. 2026-10-02 updater 연결(확인·서명 검증 설치·작업 중 거부·재시작), 키 없는 빌드는 알림+다운로드 페이지. **공개키 비어 있음, `latest.json` 게시 없음** ([업데이트·데이터](updates-and-data.md)) | 승인 후 updater 키 생성·공개키 commit·secret 등록, release에 서명 파일+`latest.json` 게시, 이전 버전→새 버전 설치·재시작·설정/키/백업 유지·작업 중 거부를 각 OS에서 확인. macOS 공증·Windows 코드서명 |
 | DOCS-01 | 문서·화면 유지 | 이번 서비스 소개·합성 screenshot·면책·개발 안내 정리 | 기능/지원/credential/가격 정책이 바뀔 때 소개·user-guide·privacy·support evidence와 화면을 같이 갱신; 목표를 검증된 기능으로 표시하지 않음 |
 
 ## 이번에 완료한 범위
+
+- [x] 2026-10-02 후속: 도움말 화면·메뉴(F1/⌘?), 첫 실행 시작 안내, 앱 안 오픈소스 라이선스(생성기), Minecraft 비공식 고지 원문, 외부 링크를 기본 브라우저로(허용 목록), 앱 안 업데이트(서명 키가 있을 때만 설치), 데이터 위치 표시·열기, 두 단계 초기화(백업 유지), 설정 파일 fsync·사본·손상 복구, 테마·안내 동의를 설정 파일로 이전. Python23/Rust29/frontend62/browser108. [업데이트·데이터](updates-and-data.md)
 
 - [x] 2026-10-01 후속: COMP-01 SNBT 명령(선행 `/`·문자열 컴포넌트 포함, 미해석 경고), Gemini thinking/사고 토큰/헤더 인증/잘림 처리, 서식 토큰 완전 일치 검사, 기본 창 크기 후보 표 원문 열 결함 수정, 데스크톱 셸·밀도·메뉴·drop·saves 목록·진행률·⌘Q 보호. Python22/Rust28/browser94, 실제 Gemini 13요청. [기록](history/native-ux-and-compat-2026-10-01.md)
 

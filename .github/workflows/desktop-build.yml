@@ -38,7 +38,7 @@ jobs:
               {"name": "Linux x64", "os": "ubuntu-24.04", "bundles": "appimage,deb",
                "artifact": "src-tauri/target/release/bundle/appimage/*"},
               {"name": "macOS", "os": "macos-14", "bundles": "app,dmg",
-               "artifact": "src-tauri/target/release/bundle/macos/*.app\nsrc-tauri/target/release/bundle/dmg/*.dmg"},
+               "artifact": "src-tauri/target/release/bundle/macos/*.app\nsrc-tauri/target/release/bundle/macos/*.tar.gz*\nsrc-tauri/target/release/bundle/dmg/*.dmg"},
               {"name": "Windows x64", "os": "windows-2025", "bundles": "nsis",
                "artifact": "src-tauri/target/release/bundle/nsis/*"},
           ]
@@ -84,8 +84,24 @@ jobs:
         run: |
           python test_core.py
           python tests/test_desktop_entry.py
-      - name: Build unsigned desktop package
-        run: pnpm exec tauri build --bundles ${{ matrix.bundles }}
+      - name: Refresh license notices for this platform
+        run: node scripts/generate-licenses.mjs
+        env:
+          POMI_BUILD_PYTHON: python
+      # With the updater signing key in the repository secrets, the build also writes the signed
+      # update archives (.app.tar.gz / -setup.exe / .AppImage + .sig) that latest.json points to.
+      # Without it the package is built exactly as before. Publishing stays a manual release step.
+      - name: Build desktop package
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            pnpm exec tauri build --bundles ${{ matrix.bundles }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            pnpm exec tauri build --bundles ${{ matrix.bundles }}
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: pomitranslate-${{ runner.os }}-${{ runner.arch }}-unsigned

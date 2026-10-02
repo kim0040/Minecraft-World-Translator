@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Dialog from '../components/Dialog.svelte';
+  import AppMaintenance from '../components/AppMaintenance.svelte';
   import Icon from '../components/Icon.svelte';
   import ScanScopeSettings from '../components/ScanScopeSettings.svelte';
   import ResourcePackSettings from '../components/ResourcePackSettings.svelte';
@@ -716,6 +717,8 @@
         <p class="hint">{t('settings.import.help')}</p>
       </details>
     </section>
+
+    <AppMaintenance />
     </fieldset>
     <footer class="save-bar" class:dirty bind:clientHeight={saveBarHeight}>
       <div class="save-status" role="status" aria-live="polite">

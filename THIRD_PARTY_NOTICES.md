@@ -4,13 +4,15 @@ PomiTranslate의 자체 소스는 [MIT License](LICENSE)를 따릅니다. 의존
 
 **2026-10-01 검토 상태:** source·lockfile·설치 metadata 검토는 수행했으며 알려진 프로젝트 소스의 MIT 충돌은 발견하지 못했습니다. 이 파일은 최종 installer의 전체 notice/SBOM을 대신하지 않습니다. 원문 고지 동봉과 누락 플랫폼 의존성 검토를 마칠 때까지 정식 바이너리 배포를 보류합니다. [검토 범위](docs/legal/license-review.md) · [전체 metadata 목록](docs/legal/dependency-inventory.md)
 
+**앱 안 고지(2026-10-02):** `scripts/generate-licenses.mjs`가 데스크톱 4개 target의 Rust crate(proc-macro·build 전용 제외), 화면 JavaScript prod 의존성, sidecar Python 패키지·인터프리터의 라이선스 원문을 `public/licenses/THIRD_PARTY_LICENSES.txt`로 모으고 앱 LICENSE를 `LICENSE.txt`로 복사한다. 정보 화면과 도움말 메뉴의 **오픈소스 라이선스**에서 볼 수 있고, desktop build 워크플로가 각 플랫폼에서 다시 생성한다. `pnpm licenses:check`로 최신 여부를 확인한다. 이 파일이 생겼다고 LEGAL-01의 법적 검토가 끝난 것은 아니다.
+
 ## 주요 구성
 
 | 구성 | 기준 버전 | 원래 조건과 확인 경로 |
 | --- | --- | --- |
 | [Svelte](https://github.com/sveltejs/svelte) | 5.57.1 | MIT |
 | [Tauri / JavaScript API](https://github.com/tauri-apps/tauri) | 2.12.0 | Apache-2.0 OR MIT |
-| [Tauri plugins](https://github.com/tauri-apps/plugins-workspace) | dialog2.8.0 / shell2.4.0 / single-instance2.5.0 | 각 package의 Apache-2.0 OR MIT 조건 확인 |
+| [Tauri plugins](https://github.com/tauri-apps/plugins-workspace) | dialog2.8.0 / shell2.4.0 / single-instance2.5.0 / updater2.13.1 / opener2.7.0 | 각 package의 Apache-2.0 OR MIT 조건 확인 |
 | [ring](https://github.com/briansmith/ring/tree/0.17.14) | 0.17.14 | Apache-2.0 AND ISC; 포함된 코드별 notice 유지 |
 | [rusqlite](https://github.com/rusqlite/rusqlite) / SQLite | 0.40.2 / libsqlite3-sys0.38.2 | wrapper MIT, SQLite [public domain 안내](https://www.sqlite.org/copyright.html) |
 | [keyring-rs](https://github.com/open-source-cooperative/keyring-rs) | 4.2.0 | MIT OR Apache-2.0 |

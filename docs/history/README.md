@@ -4,6 +4,7 @@
 
 | 기록 | 읽는 이유 |
 | --- | --- |
+| [2026-10-02 도움말·업데이트·데이터 보존](../updates-and-data.md) | 도움말·시작 안내·앱 안 라이선스·Minecraft 고지 원문, updater(서명 키 있을 때만 설치)·외부 링크 허용 목록·데이터 위치·두 단계 초기화·설정 fsync/사본/손상 복구. Python23/Rust29/frontend62/browser108. 서명 release 업데이트·각 OS native 미확인 |
 | [2026-10-01 네이티브 UX·Gemini·SNBT](native-ux-and-compat-2026-10-01.md) | COMP-01 SNBT, Gemini thinking/사용량, 네이티브 셸·메뉴·드래그·saves 목록, Python22/Rust28/browser94, 실제 Gemini 13요청 + 최신 모델(3.8 flash·3.5 lite·3.1 pro·latest 별칭) 배치·E2E. macOS native 미확인 |
 | [2026-10-01 Phase2 완료](phase2-completion-2026-10-01.md) | 최종20 Python/58 frontend·browser 실패 수정/영향7, 신규 .mcc 생성·복원·집계와 native hash, Legacy 대체 범위 |
 | [2026-10-01 실제 샘플·시작 복구·provider](sample-startup-validation-2026-10-01.md) | 샘플9435청크·복사본 restore, 최신 시작 deadline/retry와 실제 API 비용·native 복원 |
