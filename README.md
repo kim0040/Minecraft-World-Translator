@@ -1,109 +1,114 @@
 # PomiTranslate
 
-**World Translator for Minecraft** — 마인크래프트 Java Edition 월드의 텍스트를 번역하는 데스크톱 앱
+**World Translator for Minecraft** — a desktop app that translates text in Minecraft Java Edition worlds
 
 <img src="assets/brand/wordmark/logo_wordmark_v1.png" alt="PomiTranslate" width="340" />
 
-한국어 | [English](docs/README.en.md) | [日本語](docs/README.ja.md) | [简体中文](docs/README.zh.md)
+English | [한국어](docs/README.ko.md) | [日本語](docs/README.ja.md) | [简体中文](docs/README.zh.md)
 
-해외 어드벤처 맵을 플레이하다 보면 표지판과 책, 아이템 설명이 읽히지 않아 흐름이 끊길 때가 있습니다. PomiTranslate는 그 텍스트를 원하는 언어로 바꿔 주는 데스크톱 앱입니다. 월드를 먼저 스캔해 번역할 문장을 확인하고, 필요한 문장만 골라 직접 번역하거나 선택한 AI 제공사로 번역한 다음, 검증된 백업과 함께 월드에 적용합니다.
+When an adventure map greets you with signs, books and item descriptions you cannot read, PomiTranslate turns that text into a language you know. Scan the world first to see what would be translated, review the candidates, then apply your own translations or send the rest to an AI provider you choose — with a verified backup taken before anything is written.
 
-대학생 **김현민**이 직접 쓰려고 만들기 시작한 개인 오픈소스 프로젝트입니다. 개인 시간과 제한된 예산으로 개발하고 있으며, 기업이 운영하는 상용 서비스나 유료 지원 상품이 아닙니다. 마스코트는 **Pomi**입니다.
+What you can do with PomiTranslate:
 
-> **개발 중:** macOS Apple Silicon의 격리된 개발 앱에서 주요 흐름을 확인했습니다. 서명된 정식 설치본, Windows/Linux 실기 검증, 실제 유료 번역의 최종 검증은 남아 있습니다. [현재 상태](docs/current-state.md) · [추후 작업](docs/follow-up-work.md)
+- **Scan safely** — see what would be translated without changing world files or calling any API.
+- **Review and edit** — search, filter, exclude strings, or enter your own translations.
+- **Translate with AI** — OpenAI, Gemini, Anthropic, OpenRouter, Comet or a custom endpoint, with estimated request counts and costs before you start.
+- **Apply with confidence** — changes are written only after a verified backup, and any earlier point can be restored.
+
+> **In development:** the main flows have been exercised in an isolated development app on macOS Apple Silicon. Signed installers, clean-machine Windows/Linux validation and the final paid-translation workflow remain unfinished. [Current status](docs/current-state.md) · [Follow-up work](docs/follow-up-work.md)
 >
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-## 어떻게 동작하나요
+## How it works
 
-PomiTranslate는 월드를 앱 안으로 복사하지 않고 선택한 폴더를 직접 읽습니다. 작업은 다섯 단계로 진행되며, 스캔과 검토 단계에서는 월드 파일이 전혀 바뀌지 않습니다.
+PomiTranslate reads the folder you select directly; it does not copy the world into the app. Work proceeds in five steps, and the scan and review steps never change world files.
 
-1. **월드 선택** — Java Edition 월드 폴더(level.dat 포함)나 서버 루트 폴더를 엽니다. 차원 구성, 데이터 형식(DataVersion), 월드 내장 리소스팩, 보존 중인 백업 수를 보여 줍니다. Bedrock, 구형 `.mcr`, `.linear`, 게임이나 서버가 사용 중인 월드는 시작 전에 차단합니다.
-2. **스캔** — 번역할 문장을 찾습니다. 이 단계는 번역 API를 호출하지 않고 월드 파일도 수정하지 않습니다. 고유 문자열 수, 전체 등장 위치, 예상 API 요청 수, 텍스트 유형을 요약합니다. 읽을 수 없는 청크나 지원하지 않는 형식은 원본을 그대로 둔 채 경고로 알립니다.
-3. **검토** — 검색, 정렬, 유형·상태 필터로 후보를 살펴봅니다. 번역에서 제외할 문장을 고르고, 원하는 문장에는 직접 번역문을 입력할 수 있습니다. 같은 원문이 여러 위치에 쓰이면 한 번만 번역해 모든 위치에 적용합니다.
-4. **실행** — 대상 월드, 번역 언어, 제공사와 모델, 전송할 문자열 수, 예상 요청 횟수와 비용, 안전 백업 여부를 확인한 뒤 시작합니다. 모든 번역이 정상적으로 끝날 때까지 월드 원본 파일은 변경되지 않습니다.
-5. **결과와 복원** — 변경된 파일 수, 번역·실패·원문 유지 문장, 사용한 토큰과 실제 청구 비용을 확인합니다. 되돌리려면 백업 관리에서 원하는 시점으로 복원합니다. 복원 직전 상태도 안전 스냅샷으로 남습니다.
+1. **Select a world** — open a Java Edition world folder (with level.dat) or a server root folder. The app shows the dimensions it found, the world's data format (DataVersion), an in-world resource pack and the number of stored backups. Bedrock worlds, legacy `.mcr`, `.linear` and worlds in use by a running game or server are blocked before anything starts.
+2. **Scan** — find the text worth translating. This step calls no translation API and writes nothing. It summarizes unique strings, total occurrences, the estimated number of API requests and the text kinds it found, and reports unreadable chunks or unsupported formats as warnings while leaving the originals untouched.
+3. **Review** — search, sort and filter candidates by kind or state. Exclude strings you do not want translated, or type your own translation for a string. A sentence used in several places is translated once and applied everywhere.
+4. **Run** — check the target world, translation language, provider and model, the number of strings to send, the estimated request count and cost, and the safety backup, then start. World files stay untouched until every translation finishes successfully.
+5. **Result and restore** — review changed files, translated/failed/kept strings, tokens used and reported cost. If you want to undo the run, restore any backup point from Backups; the state right before a restore is kept as a recovery snapshot.
 
-## 화면
+## Screenshots
 
-### 번역할 문장을 직접 검토
+### Reviewing candidates
 
-![후보 검색·유형 필터·직접 번역 편집 화면](docs/images/review.png)
+![Candidate search, kind filters and manual translation editing](docs/images/review.png)
 
-검색과 유형·상태 필터로 문장을 찾고, 번역에서 제외하거나 직접 번역문을 입력할 수 있습니다. 같은 원문이 어디에 쓰였는지도 함께 확인합니다. `§` 서식 코드와 `%s`, `{0}` 같은 자리표시자는 게임 안에서 그대로 표시되도록 유지합니다.
+Search and filter by kind or state, exclude strings, or enter your own translation. You can also see where the same source text appears. Formatting codes such as `§` and placeholders such as `%s` or `{0}` are preserved so the game still renders them.
 
-### 모델과 추론 방식 설정
+### Provider, model and reasoning
 
-![제공사·모델·추론 방식·키 저장 상태 화면](docs/images/settings.png)
+![Provider, model, reasoning mode and saved-key status](docs/images/settings.png)
 
-OpenRouter 추론은 **모델 기본값 / 추론 끄기 / 직접 설정** 중에서 고릅니다. 모델 지원 정보 조회와 설정 저장을 분리했고, 화면 아래에는 저장·변경 취소 영역을 고정했습니다.
+OpenRouter reasoning can follow the **model default**, be **turned off**, or use a **custom effort**. Model support lookup is separate from saving settings, and the save/discard bar stays pinned at the bottom.
 
 <details>
-<summary>실행 전 확인 화면</summary>
+<summary>Pre-run summary</summary>
 
-![추론·요청 수·예상 비용과 외부 전송 확인 화면](docs/images/run.png)
+![Reasoning, request count, estimated cost and external-transfer notice](docs/images/run.png)
 
 </details>
 
-화면은 현재 제품 UI를 **합성 데이터**로 실행해 캡처했습니다. 표시된 모델·월드·비용은 소개용 예시이며 실제 사용량이나 해당 모델의 지원 보장이 아닙니다. [화면 정보](docs/images/README.md)
+The screenshots were captured by running the current UI with **synthetic data**. The models, worlds and costs shown are illustrative; they are not evidence of actual usage or of support for a particular model. [Capture details](docs/images/README.md)
 
-## 주요 기능
+## Features
 
-### 스캔과 검토
+### Scan and review
 
-- 월드를 수정하거나 번역 API를 호출하지 않고 후보와 지원 범위를 먼저 확인합니다.
-- 명령 블록 `tellraw`/`title`의 JSON 형식과 Java 1.21.5+ SNBT 형식을 모두 읽고, 바뀐 문자열만 원래 형식대로 씁니다. 해석할 수 없는 명령은 원본 유지 + 경고로 알립니다.
-- 검색, 정렬(월드 순서·원문순·빈도순·유형별), 유형·상태 필터와 일괄 포함/제외를 제공합니다.
-- 문장별 등장 위치를 확인하고 직접 번역문을 입력할 수 있습니다. 직접 번역만 적용하면 번역 API 요청이 필요하지 않습니다.
-- 이미 도착 언어로 작성된 텍스트를 건너뛰어 재번역 비용을 줄일 수 있습니다.
+- Inspect candidates and coverage before anything is translated or written.
+- Search, sort (world order, source text, frequency, kind), filter by kind or state, and include or exclude in bulk.
+- See every occurrence of a string and enter manual translations. If you only apply manual translations, no translation API request is needed.
+- Skip text already written in the target language to avoid paying for re-translation.
 
-### 제공사와 모델
+### Providers and models
 
-- OpenAI, Gemini, Anthropic, OpenRouter, Comet과 Custom endpoint(OpenAI/Anthropic 호환 규격)를 설정할 수 있습니다. 사용 가능한 모델은 제공사와 계정에 따라 다릅니다.
-- 모델 목록을 조회하고, 단가 정보가 있으면 100만 토큰당 가격을 보여 줍니다. OpenRouter는 공개 catalog를 자동으로 조회하며, 이 조회는 설정을 저장하지 않습니다.
-- OpenRouter·Gemini 추론은 모델 기본값, 끄기, 직접 강도 지정 중에서 선택합니다. 추론을 끌 수 없는 모델이나 지원하지 않는 강도는 저장할 수 없습니다. Gemini의 사고(thinking) 토큰도 사용량에 포함해 보여 줍니다.
-- 도착 언어와 문체(표준·친근·격식·존댓말·이야기풍·사용자 지정)를 설정하고 추가 지시문을 덧붙일 수 있습니다. 지시문 다듬기는 별도 AI 요청이므로 비용이 발생할 수 있습니다.
+- Configure OpenAI, Gemini, Anthropic, OpenRouter, Comet or a Custom endpoint (OpenAI/Anthropic-compatible wire formats). Available models depend on your provider and account.
+- Look up model lists and, when pricing is known, the price per million tokens. OpenRouter's public catalog is fetched automatically, and this lookup does not save settings.
+- Choose OpenRouter reasoning as model default, off, or a supported effort. Models that require reasoning cannot be turned off, and an unsupported effort cannot be saved.
+- Set the target language and a style preset (neutral, casual, formal, polite, story or a custom system prompt), plus extra instructions. The style-brief helper is a separate AI request and may cost money.
 
-### 안전한 쓰기와 복원
+### Safe writes and restore
 
-- 쓰기 전에 변경 대상 파일을 검증된 백업으로 보관하고, 복원 직전 상태도 recovery snapshot으로 남깁니다.
-- 스캔 이후 월드가 바뀌면 지문(fingerprint)이 달라져 쓰기를 거부합니다. 게임이나 서버가 월드를 사용 중이면 session.lock 충돌로 쓰기를 중단합니다.
-- 월드 밖을 가리키는 경로와 심볼릭 링크 리소스팩은 읽기와 API 전송 전에 차단합니다.
-- 취소하거나 실패해도 이미 번역된 문장은 저장해 두고 남은 문장만 이어서 번역합니다. 제공사 장애로 실패하면 월드 파일은 전혀 바뀌지 않습니다.
-- 읽을 수 없는 청크는 원본 그대로 유지하고 결과에 보고합니다.
+- Changed files are stored in a verified backup before writing, and the state right before a restore is kept as a recovery snapshot.
+- If the world changed after the scan, the fingerprint no longer matches and writing is refused. If the game or server is using the world, the session.lock conflict stops the write.
+- Paths that point outside the selected world and symlinked resource packs are blocked before reading or sending anything to an API.
+- Cancelling or failing keeps already translated strings, so a retry only asks for what is left. A provider outage leaves world files completely unchanged.
+- Unreadable chunks are preserved as-is and reported in the result.
 
-### 리소스팩 ZIP
+### Resource pack ZIPs
 
-- 옵션으로 월드 내 `resources.zip`과 직접 선택한 외부 ZIP(최대 16개)의 언어 파일을 처리합니다.
-- 외부 ZIP도 변경 전 백업하며, 복원할 때는 설정에서 같은 ZIP을 다시 선택해야 합니다. 폴더형 팩은 아직 지원하지 않습니다.
+- Optionally translate language files in the in-world `resources.zip` and in up to 16 external ZIPs you select explicitly.
+- External ZIPs are backed up before changes, and a restore requires selecting the same ZIP again in Settings. Folder-style packs are not supported yet.
 
-### 키와 개인정보
+### Keys and privacy
 
-- API 키의 기본 저장 방식은 **로컬 암호화 SQLite + 별도 key 파일**입니다. 세션 전용과 OS 키체인은 선택 사항입니다.
-- 저장된 키는 화면에 다시 표시하지 않으며, 공개 설정 JSON과 월드 백업에 포함되지 않습니다.
-- OS 키체인은 사용자가 가져오기를 누를 때만 접근하고, 앱 시작 시 자동으로 읽지 않습니다.
+- Desktop credentials default to a **local encrypted SQLite vault plus a separate key file**. Session-only and OS-keychain modes are optional.
+- Saved keys are never shown again in the UI and are not included in public settings JSON or world backups.
+- The OS keychain is accessed only when you press the import button; the app does not read it automatically at startup.
 
-### 데스크톱 경험
+### Desktop experience
 
-- Tauri 2 + Svelte 5 화면과 Python 코어를 사용하며, UI용 localhost 서버를 열지 않습니다.
-- UI 언어는 한국어·영어·일본어이고, 시스템·라이트·다크 테마를 지원합니다. 보기 메뉴에서 75–200%까지 확대할 수 있습니다.
-- 데스크톱 앱다운 동작: macOS 통합 타이틀바, 고정 사이드바·툴바와 내용만 스크롤되는 창, 메뉴 단축키(`Cmd/Ctrl+O` 월드 열기, `Cmd+,` 설정, `Cmd/Ctrl+F` 찾기), 월드 폴더 끌어다 놓기, Minecraft saves 폴더의 월드 목록(아이콘 포함), Dock·작업 표시줄 진행률, 작업 중 종료 보호.
-- 같은 코어를 쓰는 CLI를 함께 제공합니다. 데스크톱에 저장한 키와 CLI의 keyring/환경변수는 자동으로 공유되지 않습니다.
+- A Tauri 2 + Svelte 5 shell with a Python core; the desktop app opens no localhost server for its UI.
+- Korean, English and Japanese UI, with system, light and dark themes. The View menu zooms the interface from 75% to 200%.
+- Feels like a desktop app: unified macOS title bar, fixed sidebar and toolbar with only the content scrolling, menu shortcuts (`Cmd/Ctrl+O` open world, `Cmd+,` settings, `Cmd/Ctrl+F` find), drag a world folder onto the window, a list of worlds from your Minecraft saves folders (with icons), Dock/taskbar progress, and quit protection while a job runs.
+- Command blocks: `tellraw`/`title` text is read in both JSON and Java 1.21.5+ SNBT form; only changed strings are rewritten in their original quoting, and unreadable commands are kept and reported.
+- A CLI built on the same core. Keys saved in the desktop app and the CLI's keyring/environment variables are not shared automatically.
 
-## 사용 방법
+## Usage
 
-1. Minecraft 또는 서버를 종료하고 **월드의 별도 복사본**을 만듭니다.
-2. **환경 설정**에서 제공사, 모델, 도착 언어와 필요한 번역 지시를 설정합니다. AI 번역을 사용할 때는 본인의 API 키를 입력해 저장합니다.
-3. **월드 선택 → 월드 스캔**에서 복사본을 선택하고, 지원 범위와 경고를 확인합니다.
-4. **후보 검토**에서 제외할 문장과 직접 번역문을 지정합니다.
-5. **번역 진행**에서 대상·추론·외부 전송·예상 비용을 확인한 뒤 실행합니다.
-6. **완료 결과**를 확인하고 게임에서 내용을 검토합니다. 되돌리려면 **백업 관리**에서 복원을 선택합니다.
+1. Close Minecraft or the server and make an independent **copy of the world**.
+2. In Settings, choose the provider, model and target language, and add any translation instructions. When using AI translation, enter and save your own API key.
+3. In **Select world → Scan**, open the copy and read the coverage and warnings.
+4. In **Review**, exclude strings and enter manual translations.
+5. In **Run**, check the target, reasoning, external transfer and estimated cost, then start.
+6. Review the **Result** and verify the text in game. To undo, restore from **Backups**.
 
-추정 비용은 실제 청구 금액과 다를 수 있습니다. 추론 토큰, 재시도, 모델 라우팅 비용은 추정에 포함되지 않으므로 제공사 대시보드도 함께 확인하세요. 자세한 설정·복원·CLI 안내는 [사용 안내](docs/user-guide.md)에 있습니다.
+Cost estimates can differ from the actual bill. Reasoning tokens, retries and model routing are not included in the estimate, so check your provider dashboard as well. The [user guide](docs/user-guide.md) covers settings, restore and CLI usage in more detail.
 
-### 실행·설치
+### Running from source
 
-현재는 개발 빌드를 기준으로 안내합니다. 정식 서명 설치본이나 모든 OS 지원이 완료됐다고 소개하지 않습니다. 소스 실행에는 Python 3.12, Node.js 22.12 이상, pnpm 12.6.0, Rust toolchain과 [Tauri 플랫폼 준비 항목](https://v2.tauri.app/start/prerequisites/)이 필요합니다.
+Development builds are the current reference; there is no signed installer and not every OS has been validated. Running from source needs Python 3.12, Node.js 22.12 or newer, pnpm 12.6.0, a Rust toolchain and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```bash
 git clone https://github.com/kim0040/PomiTranslate.git
@@ -115,51 +120,53 @@ pnpm install --frozen-lockfile
 pnpm desktop:dev
 ```
 
-위 가상환경 활성화는 macOS/Linux 예시입니다. Windows 명령, toolchain 버전과 패키징은 [개발 안내](docs/development.md)를, 기여 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다. 완성된 패키지는 Python sidecar를 포함하는 구조지만, clean-machine 설치 검증은 아직 남아 있습니다.
+The activation command above is for macOS/Linux. Windows commands, toolchain versions and packaging are in the [development guide](docs/development.md); contribution steps are in [CONTRIBUTING.md](CONTRIBUTING.md). The packaged design embeds a Python sidecar, but clean-machine installation has not been validated yet.
 
-## 지원 범위
+## Support scope
 
-표지판, 책 페이지와 제목(필터링된 제목 포함), 엔티티·블록 이름, 아이템 이름과 설명, 텍스트 디스플레이, 명령 텍스트 컴포넌트와 ZIP 리소스팩 언어 파일을 처리합니다. 압축은 gzip, zlib, 무압축, LZ4와 외부 `.mcc`를 검증했습니다. 검증한 **합성 형식**을 기준으로 하며 모든 Minecraft 버전·모드·월드의 텍스트를 찾는다는 뜻은 아닙니다.
+PomiTranslate handles signs, book pages and titles (including filtered titles), entity and block names, item names and lore, text displays, command text components and ZIP resource-pack language files. Verified compression formats are gzip, zlib, none, LZ4 and external `.mcc`. Support is based on **synthetic fixtures**: a passing row means that shape is read and written correctly, not that every text in every Minecraft version, mod or world will be found.
 
-스캔 대상은 각 차원의 `region`/`entities` 폴더, 월드 안의 `resources.zip`, 데스크톱에서 직접 선택한 외부 ZIP입니다. 데이터팩, scoreboard, command storage, `level.dat`의 텍스트, playerdata, 폴더형 리소스팩은 현재 범위에 포함되지 않습니다. Bedrock, `.mcr`, `.linear`, 알 수 없는 압축에는 쓰지 않습니다. [지원 표](docs/support-matrix.md)
+The scan covers the `region` and `entities` folders of each dimension, the in-world `resources.zip`, and external ZIPs selected explicitly on desktop. Data packs, scoreboards, command storage, `level.dat` text, player data and folder-style resource packs are outside the current scope. Bedrock, `.mcr`, `.linear` and unknown compression are never written. [Support matrix](docs/support-matrix.md)
 
-## 비용·개인정보·면책
+## Costs, data and disclaimer
 
-앱 자체의 구매·구독·인앱 결제는 없습니다. **AI API 이용료는 선택한 제공사의 정책에 따라 사용자에게 발생할 수 있습니다.** 번역할 텍스트와 번역 지시는 선택한 API 제공사 또는 중계 서비스로 전송됩니다. 제공사별 보관·학습·개인정보 정책도 확인하세요.
+The app itself has no purchase, subscription or in-app payment. **AI API usage may cost you money under your provider's terms.** The text you choose to translate and your translation instructions are sent to the API provider or relay service you select. Check each provider's retention, training and privacy policies.
 
-API 키의 데스크톱 기본 저장 방식은 **로컬 암호화 SQLite + 별도 key 파일**입니다. 세션 전용과 OS 키체인은 선택 사항입니다. 같은 사용자 계정에서 두 파일을 모두 읽을 수 있는 프로세스까지 막는 보안은 아닙니다. [데이터·키 안내](docs/privacy.md)
+Desktop credentials default to a **local encrypted SQLite vault plus a separate key file**; session-only and OS-keychain modes are optional. This does not protect against processes that can read both files under your user account. [Data and key handling](docs/privacy.md)
 
-이 소프트웨어는 **있는 그대로(AS IS)** 제공됩니다. 번역 정확도, 모든 월드와의 호환성, 데이터 보존, 중단 없는 이용을 보증하지 않습니다. 적용 법률이 허용하는 범위에서 작성자·기여자는 데이터 손실, 월드 손상, API 청구 및 사용으로 발생하는 손해에 책임을 부담하지 않습니다. [면책·권리 안내 전문](docs/disclaimer.md)과 [MIT 원문](LICENSE)을 확인하세요.
+The software is provided **AS IS**, without guarantees of translation accuracy, compatibility with every world, data preservation or uninterrupted use. To the extent permitted by applicable law, the author and contributors accept no liability for data loss, world corruption, API charges or other damage arising from use. See the [full disclaimer and rights notice](docs/disclaimer.md) and the [MIT license text](LICENSE).
 
-맵·리소스팩·번역본의 제3자 권리는 소프트웨어 라이선스와 별개입니다. 원작자의 허락 없이 재배포하지 마세요.
+Third-party rights in maps, resource packs and translations are separate from the software license. Do not redistribute translated content without the original creator's permission.
 
 <details>
-<summary>English safety notice</summary>
+<summary>한국어 안전 안내</summary>
 
-Back up your world before translating. PomiTranslate writes to the world files you select.
+월드를 번역하기 전에 백업하세요. PomiTranslate는 선택한 월드 파일에 직접 씁니다.
 
-Text you choose to translate is sent to the API provider you select and may incur charges.
+번역할 텍스트는 선택한 API 제공사로 전송되며 요금이 발생할 수 있습니다.
 
-PomiTranslate has no purchase, subscription, or in-app payment.
+PomiTranslate에는 구매·구독·인앱 결제가 없습니다.
 
 </details>
 
-## 개발과 검증 상태
+## Development and verification status
 
-macOS Apple Silicon 개발 앱에서 월드 선택부터 스캔·검토·실행·결과·복원까지 주요 흐름을 확인했고, 합성 fixture로 형식별 읽기·쓰기를 검사합니다. 최신 소스 기준으로 관련 frontend·browser·Rust 검사와 provider Python 검사가 통과했으며, unsigned debug 앱 번들을 생성했습니다. 실제 OpenRouter 키와 모델 등록, 공개 모델 조회까지 확인했지만 **실제 유료 번역 E2E는 아직 실행하지 않았습니다.**
+The main flows — world selection, scan, review, run, result and restore — have been exercised in a macOS Apple Silicon development app, and synthetic fixtures check reading and writing per format. On the latest source, the relevant frontend, browser, Rust and provider Python checks passed, and an unsigned debug app bundle was produced. A real OpenRouter key and model were registered and the public model lookup was verified, but **the actual paid translation end-to-end run has not been executed yet**.
 
-현재 Phase 2 진행 중이며 Phase 3는 시작하지 않았습니다. 서명·notarization·updater, Windows/Linux clean-machine 설치, macOS Intel, OS 키체인 opt-in의 native 검증은 남아 있습니다. 정확한 검사 범위와 잔여 gate는 [현재 상태](docs/current-state.md)와 [추후 작업](docs/follow-up-work.md)에서 관리합니다.
+The Phase 2 desktop-feature and macOS arm64 development-environment gate is complete, and Phase 3 is in progress; the project is not release-ready. Signing, notarization and the updater, clean-machine Windows/Linux installation, macOS Intel and native validation of the OS-keychain opt-in remain. Exact check scopes and remaining gates are tracked in [Current status](docs/current-state.md) and [Follow-up work](docs/follow-up-work.md).
 
-## 기여자·문의
+## Contributor and contact
 
-- **김현민** — 제작·유지보수 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
-- 버그·제안: [GitHub Issues](https://github.com/kim0040/PomiTranslate/issues)
-- 기여: [CONTRIBUTING.md](CONTRIBUTING.md)
+- **김현민 / Hyunmin Kim** — creator and maintainer · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
+- Bugs and suggestions: [GitHub Issues](https://github.com/kim0040/PomiTranslate/issues)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 
-버그 보고에는 OS, 앱 버전, 재현 방법을 적어 주세요. API 키, 개인 월드, 비밀이 포함된 로그를 공개 Issue에 올리지 마세요. 답변·수정 일정이나 금전 보상을 약속하는 지원 서비스는 제공하지 않습니다.
+PomiTranslate began as a personal project by a university student who wanted to translate his own Minecraft worlds, and it is maintained in personal time with a limited budget. It is not a commercial service or a paid support product. As a work in progress, some features may be incomplete or rough around the edges — please check the support scope and warnings, keep your own backups, and use it with that in mind. See the [full disclaimer and rights notice](docs/disclaimer.md).
 
-## 라이선스·문서
+When reporting a bug, include your OS, app version and reproduction steps. Do not post API keys, private worlds or logs containing secrets in a public issue. No response schedule, fix timeline or financial compensation is promised.
 
-프로젝트 소스는 기존 **[MIT License](LICENSE)**를 유지합니다. 의존성은 각각의 라이선스를 따르며 프로젝트 MIT로 다시 허가되는 것이 아닙니다. 검토한 범위에서 MIT 유지의 명백한 충돌은 발견하지 않았지만, 배포물별 고지·전체 플랫폼 의존성 검증은 정식 배포 전에 완료해야 합니다. [제3자 고지](THIRD_PARTY_NOTICES.md)
+## License and documentation
 
-[문서 목차](docs/README.md) · [현재 상태](docs/current-state.md) · [추후 작업](docs/follow-up-work.md)
+The project source keeps its existing **[MIT License](LICENSE)**. Dependencies keep their own licenses and are not relicensed by the project's MIT. No obvious conflict with keeping MIT was found in the reviewed scope, but per-artifact notices and full platform dependency verification must be completed before a final binary release. [Third-party notices](THIRD_PARTY_NOTICES.md)
+
+[Documentation index](docs/README.md) · [Current status](docs/current-state.md) · [Follow-up work](docs/follow-up-work.md)

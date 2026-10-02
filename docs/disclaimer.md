@@ -2,7 +2,7 @@
 
 ## 개인 프로젝트
 
-PomiTranslate는 대학생 **김현민**이 본인의 Minecraft 월드를 번역하려고 만들기 시작한 무료 오픈소스 프로젝트입니다. 개인 시간과 제한된 예산으로 유지하며, 회사가 운영하는 유료 서비스·보상 상품·데이터 복구 서비스를 제공하지 않습니다. 문의: [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com).
+PomiTranslate는 대학생 **김현민**이 본인의 Minecraft 월드를 번역하려고 시작한 무료 오픈소스 프로젝트입니다. 개인 시간과 제한된 예산으로 유지하는 개인 프로젝트이며, 회사가 운영하는 유료 서비스·보상 상품·데이터 복구 서비스를 제공하지 않습니다. 아직 개발 중인 부분이 있어 일부 기능이 미완성이거나 예상치 못한 문제가 있을 수 있습니다. 사용 전에 지원 범위와 경고를 확인하고, 중요한 월드는 직접 백업해 주세요. 문의: [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com).
 
 이 배경을 이유로 법적 책임이 자동 면제되는 것은 아닙니다. 아래 안내와 MIT 원문은 적용 법률이 허용하는 범위에서 읽어야 하며, 법률상 배제할 수 없는 책임·권리까지 없애려는 내용이 아닙니다.
 
@@ -37,4 +37,4 @@ Minecraft 및 관련 상표·게임 자산은 해당 권리자의 것입니다. 
 
 ## English summary
 
-PomiTranslate is a free personal project started by a university student for his own use. It is not a paid support or recovery service. It is provided AS IS without warranties of translation accuracy, compatibility, data preservation or continuing support. To the extent permitted by applicable law, the authors and contributors disclaim liability as stated in the MIT license, including losses related to world files, downtime and third-party API charges. This does not exclude liability that cannot lawfully be excluded or restrict rights granted by MIT. Third-party software, Minecraft assets, maps and resource packs remain subject to their own terms. Back up your world and review provider costs and data policies before use.
+PomiTranslate is a free personal open-source project started by a university student for his own use and maintained in personal time. It is a work in progress, so some features may be incomplete or behave unexpectedly; check the support scope and warnings and keep your own backups. It is not a paid support or recovery service. It is provided AS IS without warranties of translation accuracy, compatibility, data preservation or continuing support. To the extent permitted by applicable law, the authors and contributors disclaim liability as stated in the MIT license, including losses related to world files, downtime and third-party API charges. This does not exclude liability that cannot lawfully be excluded or restrict rights granted by MIT. Third-party software, Minecraft assets, maps and resource packs remain subject to their own terms. Back up your world and review provider costs and data policies before use.

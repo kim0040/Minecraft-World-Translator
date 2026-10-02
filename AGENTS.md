@@ -30,8 +30,10 @@ Phase2 이력은 `docs/history/phase2-completion-2026-10-01.md`와 `docs/history
 
 ## 문서 정리 후 진입점
 
-사용자 문서: README.md / docs/user-guide.md / docs/privacy.md / docs/disclaimer.md. 작업 상태: docs/current-state.md / docs/follow-up-work.md. 이력: docs/history/. 라이선스: THIRD_PARTY_NOTICES.md / docs/legal/. 소개용 합성 screenshot은 docs/images/에서 의도적으로 추적하며 일반 output·report·world·DB·key는 제외한다. 과거 진행 저장은 checkpoint이며 최신 Phase2 완료 판정은 완료 기록을 따른다.
+사용자 문서: README.md(영어 메인) / docs/README.ko.md(한국어) / docs/user-guide.md / docs/privacy.md / docs/disclaimer.md. 작업 상태: docs/current-state.md / docs/follow-up-work.md. 이력: docs/history/. 라이선스: THIRD_PARTY_NOTICES.md / docs/legal/. 소개용 합성 screenshot은 docs/images/에서 의도적으로 추적하며 일반 output·report·world·DB·key는 제외한다. 과거 진행 저장은 checkpoint이며 최신 Phase2 완료 판정은 완료 기록을 따른다.
 
 2026-10-01 다국어 README(ko/en/ja/zh)와 user-guide를 보강했다. 제품 동작·Phase 상태는 바뀌지 않았다. [기록](docs/history/docs-refresh-2026-10-01.md)
+
+2026-10-02 메인 README를 영어로 전환하고 한국어판을 docs/README.ko.md로 옮겼다. 개인 프로젝트 배경 안내는 기여자 절에서 다룬다. 제품 동작·Phase 상태는 바뀌지 않았다. [기록](docs/history/readme-restructure-2026-10-02.md)
 
 원격 URL은 2026-10-01 기존/새 주소의 동일 main SHA를 확인한 `https://github.com/kim0040/PomiTranslate.git`다. 원격 rename을 새로 실행한 것이 아니다. 로컬 checkout 폴더와 내부 mwt 이름은 유지한다.

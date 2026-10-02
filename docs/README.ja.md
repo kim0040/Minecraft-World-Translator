@@ -4,11 +4,16 @@
 
 <img src="../assets/brand/wordmark/logo_wordmark_v1.png" alt="PomiTranslate" width="340" />
 
-[한국어](../README.md) | [English](README.en.md) | 日本語 | [简体中文](README.zh.md)
+[English](../README.md) | [한국어](README.ko.md) | 日本語 | [简体中文](README.zh.md)
 
 海外のアドベンチャーマップを遊んでいると、看板や本、アイテム説明が読めずに手が止まることがあります。PomiTranslate は、そんなテキストを読みたい言語に変えるデスクトップアプリです。まずワールドをスキャンして翻訳する文を確認し、必要な文だけを選んで自分で訳すか、選んだ AI プロバイダーに任せて翻訳し、検証済みのバックアップとともにワールドへ適用します。
 
-大学生の **김현민（Hyunmin Kim）** が自分のために作り始めた無料の個人オープンソースプロジェクトです。個人の時間と限られた予算で開発しており、企業が運営する商用サービスや有料サポート製品ではありません。マスコットは **Pomi** です。
+PomiTranslate でできること:
+
+- **安全なスキャン** — ワールドファイルを変更せず、API も呼び出さずに翻訳対象を確認できます。
+- **レビューと手動編集** — 検索・フィルターで候補を絞り、除外や手動翻訳を入力できます。
+- **AI 翻訳** — OpenAI、Gemini、Anthropic、OpenRouter、Comet、Custom endpoint に対応し、実行前に予想リクエスト数と費用を表示します。
+- **バックアップと復元** — 検証済みバックアップの後にのみ書き込み、いつでも元の状態に戻せます。
 
 > **開発中:** macOS Apple Silicon の隔離された開発アプリで主要な流れを確認しました。署名済みの正式インストーラー、Windows/Linux の実機検証、実際の有料翻訳の最終検証は未完了です。[現状](current-state.md) · [今後の作業](follow-up-work.md)
 >
@@ -137,13 +142,15 @@ API キーのデスクトップでの既定の保存方式は **ローカル暗�
 
 macOS Apple Silicon の開発アプリでワールド選択からスキャン・レビュー・実行・結果・復元までの主要な流れを確認し、合成 fixture で形式ごとの読み書きを検査しています。最新ソースでは関連する frontend・browser・Rust 検査と provider の Python 検査が通り、unsigned debug アプリバンドルを生成しました。実際の OpenRouter キーとモデルの登録、公開モデル取得までは確認済みですが、**実際の有料翻訳 E2E はまだ実行していません。**
 
-現在は Phase 2 進行中で、Phase 3 は未着手です。署名・notarization・updater、Windows/Linux の clean-machine インストール、macOS Intel、OS キーチェーン opt-in の native 検証が残っています。正確な検査範囲と残りの gate は [現状](current-state.md) と [今後の作業](follow-up-work.md) で管理しています。
+Phase 2 のデスクトップ機能・macOS arm64 開発環境 gate は完了し、Phase 3 が進行中で、release-ready ではありません。署名・notarization・updater、Windows/Linux の clean-machine インストール、macOS Intel、OS キーチェーン opt-in の native 検証が残っています。正確な検査範囲と残りの gate は [現状](current-state.md) と [今後の作業](follow-up-work.md) で管理しています。
 
 ## 作者・連絡先
 
 - **김현민（Hyunmin Kim）** — 制作・保守 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
 - バグ・提案: [GitHub Issues](https://github.com/kim0040/PomiTranslate/issues)
 - 貢献: [CONTRIBUTING.md](../CONTRIBUTING.md)
+
+PomiTranslate は、大学生の 김현민（Hyunmin Kim）が自分の Minecraft ワールドを翻訳するために始めた個人プロジェクトです。現在も個人の時間と限られた予算で維持しており、企業が運営する商用サービスや有料サポート製品ではありません。開発途上のため、一部の機能が未完成だったり、想定外の動作をすることがあります。対応範囲と警告を確認し、大切なワールドはご自身でバックアップしたうえでご利用ください。[免責・権利について](disclaimer.md)
 
 バグ報告には OS、アプリのバージョン、再現手順を書いてください。API キー、個人のワールド、秘密を含むログを公開 Issue に載せないでください。回答や修正の時期、金銭的な補償を約束するサポートは提供していません。
 

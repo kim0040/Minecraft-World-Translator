@@ -2,14 +2,14 @@
 
 ## 언어별 소개
 
-- [한국어 서비스 소개](../README.md)
-- [English introduction](README.en.md)
+- [English introduction](../README.md)
+- [한국어 서비스 소개](README.ko.md)
 - [日本語の紹介](README.ja.md)
 - [简体中文介绍](README.zh.md)
 
 ## 사용자
 
-- [서비스 소개와 화면](../README.md)
+- [서비스 소개와 화면](README.ko.md)
 - [사용 안내](user-guide.md): 스캔 → 검토 → 실행 → 복원, 설정과 CLI
 - [데이터·개인정보·키 저장](privacy.md)
 - [면책·권리 안내](disclaimer.md)

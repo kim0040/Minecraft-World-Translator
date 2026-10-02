@@ -4,11 +4,16 @@
 
 <img src="../assets/brand/wordmark/logo_wordmark_v1.png" alt="PomiTranslate" width="340" />
 
-[한국어](../README.md) | [English](README.en.md) | [日本語](README.ja.md) | 简体中文
+[English](../README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | 简体中文
 
 玩海外冒险地图时，告示牌、书籍和物品说明常常读不懂，节奏也因此被打断。PomiTranslate 可以把这些文本换成你熟悉的语言。先扫描世界，确认要翻译的句子，再挑选需要的句子手动翻译或交给所选 AI 提供商翻译，最后在验证过的备份保护下写入世界。
 
-这是一个由大学生 **김현민（Hyunmin Kim）** 为了自己使用而开始的无偿个人开源项目，依靠个人时间和有限预算维护，不是企业运营的商用服务，也不是付费支持产品。吉祥物是 **Pomi**。
+PomiTranslate 可以做什么:
+
+- **安全扫描** — 不修改世界文件、不调用 API，先确认要翻译的内容。
+- **检查与手动编辑** — 通过搜索和筛选挑选候选，排除或填写自己的译文。
+- **AI 翻译** — 支持 OpenAI、Gemini、Anthropic、OpenRouter、Comet 和 Custom endpoint，执行前显示预计请求数与费用。
+- **备份与恢复** — 仅在验证过的备份之后写入，并可随时恢复到之前的任意时间点。
 
 > **开发中：** 已在 macOS Apple Silicon 的隔离开发应用中确认主要流程。签名正式安装包、Windows/Linux 实机验证以及真实付费翻译的最终验证尚未完成。[当前状态](current-state.md) · [后续工作](follow-up-work.md)
 >
@@ -137,13 +142,15 @@ pnpm desktop:dev
 
 已在 macOS Apple Silicon 开发应用中确认从世界选择到扫描、检查、执行、结果、恢复的主要流程，并用合成 fixture 检查各格式的读写。最新源码通过了相关的 frontend、browser、Rust 检查以及 provider 的 Python 检查，并生成了 unsigned debug 应用包。已注册真实 OpenRouter 密钥和模型并验证公开模型查询，但 **尚未执行真实付费翻译的端到端流程**。
 
-目前处于 Phase 2 进行中，Phase 3 尚未开始。签名、notarization、updater、Windows/Linux clean-machine 安装、macOS Intel 以及 OS 密钥链 opt-in 的 native 验证仍然待办。准确的检查范围和剩余 gate 记录在 [当前状态](current-state.md) 和 [后续工作](follow-up-work.md)。
+Phase 2 的桌面功能与 macOS arm64 开发环境 gate 已完成，Phase 3 正在进行中，尚未达到 release-ready。签名、notarization、updater、Windows/Linux clean-machine 安装、macOS Intel 以及 OS 密钥链 opt-in 的 native 验证仍然待办。准确的检查范围和剩余 gate 记录在 [当前状态](current-state.md) 和 [后续工作](follow-up-work.md)。
 
 ## 作者与联系方式
 
 - **김현민（Hyunmin Kim）** — 制作与维护 · [mini0227kim@gmail.com](mailto:mini0227kim@gmail.com)
 - 缺陷与建议：[GitHub Issues](https://github.com/kim0040/PomiTranslate/issues)
 - 贡献：[CONTRIBUTING.md](../CONTRIBUTING.md)
+
+PomiTranslate 由大学生 김현민（Hyunmin Kim）为了翻译自己的 Minecraft 世界而开始，是一个利用个人时间和有限预算维护的个人项目，并非企业运营的商用服务或付费支持产品。项目仍在开发中，部分功能可能尚未完成或出现意外问题。使用前请确认支持范围与警告，并自行备份重要世界。[完整免责与权利说明](disclaimer.md)
 
 报告缺陷时请附上 OS、应用版本和复现步骤。请勿在公开 Issue 中发布 API 密钥、私人世界或包含机密的日志。不承诺回复时间、修复排期或金钱补偿。
 
