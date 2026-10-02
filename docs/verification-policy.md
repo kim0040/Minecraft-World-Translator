@@ -1,6 +1,6 @@
 # 검증 실행 정책 — 2026-10-01
 
-이 정책은 사용자 요청인 검증 최적화와 웹 우선 개발을 실행 규칙으로 만든다. [최신 인계](history/settings-ux-2026-10-01.md), [남은 작업](follow-up-work.md), [이유·근거](history/test-efficiency-audit-2026-10-01.md)와 함께 읽는다. **이미 성공한 동일 검사 재실행은 기본 동작이 아니다.**
+이 정책은 사용자 요청인 검증 최적화와 웹 우선 개발을 실행 규칙으로 만든다. [최신 인계](history/main-integration-2026-10-02.md), [남은 작업](follow-up-work.md), [이유·근거](history/test-efficiency-audit-2026-10-01.md)와 함께 읽는다. **이미 성공한 동일 검사 재실행은 기본 동작이 아니다.**
 
 ## 에이전트 필수 규칙
 

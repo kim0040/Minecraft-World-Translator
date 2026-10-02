@@ -9,7 +9,7 @@
 | Tauri 공식 updater (`tauri-plugin-updater` 2.13.1) | `src-tauri/src/updates.rs`, `tauri.conf.json` `plugins.updater` | 연결됨. 확인 주소 `https://github.com/kim0040/PomiTranslate/releases/latest/download/latest.json` |
 | 서명 검증 공개키 | `tauri.conf.json` `plugins.updater.pubkey` | **비어 있음.** 키가 없으면 새 버전 알림과 다운로드 페이지 열기만 하고, 앱 안 설치는 하지 않는다 |
 | 서명된 업데이트 파일 | `.github/workflows/desktop-build.yml` | secret `TAURI_SIGNING_PRIVATE_KEY`가 있을 때만 `createUpdaterArtifacts`로 생성 |
-| `latest.json` 게시 | GitHub Release | **미구현(RELEASE-01).** 공개 release는 승인 경계 안에서 사람이 진행 |
+| `latest.json` 게시 | GitHub Release | **미구현(RELEASE-01).** 공개 release는 승인 경계 안에서 사람이 진행. 설치 경로의 구현 완료와 실제 signed update 검증 대기를 구분한다 |
 
 동작:
 
@@ -43,7 +43,7 @@ macOS 코드서명·공증과 Windows 코드서명은 updater 서명과 별개�
 - **업데이트**: updater와 설치 프로그램은 앱 번들(`.app`, `Program Files`/설치 폴더, AppImage)만 바꾼다. 위 두 폴더는 건드리지 않는다. 설정 파일은 알 수 없는 키를 보존하고 schema를 함께 기록한다.
 - **청소 도구**: macOS 정리 앱, Windows 디스크 정리·저장소 센스, Linux tmp 정리는 캐시(`~/Library/Caches`, `%TEMP%`, `%LOCALAPPDATA%\...\Cache`, `/tmp`)를 대상으로 한다. 앱 데이터는 Application Support / Roaming AppData / XDG data에 있어 일반 청소 대상이 아니다. 단, "삭제된 앱의 잔여 파일" 정리 기능은 앱을 지운 뒤에 이 폴더를 지울 수 있다.
 - **WebView 저장소**: 이전 버전은 테마와 첫 실행 안내 동의를 WebView 저장소(macOS `~/Library/WebKit`, Windows `%LOCALAPPDATA%\...\EBWebView`)에만 두었다. 이 저장소는 청소 도구가 지울 수 있다. 이제 이 값은 설정 파일의 `app_prefs`에 저장하고, WebView 저장소는 시작 화면 깜빡임을 줄이는 빠른 사본으로만 쓴다. 처음 실행할 때 기존 값을 한 번 옮긴다.
-- **파일 손상**: 설정은 임시 파일에 쓰고 디스크까지 동기화(`fsync`)한 뒤 교체한다. 같은 내용의 `settings.backup.json`을 먼저 쓰므로 본 파일이 손상되거나 지워져도 사본에서 읽는다. 손상된 파일은 덮어쓰지 않고 `settings.damaged-<hash>.json`으로 남긴다. 모델 목록도 같은 방식으로 쓴다.
+- **파일 손상**: 설정은 임시 파일에 쓰고 디스크까지 동기화(`fsync`)한 뒤 교체한다. 같은 내용의 `settings.backup.json`을 먼저 쓰므로 본 파일이 손상되거나 지워져도 사본에서 읽는다. 손상된 파일은 덮어쓰지 않고 `settings.damaged-<hash>.json`으로 남긴다. 모델 목록은 fsync·atomic replace로 쓰지만 사본·손상 복구는 설정 파일에만 구현됐다. 모델 목록이 손상되면 빈 catalog로 처리하고 다시 조회한다.
 - **일시 파일**: 번역 코어(PyInstaller onefile)는 실행할 때마다 OS 임시 폴더에 풀렸다가 종료 시 지워진다. 데이터는 그곳에 두지 않는다.
 
 ## 초기화

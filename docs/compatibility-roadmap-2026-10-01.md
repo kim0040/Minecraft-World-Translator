@@ -2,7 +2,7 @@
 
 사용자 요청: 남은 작업을 확인하고, Minecraft 버전에 따른 동작 차이를 줄이는 작업 계획을 세운다.
 
-초기 계획 작성은 조사와 제안만 수행했다. 후속 사용자 요청으로 [샘플·시작 복구·최소 provider 검증](history/sample-startup-validation-2026-10-01.md)을 진행했다. 초기 조사 시에는 제품 소스 수정, 테스트·빌드·유료 API 실행, commit/push를 하지 않았다. 최신 상태는 [최종 검증](history/phase2-completion-2026-10-01.md)에 따라 **Phase2 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님**이다. 조사 기준은 `main` / `2d32ebe`, 시작 시 working tree clean이다. 기존 검증 결과는 기록된 범위로만 인용하며 이번에 다시 실행한 결과가 아니다.
+초기 계획 작성은 조사와 제안만 수행했다. 후속 사용자 요청으로 [샘플·시작 복구·최소 provider 검증](history/sample-startup-validation-2026-10-01.md)을 진행했다. 초기 조사 시에는 제품 소스 수정, 테스트·빌드·유료 API 실행, commit/push를 하지 않았다. Phase2 완료 근거는 [최종 검증](history/phase2-completion-2026-10-01.md), 최신 상태는 [현재 상태](current-state.md)에 따라 **Phase2 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님**이다. 2026-10-02 main 통합 상태와 남은 gate는 [추후 작업](follow-up-work.md)을 따른다. 조사 기준은 `main` / `2d32ebe`, 시작 시 working tree clean이다. 기존 검증 결과는 기록된 범위로만 인용하며 이번에 다시 실행한 결과가 아니다.
 
 ## 판단
 
@@ -17,7 +17,7 @@
 | 구형/양면 표지판, 책, 이름/lore | 처리 코드와 합성 fixture 지원 기록 있음 | 이미 되는 경로의 회귀를 유지하며 실제 버전별 표본 추가 |
 | 1.20.5 이후 아이템 components | custom_name/item_name/lore/book 및 nested item 탐색 구현 | 개별 component와 버전별 표현 차이를 별도로 검증 |
 | 1.21.5 이후 직접 NBT component | compound/list 처리 구현 | 직접 NBT 지원과 명령 문자열 SNBT 지원을 구분 |
-| 명령 속 텍스트 | tellraw/title 및 execute-run의 인자를 `json.loads`로 파싱 | 최신 SNBT 문법 누락을 최우선 호환성 수정으로 지정 |
+| 명령 속 텍스트 | JSON/SNBT parser·span patch와 선행 `/`·문자열 component, 해석 실패 경고 구현(COMP-01) | 합성 fixture/E2E 기록 있음. 실제 게임 버전 생성/로드와 최신 component는 COMP-02/04 |
 | 최신 component fallback | compound 처리에서는 translate와 문자열 fallback 조합만 수집 | 26.1 object component의 구조화된 fallback을 별도 조사·fixture로 추가 |
 | gzip/zlib/none/LZ4, 외부 .mcc | 처리 코드와 합성 round-trip 기록 있음 | 재구현보다 혼합 압축·대형 외부 청크·장애 복구 증거 보강 |
 | 버전 정보 | level.dat DataVersion 조회; UI는 첫 유효 값 표시. core는 DataVersion으로 미검증/미래 버전을 명시적으로 차단하지 않고 shape로 처리 | 청크별 버전 분포·혼합 여부·unknown 및 근거 표시와 쓰기 허용 정책 추가 |
@@ -29,19 +29,19 @@
 
 핵심 소스 근거:
 
-- [extract.py](../mwt/extract.py): 194–199, 282–335의 JSON 명령 처리; 376–417의 직접 NBT component; 485–562의 아이템·표지판·명령 탐색.
+- [extract.py](../mwt/extract.py): `_walk_command`의 JSON/SNBT 명령 처리와 직접 NBT component·아이템·표지판 탐색. [snbt.py](../mwt/snbt.py): `parse`/`SnbtDocument.render`의 원문 span 보존. 과거 조사 line 번호는 후속 구현으로 달라졌다.
 - [desktop_entry.py](../mwt/desktop_entry.py): 217–280의 level.dat 기반 inspection. [WorldScreen.svelte](../src/screens/WorldScreen.svelte): 19, 52의 DataVersion 표시.
 - [layout.py](../mwt/layout.py): 선택 루트 내부 차원/서버 탐색 및 특수 형식 차단.
 - [region.py](../mwt/region.py): 압축 codec, 외부 청크, 원본 청크 보존. [mc_world_translator.py](../mc_world_translator.py): 1412–1433의 미지원 압축 쓰기 차단; 1629–1667의 pack 파일 선택/JSON 파싱.
 - [support_matrix.py](../mwt/support_matrix.py), [현재 지원 표](support-matrix.md): 형식별 합성 결과이며 버전별 실월드 지원 표가 아니다.
-- [test_release_fixtures.py](../tests/test_release_fixtures.py): 구형/신형을 묶은 합성 형태와 JSON 명령. [test_extraction.py](../tests/test_extraction.py): DataVersion 보존, 직접 component, modified UTF-8 등의 근거. 하나의 DataVersion을 보존하는 검사만으로 여러 버전 혼합 월드 검증을 대신할 수 없다.
+- [test_release_fixtures.py](../tests/test_release_fixtures.py): 구형/신형을 묶은 합성 형태와 JSON/SNBT 명령. [test_snbt_commands.py](../tests/test_snbt_commands.py)는 escape·표현 보존·해석 실패 경고의 추가 근거다. [test_extraction.py](../tests/test_extraction.py): DataVersion 보존, 직접 component, modified UTF-8 등의 근거. 하나의 DataVersion을 보존하는 검사만으로 여러 버전 혼합 월드 검증을 대신할 수 없다.
 
 위 누락 판단은 코드와 공식 변경 내역을 비교한 것이다. 해당 버전의 실제 게임 실행으로 재현한 결과는 아니다.
 
 ## 공식 형식 변화와 목표 버전군
 
 - [Java 1.20.5 공식 변경 내역](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-20-5): 아이템 tag→components 변화와 LZ4 설정 추가. 압축 설정을 바꾸어도 기존 청크는 자동 재압축되지 않으므로 혼합 압축을 검증해야 한다.
-- [Java 1.21.5 공식 변경 내역](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-21-5): 직접 NBT text component, tellraw/title SNBT, hover/click 필드 변화. `{text:'Hello'}`는 현재 JSON 전용 파서가 처리하지 못하는 대표 입력이다.
+- [Java 1.21.5 공식 변경 내역](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-21-5): 직접 NBT text component, tellraw/title SNBT, hover/click 필드 변화. `{text:'Hello'}`는 이전 JSON 전용 파서의 누락 입력이며 COMP-01의 SNBT parser·합성 fixture로 처리한다. 실제 해당 게임 버전 로드는 별도 미검증이다.
 - [Java 26.1 공식 변경 내역](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-1): object component의 구조화된 fallback 등 텍스트 변화. 기존 translate fallback과 별개의 구조로 검증한다.
 - [Java 26.3 공식 변경 내역](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-3): 2026-09-15 정식 출시, level.dat version_history 추가. 최신 세대 검증 목표에 포함하고 기존 버전 정보와의 관계를 확인한다.
 
@@ -51,7 +51,7 @@
 | Java 1.13–1.19 | JSON component, names/lore, entity 저장 위치 전환 | 대표 경계 버전 추가 목표 |
 | Java 1.20–1.20.4 | 양면/filtered 표지판 | 형식 기반 기록 있음; 버전별 표본 필요 |
 | Java 1.20.5–1.21.4 | item components, LZ4, JSON 명령 | 형식 기반 기록 있음; 버전별 표본 필요 |
-| Java 1.21.5–1.21.11 | 직접 NBT, SNBT 명령, hover/click 세부 변화 | 명령 문법 공백부터 해결 |
+| Java 1.21.5–1.21.11 | 직접 NBT, SNBT 명령, hover/click 세부 변화 | SNBT 합성 검증 기록 있음; 버전별 실제 표본·게임 로드 필요 |
 | Java 26.1/26.2/26.3 | 최신 component와 metadata, 팩 형식 변화 | 공식 내역 조사와 실제 생성 표본 추가 목표 |
 | 모드/서버 Java | 표준 Anvil과 알려진 표시 텍스트; unknown 보존 | 제품/버전/구조별로 판단, 전체 모드 지원 선언 금지 |
 | Bedrock/.mcr/.linear/custom compression | 안전한 식별·안내 | 쓰기 미지원 유지; adapter는 별도 후속 과제 |
@@ -60,9 +60,9 @@
 
 ## 실행 순서와 완료 조건
 
-### 1. Phase2를 닫기 위한 기존 잔여 작업
+### 1. Phase2 완료 조건 (완료 이력)
 
-Phase3 구현 시작 전 다음 계약을 완료한다. 호환성 조사와 계획 작성은 지금 가능하지만 이 문서가 Phase3 구현 착수를 뜻하지 않는다.
+아래 P2-START/P2-PARITY/P2-API/P2-FINAL은 `c26fcd7`에서 완료·commit/push했다. 완료 조건을 보존하며 다음 작업으로 반복하지 않는다. 후속 native 변경은 UX-NATIVE-01의 별도 확인 대상이다.
 
 | 순서 / ID | 작업 | 완료 조건 |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ P2-API는 저장된 사용자 key를 읽어 채팅/파일로 복사하지 않는
 
 | ID / 선행 조건 | 범위와 주요 파일 | 완료 조건 |
 | --- | --- | --- |
-| COMP-01 / Phase2 완료 | `extract.py` command adapter에 JSON/SNBT 구분과 안전한 parse/patch 추가; 필요 모듈은 독립 분리 | tellraw/title 및 execute-run, click embedded command에서 작은따옴표/따옴표 없는 key/list/escape/nesting을 처리. 허용된 visible text만 변경; selector·resource ID·좌표·명령 이름 보존. parse 실패는 원문 유지+미처리 안내. 원래 표현을 유지하고 출력 재파싱 확인 |
+| COMP-01 완료 / Phase2 완료 | `extract.py` command adapter에 JSON/SNBT 구분과 안전한 parse/patch 추가; 필요 모듈은 독립 분리 | tellraw/title 및 execute-run, click embedded command에서 작은따옴표/따옴표 없는 key/list/escape/nesting을 처리. 허용된 visible text만 변경; selector·resource ID·좌표·명령 이름 보존. parse 실패는 원문 유지+미처리 안내. 원래 표현을 유지하고 출력 재파싱 확인 |
 | COMP-02 / COMP-01 | 직접 NBT/JSON의 최신 component adapter와 알려진 필드 보강 | 26.1 object fallback, 최신 hover show_item/show_entity, book filtered/raw, sign 관련 component를 공식 구조별 조사. 실제로 빠지는 형태만 최소 구현하고 각 fixture로 수집/쓰기/복원을 검증. bossbar/team visible text는 별도 command adapter로 추가 |
 | COMP-03 / COMP-01과 독립 조사 가능 | chunk DataVersion·shape·compression·layout coverage → JSONL/report/UI | level.dat 버전과 chunk별 관측을 구분. 혼합 버전·미지 버전·부분 미지원·검사하지 않은 파일을 표시. 미검증 버전/구조의 쓰기 허용 정책을 명시하고 기본은 scan/preserve. 후보0은 ‘이 월드에 번역할 글이 없다’는 증거로 사용하지 않음. report와 UI에 processed/skipped/unsupported/unknown 경계가 일치 |
 | COMP-04 / COMP-01–03 안정화 | 버전 manifest와 대표 실제 생성 월드, 기존 compression fixture 보강 | 경계 버전별 scan→결정적 번역→write→reopen→비대상 보존→restore hash 검사. 같은 월드/region에 구형·신형 shape, 서로 다른 DataVersion/압축을 섞어 검증. external .mcc·entity/custom dimensions/Paper 루트·large/corrupt/emoji/NUL 포함; 255-sector 내부 한계 전후와 번역 후 신규 .mcc 생성·백업·복원·중단 복구를 추가 |

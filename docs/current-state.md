@@ -1,8 +1,8 @@
-# 현재 상태 — 2026-10-01
+# 현재 상태 — 2026-10-02
 
 ## 판정
 
-**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 2026-10-01 후속 작업으로 [네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)을 구현했다. 이 후속 변경의 macOS native 확인은 아직 하지 않았다(Linux에서 Rust 컴파일·테스트와 browser fixture로만 확인). 최신 SHA/원격 상태는 Git 기록을 따른다. 플랫폼·서명 배포 gate는 남아 있다.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 2026-10-01 후속 작업으로 [네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)을 구현했다. 이 후속 변경의 macOS native 확인은 아직 하지 않았다(Linux에서 Rust 컴파일·테스트와 browser fixture로만 확인). `claude/review-and-plan-2026-10-01`의 7개 commit을 2026-10-02 main에 fast-forward 통합했다. [통합·대조 기록](history/main-integration-2026-10-02.md). 최신 SHA/원격 상태는 Git 기록을 따른다. 플랫폼·서명 배포 gate는 남아 있다.
 
 최신 증거는 [Phase2 완료 검증](history/phase2-completion-2026-10-01.md), 샘플 provenance·실제 provider는 [샘플·시작 복구 검증](history/sample-startup-validation-2026-10-01.md), 설정 증거는 [설정·추론 UI/UX 개선](history/settings-ux-2026-10-01.md), 전체 backlog는 [남은 작업](follow-up-work.md)이다. 과거 중단 기록은 현재 실행 상태를 덮어쓰지 않는다.
 
@@ -24,7 +24,10 @@
 - 같은 계정으로 DB와 key 파일을 모두 읽는 프로세스까지 막는 설계는 아니다. Windows permission 코드는 target typecheck만 통과했으며 native 검증 전이다.
 - OpenAI/Gemini/Anthropic/OpenRouter/Comet/Custom, provider endpoint 고정과 Custom wire format·URL 검증. Gemini는 헤더 인증, thinking 제어(3.x level/2.5 budget), 사고 토큰 사용량 합산, MAX_TOKENS 실패 처리. CLI 환경변수 호환과 Rust-owned sidecar 환경변수 차단을 구분한다.
 - 설정 그룹/disclosure, 종류별 scope 및 curated presets, 파일/key 규칙, global source overrides, performance/file retry/error 정책, 공개 JSON import/export/reset, literal `translate.py` 읽기 전용 preview, 명시적 확인 후 style helper.
-- System/Light/Dark 및 ko/en/ja semantic i18n. 중국어 UI는 현재 제공하지 않는다.
+- System/Light/Dark 즉시 적용·설정 파일 저장·보기 메뉴 동기화·OS 변경 추적·시작 전 배경 적용, ko/en/ja semantic i18n. 중국어 UI는 현재 제공하지 않는다. 최신 macOS/Windows 창 확인은 남아 있다.
+- 도움말 화면·F1/⌘? 메뉴·첫 실행 Tour, 허용 목록 외부 링크·데이터 폴더 열기, About 앱 버전·license 뷰어. 공개 설정 import/export/reset과 전체 앱 두 단계 초기화(백업 유지, 저장된 키 삭제 선택).
+- 설정 파일 fsync·atomic replace·동일 내용 사본·손상본 보존/복구, app_prefs 테마·안내 동의 저장. 모델 catalog는 atomic write를 사용하며 설정과 같은 사본 복구는 구현하지 않았다.
+- updater 확인·자동 알림·작업 잠금·서명 검증 설치/재시작 경로 연결. 공개키는 비어 있고 signed release/latest.json 게시와 실제 업데이트 검증은 RELEASE-01에 남아 있다.
 - native View 메뉴의 75–200% 실제 WebView 확대. Cmd/Ctrl+0은 100%, Cmd/Ctrl+2는 200%. Dialog는 명시적 fixed 위치·동적 viewport 높이를 사용하고, native에서 보이지 않던 등장 애니메이션을 제거했다.
 - alternate app identifier는 명시적인 sidecar data root로 격리한다. 테스트 설정·DB·키·월드가 production root로 흘러가지 않는다.
 - 선택한 월드 밖으로 연결된 level/region/entity/resource pack은 읽기·API 전에 차단한다. resources.zip symlink는 내부 대상이어도 restore 경로 보존을 위해 차단한다. 큰 파일 지문/백업 해시는 스트리밍한다.
@@ -33,23 +36,25 @@
 
 서비스 소개와 사용법은 root README, 자세한 실행·복원은 user-guide, 비용·키 저장은 privacy, 개인 프로젝트/보증·책임 제한은 disclaimer로 구분했다. 기여자는 김현민(mini0227kim@gmail.com)이다. 기존 MIT를 유지하고 제3자 metadata 검토·미확인 플랫폼/배포 고지를 legal 문서와 LEGAL-01에 기록했다. 날짜별 기록은 history, 의도적인 합성 소개 화면은 images에서 관리한다. 2026-10-01 다국어 README(ko/en/ja/zh)를 같은 범위로 맞추고 user-guide에 설정·결과·CLI·문제 해결을 보강했다. [기록](history/docs-refresh-2026-10-01.md) 이번 문서 작업으로 유료 API·전체 matrix·installer 빌드를 실행하지 않았다.
 
-## 현재 검증
+## 검증 기록과 적용 범위
 
-| 영역 | 최신 증거 | 범위 |
+아래 PASS 수치는 브랜치의 기존 기록이다. 이번 통합에서는 코드·문서·Git 이력을 대조했으며 테스트/빌드/native/API를 새로 실행하지 않았다. Phase2 행은 `c26fcd7` 이전 범위의 이력이고 후속 UI/Rust/provider source의 최신 native PASS가 아니다.
+
+| 영역 | 기록된 증거 | 범위 |
 | --- | --- | --- |
 | 후속(2026-10-02) | Python23/Rust30/check·build/frontend62/browser114 PASS: 도움말·시작 안내·라이선스 뷰어·업데이트·데이터 위치·초기화·설정 내구성, 라이트/다크/시스템 화면 모드(설정 타일·보기 메뉴·OS 변경 추적·시작 전 적용·전 화면 다크 axe) | [업데이트·데이터](updates-and-data.md). 실제 서명 release 업데이트·각 OS native 미확인 |
 | 후속(2026-10-01) | Python22/Rust28/check·build/frontend58/browser98 PASS(부드러움·일관성 후속 포함), 실제 Gemini 실측 | [네이티브 UX·Gemini·SNBT](history/native-ux-and-compat-2026-10-01.md). Linux 환경, macOS native 미확인 |
 | Python | 최종20 suites PASS | 신규 .mcc 경계/복원/실패/물리 집계 및 기존 core/provider/JSONL |
-| Frontend | 전체11 files /58 PASS | startup4 포함 최신 frontend source |
+| Frontend | 전체11 files /58 PASS | startup4 포함 Phase2 당시 frontend source |
 | Browser | 최종87 실행 중86 PASS/1 FAIL→수정 후 영향7 PASS | override 입력창 자동 닫힘과 오래된 Save 기대 수정. 영향 없는86 재사용; 단일 전체87 PASS 실행 아님 |
-| Type/build | 0 errors /0 warnings, production build PASS | 최종 UI source |
+| Type/build | 0 errors /0 warnings, production build PASS | Phase2 당시 UI source |
 | Rust | 28 PASS | 기존 vault/routing 및 신규 startup deadline4 |
-| Packaging | sidecar + unsigned debug Eval app PASS (59.21 MiB) | 최신 macOS arm64, shared cache; clean-machine 검증 아님 |
-| Native | startup fault2종/retry/cold Ready, 실제 API 및 신규 .mcc 수동 번역·복원 PASS | 최신 패키지 변경2/API0/원래2파일 hash 차이0·새 .mcc 없음, 이전 world4+ZIP1도 차이0 |
+| Packaging | sidecar + unsigned debug Eval app PASS (59.21 MiB) | Phase2 당시 macOS arm64, shared cache; clean-machine 검증 아님 |
+| Native | startup fault2종/retry/cold Ready, 실제 API 및 신규 .mcc 수동 번역·복원 PASS | Phase2 패키지 변경2/API0/원래2파일 hash 차이0·새 .mcc 없음, 이전 world4+ZIP1도 차이0 |
 | Real API | OpenRouter 최소 E2E PASS, provider 비용 $0.0001484 | 3문장/1요청, 입력391/출력108, 누적 usage 전후·verified backup/native restore |
 | 실제 샘플 | 총9435청크 읽기/NBT 바이트 보존 PASS | 공개5 region 후보0; Roguefire 복사본477후보·12쓰기·전체117파일 hash 복원0, 게임 로드 NOT_RUN |
 
-최신 패키지 hash·native는 Phase2 완료 기록을, 실제 API·샘플 provenance는 샘플·시작 복구 기록을 따른다. 설정 화면의 이전 정확한 범위는 UI/UX 문서를 따른다. source/dependencies가 같은 Rust28 등은 유효 범위로 재사용했다. 기존 native 200% 확대는 이전 범위별 증거이며 전체 release gate PASS로 복사하지 않는다.
+Phase2 당시 패키지 hash·native는 Phase2 완료 기록을, 실제 API·샘플 provenance는 샘플·시작 복구 기록을 따른다. 설정 화면의 이전 정확한 범위는 UI/UX 문서를 따른다. source/dependencies가 같은 Rust28 등은 유효 범위로 재사용했다. 기존 native 200% 확대는 이전 범위별 증거이며 전체 release gate PASS로 복사하지 않는다.
 
 ## 지원 경계와 남은 gate
 
@@ -57,7 +62,7 @@
 
 Legacy UI/launcher는 유지한다. [기능 비교](legacy-ui-parity.md)에 항상 백업·앱 관리 backup/checkpoint·공개 설정 literal import의 대체 범위를 확정해 명시했다. off/suffix/임의 경로와 동등 기능이나 100% parity 완료를 주장하지 않는다.
 
-최소 실제 provider/usage/cost/restore와 개발 환경의 Phase2 gate는 완료했다. 최종 diff/secret/artifact review→완료 commit→push를 따른다. Phase3 및 Windows/Linux clean-machine, signing/notarization/updater/release는 남아 있다. [CI 정책](ci-policy.md)은 main의 관련 Python 변경/PR만 자동 core 검사, installer manual/tag, 수동 기본 Linux다. installer/release dispatch는 하지 않는다.
+최소 실제 provider/usage/cost/restore와 개발 환경의 Phase2 gate는 완료·commit/push됐고 Phase3 COMP-01 및 후속 UX 구현을 main에 통합했다. Phase3 잔여 호환성·품질·데이터/복구, 후속 macOS native, Windows/Linux clean-machine, signing/notarization·실제 updater 설치/release는 남아 있다. [CI 정책](ci-policy.md)은 main의 관련 Python 변경/PR만 자동 core 검사, installer manual/tag, 수동 기본 Linux다. installer/release dispatch는 하지 않는다.
 
 ## 저장소 주소
 

@@ -1,14 +1,14 @@
-# 추후 작업 — 2026-10-01
+# 추후 작업 — 2026-10-02
 
 **Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 이 문서는 미완 작업의 기준 목록이다. [최종 완료 증거](history/phase2-completion-2026-10-01.md)는 플랫폼·정식 배포 완료와 구분한다. 최신 구현은 [현재 상태](current-state.md), 범위별 증거는 [검증 이력](history/README.md)을 따른다.
 
 2026-10-01 사용자 요청에 따른 [잔여 작업·Minecraft 호환성 확대 계획](compatibility-roadmap-2026-10-01.md)은 현재 코드의 버전/형식 공백과 실행 순서·완료 조건을 정리한 제안이다. Phase2 완료 후 Phase3에서 SNBT 명령·최신 component·혼합 버전 검증을 우선한다. 초기 계획 작성 자체는 지원 범위나 Phase 상태를 변경하지 않았으며, 후속 구현·최종 검증으로 Phase2 개발 환경 gate를 완료했다. 후속 요청의 [샘플·시작 복구·실제 provider 검증](history/sample-startup-validation-2026-10-01.md)을 추가했으며 게임 버전 전체 지원은 선언하지 않는다.
 
-## 지금 할 순서 (2026-10-01 후속 기준)
+## 지금 할 순서 (2026-10-02 main 통합 기준)
 
-[네이티브 UX·Gemini·SNBT 개선](history/native-ux-and-compat-2026-10-01.md)과 최신 Gemini 실측 뒤 남은 작업의 권장 순서다. 아래 표의 ID와 완료 조건이 기준이다.
+[main 통합·잔여 작업 대조](history/main-integration-2026-10-02.md)에서 `e97261c`의 코드와 문서를 대조했다. 도움말·초기화·화면 모드·업데이트 연결까지 구현됐으며, 이전 Linux 검증 기록과 이번 코드 확인을 구분한다. 아래는 실제로 남은 작업의 권장 순서다. 아래 표의 ID와 완료 조건이 기준이다.
 
-1. **UX-NATIVE-01 — macOS 실제 확인(사용자 로컬 필요).** Linux에서는 컴파일·fixture로만 확인했다. `pnpm sidecar:build` → `pnpm desktop:dev`로 overlay 타이틀바·메뉴(도움말 메뉴·업데이트 확인 포함)·⌘Q·drop·saves 목록·Dock 진행률·다크 시작·외부 링크가 브라우저로 열리는지·데이터 폴더 열기·초기화 후 재시작을 본다. 결함은 native-only 재현 후 수정.
+1. **UX-NATIVE-01 — macOS 실제 확인(사용자 로컬 필요).** Linux에서는 컴파일·fixture로만 확인했다. `pnpm desktop:dev`(sidecar 빌드 포함)로 overlay 타이틀바·메뉴(도움말 메뉴·업데이트 확인 포함)·⌘Q·drop·saves 목록·Dock 진행률·다크 시작·외부 링크가 브라우저로 열리는지·데이터 폴더 열기·초기화 후 재시작을 본다. 결함은 native-only 재현 후 수정.
 2. **PROVIDER-01 — Gemini 후속.** sidecar가 요청마다 새로 떠서 thinking 최저 단계 학습(`_GEMINI_LEVEL_FLOOR`)이 작업마다 초기화된다(작업당 거부 요청 1회, 동시 batch 수만큼 늘 수 있음). 모델 catalog 캐시에 저장하고, 비 OpenRouter 제공사의 날짜 명시 가격표 기반 비용 추정, 모델 목록에서 robotics/computer-use 등 번역 부적합 모델 정리.
 3. **COMP-02 → COMP-03 → COMP-04** ([호환성 계획](compatibility-roadmap-2026-10-01.md)): 최신 component(26.x object fallback, hover/book/sign), chunk별 DataVersion·coverage UI, 1.21.5+로 실제 생성한 맵의 번역·게임 로드 확인.
 4. **QUALITY-01 — 번역 품질.** 고유명사 유지/번역 일관성(실측: "Elder Mira"가 모델마다 다름), lite 모델 군더더기 글자(`§lcrypt`→`§lc지하실`) 같은 서식 인접 오류 감지, glossary·TM(Phase3 QUALITY).
@@ -22,7 +22,7 @@
 | P2-START 완료 | startup 지연·무응답 복구 | 개발 환경 targeted/native PASS: hello30초/bootstrap60초 오류·cleanup·retry/cold Ready. 과거 blank 원인·clean-machine는 미확정 | 무응답/지연 sidecar·저장소 fixture, handshake/bootstrap deadline·오류 안내·소유 process cleanup; native 재시작 증거. write 전체에 무조건 timeout을 적용하지 않음 |
 | P2-PARITY 완료 | 문서화한 Legacy 대체 범위 | 항상 백업·앱 관리 backup/checkpoint 유지, off/suffix/path 차이 명시 | 기존 안전 구현의 범위·literal import·legacy restore 검증. 동등 옵션/100% parity 아님, Legacy 유지 |
 | P2-FINAL 완료 | 최종 Phase2 개발 환경 gate | Python20/frontend58/build/Rust28, browser86+수정 후 영향7 및 최종 native .mcc PASS | 검증·증거 재사용 경계 명시, docs/diff/secret/artifact review→완료 commit/push. 플랫폼/release gate 별도 |
-| UX-NATIVE-01 | 네이티브 UX 후속의 macOS 확인 | 2026-10-01 구현·Linux Rust/browser94 PASS. [기록](history/native-ux-and-compat-2026-10-01.md) | Python 변경이 있으므로 sidecar 재빌드 후 macOS dev app에서 overlay 타이틀바·신호등·드래그 영역, 메뉴 라벨/단축키, ⌘Q 보호(작업 중), 폴더 drop, saves 목록, Dock 진행률/attention, 다크 시작 깜빡임을 확인하고 결함 수정 |
+| UX-NATIVE-01 | 네이티브 UX 후속의 macOS 확인 | 2026-10-02까지 구현·Linux Rust30/browser114 PASS 기록. 이번 통합에서 재실행하지 않음. [기록](history/native-ux-and-compat-2026-10-01.md) | Python 변경이 있으므로 sidecar 재빌드 후 macOS dev app에서 overlay 타이틀바·신호등·드래그 영역, 메뉴 라벨/단축키, ⌘Q 보호(작업 중), 폴더 drop, saves 목록, Dock 진행률/attention, 다크 시작·OS 화면 모드 변경, 도움말·라이선스 메뉴, 외부 링크·데이터 폴더 열기, 초기화 후 재시작·백업 유지·키 삭제/유지를 확인하고 결함 수정 |
 | UX-NATIVE-02 | 남은 네이티브 다듬기 | 미착수 | 사이드바 vibrancy(투명 창 필요 여부 결정), 후보 행 우클릭 메뉴(포함/제외/직접 번역/복사), 창 크기·위치 기억, Windows Mica/타이틀바 확인 |
 | PROVIDER-01 | Gemini·비 OpenRouter 제공사 후속 | 2026-10-01 최신 모델 실측 완료: 3.8/3.7 flash·pro·`flash-latest`는 minimal 거부 → 자동 단계 상승 구현. 학습한 단계는 프로세스 메모리에만 있음 | 단계 학습을 catalog 캐시에 저장해 작업 간 재사용(동시 batch에서도 거부 1회 이하), Gemini/OpenAI/Anthropic 가격을 날짜·출처와 함께 추정에 반영(확인 불가 시 unknown), 번역 부적합 모델(robotics, computer-use 등) 목록 정리, 변경마다 최소 실제 호출로 확인 |
 | QUALITY-01 | 번역 품질 보강 | 서식 토큰 개수 검사·끝 `§r` 정리 완료. 고유명사 일관성·서식 인접 군더더기는 미검출 | 고유명사 처리 규칙/glossary와 연결, 서식 코드 바로 뒤 원문 잔여 글자 감지(경고 또는 재시도), 모델별 비교 fixture(합성)로 회귀 확인 |
@@ -62,16 +62,18 @@
 - [ ] datapack visible text / command storage / scoreboard 조사, opt-in 지원과 detected/unsupported/preserved coverage.
 - [ ] external folder pack/fill/merge, collision·path 안전성. ZIP/source·target locale/overwrite·skip는 Phase2 구현, native gate PASS.
 - [ ] occurrence별 include/exclude와 전체 위치 lazy query.
-- [ ] scan/override/checkpoint/resume schema migration.
+- [ ] scan/override/checkpoint/resume schema migration의 일반 계약·rollback. 기존 `EXTRACTOR_VERSION` 3으로 이전 scan을 무효화하는 경로는 구현됐으며 전체 migration 완료는 아님.
 - [ ] candidate/occurrence/glossary/TM/job history SQLite 범위·indexes·migration/rollback.
 - [ ] world/global glossary와 규칙·revision·import/export/delete.
 - [ ] revision/context-aware TM, world 격리, 잘못된 번역 무효화·편집·삭제.
 - [ ] provider 가격·시각 기반 token/cost low/high 추정과 실제 usage 비교, resume 남은 분량.
-- [ ] Java 버전/압축/entities/dimensions/large/corrupt/mixed/emoji/NUL compatibility.
+- [ ] COMP-02–06: 최신 component·chunk별 DataVersion/coverage·대표 게임 버전 생성/로드·혼합 형식·구형 pack·버전별 지원 근거. 기존 압축/entities/dimensions/emoji/NUL 및 신규 .mcc 합성 회귀를 재구현하는 작업은 아님.
 - [ ] crash/kill 뒤 interrupted 복구, consistency 검사, 사용자 restore/resume/discard.
 - [ ] 자연스러운 core/desktop 모듈 분리, CLI·legacy 설정 호환.
-- [ ] screen reader/high contrast, font size/density, diagnostics redaction, cache/TM 삭제·settings export/reset.
-- [ ] About에 배포물별 third-party notices/SBOM 연결, 실제 version/commit 표시. 소스 MIT·제3자 검토 문서는 작성했지만 binary license gate는 미완이다.
+- [x] 공개 settings import/export/reset, 전체 앱 두 단계 초기화(백업 유지·키 삭제 선택), 데이터 위치 표시, 도움말/시작 안내, 데스크톱 밀도와 시스템/라이트/다크 모드 구현. Linux 검증 기록이며 최신 macOS native gate는 UX-NATIVE-01.
+- [ ] screen reader/high contrast, 사용자 font size/density 설정, diagnostics redaction 범위 점검, cache/TM 개별 삭제. 고정된 13px 밀도 구현은 사용자 조절 기능의 완료가 아님.
+- [x] About의 앱 버전 조회와 앱 안 third-party license 뷰어·고지 생성기.
+- [ ] About에 실제 build commit·target별 SBOM 연결, 배포물의 license/NOTICE 완전성·MPL source 안내 확인(LEGAL-01). 현재 버전 표시가 build commit 증거를 대신하지 않음.
 - [ ] macOS Apple Silicon/Windows x64/Linux x64 clean-machine; macOS Intel 목표 유지 시 별도.
 - [ ] installer sidecar/dependencies/assets/data/chooser/credential/restart/update 확인.
 - [ ] 실제 credential이 있을 때 signing/notarization/updater verification·rollback.
@@ -81,6 +83,6 @@
 
 원본 sample 쓰기 금지. 합성 또는 복사본에서 SHA-256 baseline을 기록하고 쓰기·복원 전후를 비교한다. 추가 실제 API 비용은 이번 제공사 응답 기준 $0.0001484다. 실제 E2E의 기존 허용 예산은 추가 총 $1 이하(목표 $0.01–$0.10)이며 mock 먼저·최소 호출 원칙을 따른다. 최소 E2E는 완료했고 같은 입력의 유료 호출을 반복하지 않는다.
 
-[CI 정책](ci-policy.md)에 따라 일반 문서/UI 변경은 Python CI를 시작하지 않으며 installer는 manual/tag이다. 이전 진행 저장은 `[skip ci]` checkpoint였다. 이번 Phase2 완료 push의 Python/CI 변경은 자동 core 검사의 대상이며 installer/release dispatch는 하지 않는다. 공개 release·서명 자격·사용자 world upload는 별도 확인 없이 하지 않는다.
+[CI 정책](ci-policy.md)에 따라 일반 문서/UI 변경은 Python CI를 시작하지 않으며 installer는 manual/tag이다. 이전 진행 저장은 `[skip ci]` checkpoint였다. 이번 main 통합의 Python/CI 변경은 자동 core 검사의 대상이며 installer/release dispatch는 하지 않는다. 공개 release·서명 자격·사용자 world upload는 별도 확인 없이 하지 않는다.
 
 맵 재배포·상표·의존성 권리는 [면책 안내](disclaimer.md)와 [라이선스 검토](legal/license-review.md)를 따른다. 미검증을 완료라고 쓰지 않고 충돌을 발견하면 기록·해결한 뒤 해당 배포를 재개한다.

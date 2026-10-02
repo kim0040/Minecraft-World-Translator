@@ -4,11 +4,11 @@
 
 > 2026-10-01 사용자 검증 최적화 결정은 [검증 실행 정책](verification-policy.md)과 [이전 중단 인계](history/phase2-pause-2026-10-01.md)를 따른다. 중간 checkpoint 저장은 Phase 완료가 아니다.
 
-## 현재 작업 상태 — 2026-10-01
+## 현재 작업 상태 — 2026-10-02
 
-**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님.** 현재 구현은 [current-state](current-state.md), 미완 gate는 [follow-up-work](follow-up-work.md), 최신 최종 증거는 [Phase2 완료 기록](history/phase2-completion-2026-10-01.md)을 따른다. 실제 OpenRouter 최소 E2E·startup 복구·Legacy 대체 범위·최종 .mcc 생성/복원/물리 집계와 관련 gate를 완료했다. provider-reported 추가 API 비용$0.0001484이며 최종 수동 gate의 추가 비용은0이다. 플랫폼·정식 배포/라이선스 gate는 남아 있다.
+**Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님.** 현재 구현은 [current-state](current-state.md), 미완 gate는 [follow-up-work](follow-up-work.md), 최신 최종 증거는 [Phase2 완료 기록](history/phase2-completion-2026-10-01.md)을 따른다. 실제 OpenRouter 최소 E2E·startup 복구·Legacy 대체 범위·최종 .mcc 생성/복원/물리 집계와 관련 gate를 완료했다. provider-reported 추가 API 비용$0.0001484이며 최종 수동 gate의 추가 비용은0이다. 플랫폼·정식 배포/라이선스 gate는 남아 있다.
 
-이번 서비스 소개·사용 안내·합성 screenshot·면책·제3자 검토 정리와 진행 저장은 사용자 요청의 checkpoint다. 과거 key 대기·테스트 수·HEAD를 현재 상태로 복사하지 않는다.
+2026-10-02 작업 브랜치의 SNBT·Gemini·native UX·도움말·라이선스 뷰어·업데이트 연결·초기화·화면 모드를 main에 통합했다. [통합·대조 기록](history/main-integration-2026-10-02.md)의 구현/기존 검증/미검증 구분을 따른다. 이후 변경의 macOS native와 signed updater/release·SBOM gate는 남아 있다. 과거 서비스 소개 정리는 checkpoint 이력이다. 과거 key 대기·테스트 수·HEAD를 현재 상태로 복사하지 않는다.
 아래 9월28~30일 관측은 역사 기록/장기 계획이며 현재 완료 증거가 아니다. 사용자 결정인 local encrypted credential 기본·keychain opt-in, 웹 선검증 후 native 최종 gate, Phase별 검증→commit→push 순서를 유지한다.
 
 > 원격 인계용 사본: 프로젝트 루트 계획/기록을 제품 저장소에도 포함했다. 본문의 프로젝트 루트 경로는 기존 로컬 배치를 설명하며, 이 저장소만 clone한 경우 실행 명령은 clone 루트에서 수행한다.

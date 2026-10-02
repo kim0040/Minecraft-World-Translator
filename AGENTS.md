@@ -4,7 +4,7 @@
 
 1. 사용자 최신 요청과 상위 AGENTS.md.
 2. `docs/verification-policy.md` — 검증 선택·증거 재사용·중단 규칙.
-3. `docs/history/phase2-completion-2026-10-01.md`, `docs/current-state.md`, `docs/follow-up-work.md` (이전 중단 이력: `docs/history/phase2-pause-2026-10-01.md`).
+3. `docs/history/main-integration-2026-10-02.md`, `docs/current-state.md`, `docs/follow-up-work.md` (이전 중단 이력: `docs/history/phase2-pause-2026-10-01.md`).
 4. `docs/PomiTranslate_Implementation_Plan_and_Agent_Instructions_v1.1.md`.
 
 ## 실행 계약
@@ -22,7 +22,11 @@
 
 ## 현재 재개 상태
 
-2026-10-01 후속: Phase3 진행 중(COMP-01 SNBT 완료) + 네이티브 UX·Gemini 개선, macOS native 확인 대기(UX-NATIVE-01). [기록](docs/history/native-ux-and-compat-2026-10-01.md). 2026-10-02: 도움말·시작 안내·라이선스 고지·업데이트(키 있을 때만 설치)·초기화·데이터 내구성·라이트/다크/시스템 화면 모드, Linux Python23/Rust30/frontend62/browser114 PASS. updater 공개키·`latest.json` 게시는 RELEASE-01 승인 경계. [업데이트·데이터](docs/updates-and-data.md). 이하 Phase2 완료 시점 요약: 2026-10-01 Phase2 데스크톱 기능·macOS arm64 개발 환경 gate 완료 / Phase3 미시작 / release-ready 아님. 최신 증거는 `docs/history/phase2-completion-2026-10-01.md`, 샘플 provenance/실제 API는 `docs/history/sample-startup-validation-2026-10-01.md`다. Python20/frontend58/build/Rust28, browser87 중86 PASS와 결함 수정 후 영향7 PASS, 최종 native 신규 .mcc 생성·변경2/API0/원래2파일 hash 복원0. 공개5 region+실제 복사본9435청크 보존, Roguefire12후보 쓰기/117파일 복원0, 실제 OpenRouter1요청 비용$0.0001484는 해당 범위로 재사용했다. Desktop 항상 백업·앱 관리 backup/checkpoint의 대체 차이를 문서화하며 Legacy 유지, 100% parity 주장 금지. 새 marker 백업schema3는 최신 reader로 복원하고 일반schema2 호환 유지. Phase2 완료 commit/push 후 COMP-01 SNBT를 완료했다. 다음 순서는 [추후 작업](docs/follow-up-work.md)의 "지금 할 순서"(UX-NATIVE-01 → PROVIDER-01 → COMP-02/03/04 → QUALITY-01)를 따른다. 게임 로드/경계 버전 실제 텍스트/clean-machine/다른 OS/keychain/license/signing/updater는 남아 있다.
+2026-10-02 main 통합: Phase2 개발 환경 gate 완료 / Phase3 진행 중(COMP-01 완료) / release-ready 아님. 원격 `claude/review-and-plan-2026-10-01`의 7개 commit을 `c26fcd7`→`e97261c`로 fast-forward했다. SNBT·Gemini·native UX·도움말/Tour·license 뷰어·업데이트 연결·초기화·설정 내구성·화면 모드가 구현됐다. [통합·잔여 대조](docs/history/main-integration-2026-10-02.md), [후속 구현](docs/history/native-ux-and-compat-2026-10-01.md), [업데이트·데이터](docs/updates-and-data.md)를 읽는다.
+
+Linux Python23/Rust30/frontend62/browser114 PASS는 브랜치의 기존 기록이며 이번 통합에서 새로 실행한 결과가 아니다. 후속 변경의 macOS native, clean-machine/각 OS keychain·permission, 게임 버전 표본/로드, signed updater/release·SBOM/최종 license gate는 남아 있다. 빈 updater 공개키·latest.json 게시와 공개 릴리스는 RELEASE-01 승인 경계다. 다음 순서는 [추후 작업](docs/follow-up-work.md)의 UX-NATIVE-01 → PROVIDER-01 → COMP-02/03/04 → QUALITY-01이다.
+
+Phase2 이력은 `docs/history/phase2-completion-2026-10-01.md`와 `docs/history/sample-startup-validation-2026-10-01.md`를 따른다. Python20/frontend58/Rust28·native .mcc hash 복원·OpenRouter 최소 E2E는 당시 범위이며 후속 source의 native 증거로 복사하지 않는다. Desktop 항상 백업·앱 관리 backup/checkpoint, Legacy 유지, schema2 호환/schema3 부재 marker 복원을 유지한다.
 
 ## 문서 정리 후 진입점
 
