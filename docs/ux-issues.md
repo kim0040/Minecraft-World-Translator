@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- | --- |
 | U1 | 높음 | 저장하지 않은 설정(입력한 API 키 포함)이 있어도 창을 닫으면(⌘Q·창 X) 경고 없이 사라진다. 화면 이동은 이제 확인하지만 창 닫기는 작업 중 보호만 있다. | 설정에서 키 입력 → 창 닫기 | `src-tauri` close-requested 처리, `app.settingsDirty` | 닫기 요청 때 `settingsDirty`면 앱 안 확인 dialog를 띄우고 닫기를 보류. native 확인 필요 |
 | U2 | 중간 | OpenAI·Gemini·Anthropic·Comet은 키를 **저장한 뒤에야** 모델 목록을 불러올 수 있다. 새 사용자는 모델 ID를 모른 채 빈 칸 앞에서 멈춘다. 입력한 ID의 오타도 OpenRouter 외에는 실행 전까지 알 수 없다. | 새 설치 → 설정 → 모델 칸 | `SettingsScreen.svelte` `loadModels`, `settings.model.saveKeyFirst` | 키 저장 직후 목록 자동 조회(사용자 동의 문구와 함께), 또는 제공사별 날짜·출처를 단 추천 모델 표시. PROVIDER-01의 가격표 작업과 함께 |
-| U3 | 중간 | 시작 오류(startupFailed)일 때 사이드바가 전부 비활성이라 도움말·정보(진단 복사)로 갈 수 없다. 오류 화면에는 다시 시도만 있다. | `scenario=startup-stopped` | `Sidebar.svelte` nav `disabled` | 도움말·정보는 시작 실패에도 열리게 하고, 오류 화면에 진단 복사·이슈 보고 연결 |
+| U3 | 중간 | 시작 오류(startupFailed)일 때 사이드바가 전부 비활성이라 도움말·정보(진단 복사)로 갈 수 없다. 오류 화면에는 다시 시도만 있다. 메뉴 막대의 도움말·라이선스·문제 보고도 `app.menu()`에서 함께 막힌다. 사이드바 상태 점은 "앱을 준비하지 못했습니다"인데도 초록색이다. | `scenario=startup-stopped` | `Sidebar.svelte` nav `disabled`·`.dot`, `App.svelte` 시작 실패 분기, `app.menu()` | 도움말·정보는 시작 실패에도 열리게 하고, 오류 화면에 진단 복사·이슈 보고 연결, 실패 시 상태 점을 위험색으로 |
 | U4 | 중간 | 복원을 마치면 작업 공간이 조용히 "월드 스캔" 단계로 초기화된다. 백업 화면에 있는 사용자는 이전 검토 결과가 사라진 것을 다음에 번역 작업을 열 때 알게 된다. | 백업 관리 → 복원 → 번역 작업 | `app.restore()` → `resetJob()` | 복원 완료 toast에 "다시 스캔해야 합니다"와 이동 버튼을 붙이거나 스캔 화면에 "복원 후 다시 스캔" 안내 |
 
 ## 화면 구성
@@ -35,7 +35,17 @@
 | U13 | 중간 | 2026-10-02 UX 수정으로 설정 화면 문구(번역 언어 부제, "모델 목록 불러오기", 표시 언어 안내)와 실행 화면 안내가 바뀌었다. `docs/images/locales/*`의 ko/en/ja 소개 화면과 `manifest.json`의 UI 입력 hash는 수정 전 화면이다. | [현지화 관리](localization.md)의 재캡처 절차로 ko/en/ja 화면과 manifest를 함께 갱신(DOCS-01) |
 | U14 | 낮음 | 4개 언어 사용 안내(`user-guide` "화면 표시 언어")는 틀린 설명은 없지만, 표시 언어가 즉시 적용된다는 점과 저장하지 않고 설정을 떠나면 확인을 묻는다는 점, 새 설치 안내·"돌아가기" 흐름을 설명하지 않는다. | 4개 언어 사용 안내·앱 도움말에 함께 반영(DOCS-01) |
 
+## 해결 방향 검토 메모 (2026-10-02, 미적용)
+
+U1·U3·U4·U6은 해결 방향을 실제로 구현해 브라우저 fixture에서 확인해 보았다. 사용자 요청에 따라 **코드는 반영하지 않았고**(작업 트리에서 빼 두었다), 다음 작업자가 참고할 사실만 남긴다.
+
+- **U1 창 닫기:** 현재 Rust `on_window_event(CloseRequested)`와 `RunEvent::ExitRequested`는 작업 gate(`request_gate`)만 확인한다. 방향: 페이지가 `settingsDirty`를 Rust 상태(예: `AtomicBool`)에 알리는 명령, 닫기·종료 요청 때 그 값이 참이면 보류하고 page에 이벤트를 보내 기존 "저장하지 않은 설정" dialog를 닫기 문구("저장하고 닫기/저장하지 않고 닫기")로 재사용, 사용자가 답하면 플래그를 지우고 창 닫기(창 X) 또는 `app.exit(0)`(⌘Q). 창을 닫은 뒤 이어지는 `ExitRequested(code=None)`도 플래그가 지워져 있어야 통과한다. **native에서만 확인 가능**하며 macOS ⌘Q·창 X·Windows 창 X를 각각 봐야 한다.
+- **U3 시작 실패:** 도움말 화면의 진단 복사는 bootstrap 없이 기본 설정으로 동작한다. 도움말·정보 페이지만 시작 실패에도 열고, 그 화면 위에 실패 안내와 다시 시도를 함께 두는 방식이 fixture에서 자연스러웠다.
+- **U4 복원 후:** `app.lastRestoreId`가 이미 있으나 화면에서 쓰지 않는다. 복원 뒤 스캔 화면에 "백업을 복원했습니다 — 다시 스캔하세요" 안내를 두고, 새 스캔·다른 월드 선택 때 지우면 된다. 복원 완료 toast 문구에도 다시 스캔 안내가 필요하다.
+- **U6 좁은 창:** 창 1024px에서 작업 영역은 약 750px이고, 상세 패널 280px + 목록(원문·상태 열)이 함께 들어간다. 기준을 창 폭(1100px)이 아니라 작업 영역 폭(약 700px)으로 바꾸면 1024·840px 창에서도 모달 없이 옆 패널이 된다. ResizeObserver 콜백 안에서 열 배치를 바로 바꾸면 "ResizeObserver loop" 경고가 나므로 다음 frame에 적용해야 한다. 패널에서 편집 중 좁아지면 초안·focus를 시트로 옮겨야 하며, 840px에서 시트를 기대하는 기존 browser 테스트(`workflow.spec.ts` "manual draft survives desktop to narrow dialog resize")는 기준 변경 시 함께 바꿔야 한다.
+
 ## 검증 공백
 
 - 위 목록과 2026-10-02 수정은 Linux browser fixture로만 확인했다. macOS overlay 타이틀바·Windows 창에서 toast 위치, 저장 확인 dialog, 사이드바 "작업 화면 보기"를 UX-NATIVE-01에서 함께 본다.
 - 화면 읽기 프로그램·고대비·글자 크기 조절은 이번 점검 범위가 아니다(Phase3 접근성 항목).
+- Linux에서 Rust lib 테스트(`cargo test --manifest-path src-tauri/Cargo.toml --lib`)는 GTK/WebKit 개발 패키지 외에 sidecar 바이너리(`src-tauri/binaries/pomi-sidecar-<target>`)가 있어야 build script를 통과한다. 이 환경에서는 sidecar가 없어 실패했다(코드 오류가 아닌 환경 조건). Rust를 바꾸는 작업은 `pnpm sidecar:build` 후 실행하거나 native 환경에서 확인한다.
