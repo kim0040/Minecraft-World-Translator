@@ -164,7 +164,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 840, height: 480 
     await expect(page.locator('tr[data-index]')).toHaveCount(1);
     const sourceWidth = await page.locator('td.c-source').first().evaluate((element) => element.getBoundingClientRect().width);
     expect(sourceWidth).toBeGreaterThan(120);
-    await expect(page.getByRole('button', { name: '번역 준비 단계로 이동' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '번역 진행 단계로 이동' })).toBeVisible();
     await page.screenshot({ path: `output/playwright/review-${viewport.width}x${viewport.height}.png`, fullPage: true });
   });
 }
@@ -175,7 +175,8 @@ test('manual draft survives desktop to narrow dialog resize', async ({ page }) =
   const editor = page.locator('#manual-translation');
   await editor.fill('로그파이어에 오신 것을 환영합니다');
   await editor.focus();
-  await page.setViewportSize({ width: 840, height: 480 });
+  // Narrow enough that the list area has no room for the side panel.
+  await page.setViewportSize({ width: 700, height: 480 });
   await expect(editor).toBeFocused();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(editor).toHaveValue('로그파이어에 오신 것을 환영합니다');
@@ -183,7 +184,7 @@ test('manual draft survives desktop to narrow dialog resize', async ({ page }) =
   expect(bounds).not.toBeNull();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.y).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(840);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(700);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(480);
   const close = page.getByRole('dialog').getByRole('button', { name: '닫기', exact: true }).last();
   await close.scrollIntoViewIfNeeded();

@@ -140,13 +140,20 @@
           <span>{t('common.loading')}</span>
         </div>
       {:else if app.startupFailed}
-        <Callout tone="danger" title={t('startup.failed')} role="alert">
-          <p>{app.banner?.message}</p>
-          <p>{t('startup.help')}</p>
-          {#snippet actions()}
-            <button type="button" class="btn btn-primary" onclick={() => app.boot()}>{t('common.retry')}</button>
-          {/snippet}
-        </Callout>
+        <!-- Help and About need nothing from the core: they stay reachable, under the same retry. -->
+        <div class:banner={app.page === 'help' || app.page === 'about'}>
+          <Callout tone="danger" title={t('startup.failed')} role="alert">
+            <p>{app.banner?.message}</p>
+            <p>{t('startup.help')}</p>
+            {#snippet actions()}
+              <button type="button" class="btn btn-primary" onclick={() => app.boot()}>{t('common.retry')}</button>
+              {#if app.page !== 'help'}
+                <button type="button" class="btn btn-secondary" onclick={() => app.goto('help')}>{t('startup.openHelp')}</button>
+              {/if}
+            {/snippet}
+          </Callout>
+        </div>
+        {#if app.page === 'help'}<HelpScreen />{:else if app.page === 'about'}<AboutScreen />{/if}
       {:else}
         {#if app.banner}
           <div class="banner">

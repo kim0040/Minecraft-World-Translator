@@ -60,7 +60,8 @@
       `PomiTranslate ${version}`,
       `OS: ${navigator.userAgent.match(/\(([^)]+)\)/)?.[1] ?? navigator.platform}`,
       `UI: ${app.locale}, theme ${app.theme}`,
-      `Provider: ${app.settings.provider || '-'}, model ${app.settings.model || '-'}`
+      // After a failed start the settings are only defaults, so they would name the wrong provider.
+      app.startupFailed ? 'Startup: failed' : `Provider: ${app.settings.provider || '-'}, model ${app.settings.model || '-'}`
     ];
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
@@ -72,10 +73,13 @@
 </script>
 
 <div class="page help">
-  <header class="page-head with-actions">
+  <header class="page-head" class:with-actions={!app.startupFailed}>
     <h1>{t('help.title')}</h1>
     <p class="lead">{t('help.lead')}</p>
-    <div class="actions"><button type="button" class="btn btn-secondary btn-sm" onclick={() => (app.showTour = true)}><Icon name="play" size={12} /> {t('help.tourButton')}</button></div>
+    <!-- The tour walks into settings, which needs a started core. -->
+    {#if !app.startupFailed}
+      <div class="actions"><button type="button" class="btn btn-secondary btn-sm" onclick={() => (app.showTour = true)}><Icon name="play" size={12} /> {t('help.tourButton')}</button></div>
+    {/if}
   </header>
 
   <section aria-labelledby="start-title">
@@ -136,7 +140,10 @@
 </div>
 
 <style>
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); counter-reset: none; }
+  /* Four steps read as 2×2 or one row of four, never three plus a stray one. */
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); counter-reset: none; }
+  @media (min-width: 1360px) { .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .steps { grid-template-columns: 1fr; } }
   .steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) var(--space-4); align-items: start; }
   .steps h3 { font-size: var(--text-md); }
   .steps p { margin-top: 2px; font-size: var(--text-sm); color: var(--text-secondary); }

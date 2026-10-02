@@ -19,7 +19,12 @@
   const tone = $derived(presentation.tone);
   const titleKey = $derived(`result.${presentation.status}` as MessageKey);
   const bodyKey = $derived(`result.${presentation.status}Body` as MessageKey);
-  const body = $derived(presentation.status === 'completed' ? t('result.completedBody', { files: formatNumber(result?.changedFileCount ?? 0, app.locale) }) : t(bodyKey));
+  const body = $derived(
+    presentation.status === 'completed' ? t('result.completedBody', { files: formatNumber(result?.changedFileCount ?? 0, app.locale) })
+      // Nothing was written, so there is nothing to check or restore.
+      : presentation.status === 'failed' && !result?.changedFileCount ? t('result.failedBodyUnchanged')
+      : t(bodyKey)
+  );
   const stats = $derived(result?.translation ?? {});
   const firstError = $derived(result?.errors?.[0]);
   const reason = $derived.by(() => {
@@ -52,6 +57,7 @@
     <Callout {tone} title={t(titleKey)} role="status">
       {body}
       {#if showReason && reason}<br />{reason}{/if}
+      {#if status === 'completed'}<br />{t('result.completedNext')}{/if}
       {#snippet actions()}
         {#if resumable}
           <button type="button" class="btn btn-primary" disabled={app.isBusy} onclick={() => app.startTranslate({ resume: true })}><Icon name="refresh" size={18} /> {t('result.retry')}</button>
@@ -112,6 +118,9 @@
     {#if result.translationFailures?.length}
       <section class="card samples" aria-labelledby="fail-title">
         <h2 id="fail-title">{t('result.failures')}</h2>
+        {#if (stats.failed ?? 0) > result.translationFailures.length}
+          <p class="muted">{t('result.failuresShown', { total: formatNumber(stats.failed ?? 0, app.locale), shown: formatNumber(result.translationFailures.length, app.locale) })}</p>
+        {/if}
         <ul class="lines">
           {#each result.translationFailures as item (item.source)}<li><strong>{item.source}</strong><span class="muted">{item.reason}</span></li>{/each}
         </ul>

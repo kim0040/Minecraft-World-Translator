@@ -71,6 +71,9 @@
       <div><button type="button" class="btn btn-secondary" disabled={app.cancelling} onclick={() => app.cancel()}>{t('common.cancel')}</button></div>
     </section>
   {:else if !scan}
+    {#if app.lastRestoreId}
+      <Callout tone="info" title={t('restore.rescanTitle')} role="status">{t('restore.rescanBody')}</Callout>
+    {/if}
     <section class="card start">
       <div class="ico" aria-hidden="true"><Icon name="search" size={22} /></div>
       <div class="copy">

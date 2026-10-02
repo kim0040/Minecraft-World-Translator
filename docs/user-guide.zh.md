@@ -22,7 +22,7 @@
 - **模型：** 直接输入模型 ID，或从列表中选择。提供价格信息时，会显示每百万 token 的输入和输出价格。
 - **模型信息查询：** OpenRouter 会自动查询公开 catalog，也提供手动刷新。查询不会保存设置，也不会发送密钥或世界文本。其他提供商可能需要已保存的密钥。缓存、查询失败和找不到模型会在界面中分别显示。
 - **API 密钥：** 输入并保存你自己的 AI 翻译密钥。保存后只显示是否已保存和保存方式，不会显示密钥的值；你可以更改或删除它。
-- **推理（OpenRouter/Gemini）：** 可以选择模型默认值、关闭推理或手动设置。确认了模型信息后，界面只显示受支持的强度；必须推理的模型不能关闭推理。Gemini 需要先使用已保存的密钥刷新一次**支持信息**，才能确认模型是否支持 thinking。Gemini 3 系列默认开启 thinking，短文本翻译也可能产生大量按输出计费的思考 token，因此建议翻译时**关闭推理**。部分较新的模型（3.7/3.8 flash、pro、`gemini-flash-latest`）无法完全关闭推理，应用会自动调整到该模型允许的最低级别。思考 token 会计入结果页面显示的输出 token。
+- **推理（OpenRouter/Gemini）：** 可以选择模型默认值、关闭推理或手动设置。确认了模型信息后，界面只显示受支持的强度；必须推理的模型不能关闭推理。Gemini 需要先使用已保存的密钥执行一次 **Load model list**（加载模型列表），才能确认模型是否支持 thinking。Gemini 3 系列默认开启 thinking，短文本翻译也可能产生大量按输出计费的思考 token，因此建议翻译时**关闭推理**。部分较新的模型（3.7/3.8 flash、pro、`gemini-flash-latest`）无法完全关闭推理，应用会自动调整到该模型允许的最低级别。思考 token 会计入结果页面显示的输出 token。
 - **查看用量（OpenRouter）：** 查询已保存密钥的累计使用额度。此操作不会发送翻译请求或保存设置；由于同一密钥的其他任务和提供商统计延迟，前后额度差不一定正好等于本次操作的费用。
 
 ### 翻译语言与文体
@@ -159,7 +159,7 @@ CLI 使用相同的 Python 核心，但与桌面 vault 使用不同的 credentia
 | `AUTH_FAILED` | 在设置中重新检查 API 密钥。 |
 | `NO_CREDIT` | 查看提供商账户余额和 credit。 |
 | `RATE_LIMITED` | 稍后再试，或降低并发请求数。 |
-| `MODEL_NOT_FOUND` | 检查模型 ID，或刷新支持信息。Gemini 旧别名 `flash`/`pro` 现在对应 `gemini-flash-latest`/`gemini-pro-latest`。 |
+| `MODEL_NOT_FOUND` | 检查模型 ID，或再次使用 **Load model list**。Gemini 旧别名 `flash`/`pro` 现在对应 `gemini-flash-latest`/`gemini-pro-latest`。 |
 | Gemini 响应缓慢或出现 “output token limit” | 选择的模型开启了 thinking。尝试在设置中关闭推理，或选择 `flash-lite` 系列。 |
 | `NETWORK_ERROR` | 检查网络连接和提供商状态。 |
 | 世界正在使用 | 完全退出 Minecraft 或服务器后再试。 |

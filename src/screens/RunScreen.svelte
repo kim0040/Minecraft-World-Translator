@@ -6,12 +6,20 @@
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
   import SetupNotice from '../components/SetupNotice.svelte';
-  import { REASONING_PROVIDERS, reasoningSummary } from '../lib/reasoning';
+  import Dialog from '../components/Dialog.svelte';
+  import { REASONING_PROVIDERS, reasoningSummary, supportsReasoning } from '../lib/reasoning';
 
   const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', comet: 'Comet API', custom: 'Custom' };
   const running = $derived(app.busy === 'translate');
   const reasoningModel = $derived(app.modelsFor(app.settings).find((model) => model.id === app.settings.model.trim()));
   const reasoning = $derived(reasoningSummary(app.settings.openrouter_reasoning ?? 'default', reasoningModel));
+  // A model known not to reason has nothing to edit; an unknown one might, so the way to settings stays.
+  const reasoningEditable = $derived(!reasoningModel || supportsReasoning(reasoningModel));
+  let confirmFresh = $state(false);
+  function startFresh(): void {
+    confirmFresh = false;
+    void app.startTranslate({ resume: false });
+  }
   let attemptedMetadata = false;
   $effect(() => {
     if (app.settings.provider !== 'openrouter' || app.manualOnly || app.busy || attemptedMetadata) return;
@@ -135,7 +143,7 @@
         <div class="row-item"><dt class="k">{t('run.summary.language')}</dt><dd class="v">{app.settings.target_language}</dd></div>
         <div class="row-item"><dt class="k">{t('run.summary.model')}</dt><dd class="v" class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
         {#if REASONING_PROVIDERS.includes(app.settings.provider) && !app.manualOnly}
-          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline"><span class="text">{reasoning}</span><button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.openSettingsFor('run')}>{t('run.reasoning.edit')}</button></dd></div>
+          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline"><span class="text">{reasoning}</span>{#if reasoningEditable}<button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.openSettingsFor('run')}>{t('run.reasoning.edit')}</button>{/if}</dd></div>
         {/if}
       </dl>
     </section>
@@ -176,6 +184,10 @@
         <button type="button" class="btn btn-secondary btn-lg" disabled={app.isBusy} onclick={() => app.goStep('review')}>
           <Icon name="chevron-left" size={16} /> {t('step.review')}
         </button>
+        {#if app.resume}
+          <!-- Resuming is the default; starting over is offered, behind a cost warning. -->
+          <button type="button" class="btn btn-secondary btn-lg" disabled={!app.canRun} onclick={() => (confirmFresh = true)}>{t('run.fresh')}</button>
+        {/if}
         <button type="button" class="btn btn-primary btn-lg" disabled={!app.canRun} onclick={() => app.startTranslate({ resume: !!app.resume })}>
           <Icon name="play" size={16} /> {app.resume ? t('run.resume') : t('run.start')}
         </button>
@@ -183,6 +195,16 @@
     </div>
   {/if}
 </div>
+
+{#if confirmFresh && app.resume}
+  <Dialog title={t('run.freshTitle')} onClose={() => (confirmFresh = false)}>
+    <p>{t('run.freshBody', { count: formatNumber(app.resume.translatedCount ?? 0, app.locale) })}</p>
+    {#snippet actions()}
+      <button type="button" class="btn btn-secondary" data-autofocus onclick={() => (confirmFresh = false)}>{t('common.cancel')}</button>
+      <button type="button" class="btn btn-primary" disabled={!app.canRun} onclick={startFresh}>{t('run.freshConfirm')}</button>
+    {/snippet}
+  </Dialog>
+{/if}
 
 <style>
   .external-paths { padding-inline-start: 1em; margin: 0; overflow-wrap: anywhere; }

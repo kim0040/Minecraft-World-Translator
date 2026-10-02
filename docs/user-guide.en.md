@@ -18,7 +18,7 @@ Close Minecraft or the server and make an **independent copy of your world**. Au
 
 - **Provider:** choose OpenAI, Gemini, Anthropic, OpenRouter, Comet or Custom endpoint. Custom requires an endpoint URL and an OpenAI/Anthropic-compatible wire format.
 - **Model:** enter a model ID or choose from the list. When known, input and output prices are shown per million tokens.
-- **Refresh support information:** OpenRouter's public catalog loads automatically and can be refreshed manually. This lookup does not save settings or send keys or world text. Other providers may require a saved key. Cached information, lookup failures and missing models are distinguished in the UI.
+- **Load model list:** OpenRouter's public catalog loads automatically and can be refreshed manually. This lookup does not save settings or send keys or world text. Other providers may require a saved key. Cached information, lookup failures and missing models are distinguished in the UI.
 - **API key:** save your own key for AI translation. Saved keys are represented by their storage status and mode, never their original value. You can change or delete them.
 - **Reasoning (OpenRouter and Gemini):** choose Model default, Disable reasoning or Custom. Verified model information restricts the available effort levels; mandatory reasoning cannot be disabled. For Gemini, refresh support information using a saved key to check thinking support. Gemini 3 models enable thinking by default and can consume many billed output tokens even for short translations. Disable reasoning for translation where possible. Some models cannot turn it off completely; the app adjusts to the lowest accepted level. Thinking tokens are included in reported output usage.
 - **Check OpenRouter usage:** retrieves cumulative credits used by the saved key without translating or saving settings. Other jobs using that key and reporting delays can affect the before/after difference. It may differ from this job's cost.
@@ -152,7 +152,7 @@ These examples use macOS/Linux. Windows uses `.venv\Scripts\python.exe`. Actual 
 | `AUTH_FAILED` | Check your API key in Settings. |
 | `NO_CREDIT` | Check provider credit/balance. |
 | `RATE_LIMITED` | Wait or lower concurrency. |
-| `MODEL_NOT_FOUND` | Check the model ID or refresh support information. Old Gemini `flash`/`pro` aliases become `gemini-flash-latest`/`gemini-pro-latest`. |
+| `MODEL_NOT_FOUND` | Check the model ID or use **Load model list** again. Old Gemini `flash`/`pro` aliases become `gemini-flash-latest`/`gemini-pro-latest`. |
 | Slow Gemini response / output token limit | Disable thinking where possible or choose a flash-lite model. |
 | `NETWORK_ERROR` | Check connectivity and provider status. |
 | World in use | Fully close Minecraft/server. |

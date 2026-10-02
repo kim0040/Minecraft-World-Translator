@@ -76,9 +76,17 @@ test('result to backup restore returns to a valid scan step', async ({ page }) =
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: '이 시점으로 월드 복원' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // The backup page says the reviewed scan is gone and offers the way to scan again.
+  const notice = page.getByRole('status').filter({ hasText: '번역하려면 다시 스캔하세요' });
+  await expect(notice).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: 'output/playwright/restore-rescan-notice.png' });
+  await notice.getByRole('button', { name: '월드 스캔으로' }).click();
   await expect(page.getByRole('heading', { name: '월드 스캔', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '번역 결과', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: '이전 스캔·검토 결과를 지웠습니다' })).toBeVisible();
+  await page.getByRole('button', { name: '스캔 시작', exact: true }).click();
+  await expect(page.getByText('번역하려면 다시 스캔하세요')).toHaveCount(0);
 });
 
 for (const scenario of ['result-success']) {
@@ -96,7 +104,7 @@ for (const scenario of ['result-success']) {
 const resultCases = [
   { scenario: 'result-needs_retry', title: '번역이 완료되지 않아 작업을 중단했습니다', body: '월드 파일은 변경되지 않았습니다.', action: '남은 문장만 이어서 시도' },
   { scenario: 'result-partial', title: '일부 텍스트만 번역되었습니다', body: '번역되지 않은 문장은 원문 그대로 유지되었습니다. 아래 상세 내역을 확인해 주세요.', action: '처음부터 다시 스캔' },
-  { scenario: 'result-failed', title: '번역에 실패했습니다', body: '번역을 완료하지 못했습니다. 변경 파일 수와 오류를 확인하고, 필요하면 백업을 복원해 주세요.', action: '처음부터 다시 스캔' },
+  { scenario: 'result-failed', title: '번역에 실패했습니다', body: '번역을 완료하지 못했습니다. 월드 파일은 바뀌지 않았습니다.', action: '처음부터 다시 스캔' },
   { scenario: 'result-cancelled', title: '번역을 취소했습니다', body: '이미 번역된 문장은 안전하게 저장되어 있어 언제든 이어서 진행할 수 있습니다.', action: '남은 문장만 이어서 시도' },
   { scenario: 'result-invalidated', title: '스캔 이후 월드 파일이 변경되었습니다', body: '데이터 무결성 보호를 위해 저장을 중단했습니다. 월드를 다시 스캔해 주세요.', action: '처음부터 다시 스캔' },
   { scenario: 'result-unsupported', title: '지원하지 않는 월드 형식입니다', body: '월드 파일은 전혀 변경되지 않았습니다.', action: '처음부터 다시 스캔' }

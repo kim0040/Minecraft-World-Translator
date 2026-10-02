@@ -54,6 +54,8 @@ export const DEFAULT_PREFS: AppPrefs = {
   update_auto_check: true, update_last_check: 0, update_skipped_version: ''
 };
 export type UpdateState = 'idle' | 'checking' | 'installing' | 'error';
+/** Menu commands that work while the core failed to start: help pages and links only. */
+const STARTUP_SAFE_ACTIONS: MenuAction[] = ['help', 'shortcuts', 'licenses', 'report'];
 const RESUMABLE = ['cancelled', 'needs_retry', 'failed'];
 /** Settings that change which text a scan finds. Changing one makes a reviewed scan stale. */
 const SCOPE_KEYS: (keyof Settings)[] = ['target_language', 'resource_pack_enabled', 'skip_target_language_text'];
@@ -126,6 +128,7 @@ export class AppState {
   progress = $state<JobProgress>(emptyProgress());
   result = $state<TranslationResult | null>(null);
   resume = $state<ResumeStatus | null>(null);
+  /** The recovery snapshot of the last restore, until the next scan or world change replaces the job. */
   lastRestoreId = $state('');
 
   private toastSerial = 0;
@@ -492,7 +495,9 @@ export class AppState {
       this.setTheme(action.slice(6) as ThemeChoice);
       return;
     }
-    if (!this.ready || this.startupFailed || this.busy === 'settings') return;
+    if (!this.ready || this.busy === 'settings') return;
+    // Help, licenses and the issue link need nothing from the core, so they stay open when it failed to start.
+    if (this.startupFailed && !STARTUP_SAFE_ACTIONS.includes(action)) return;
     if (action === 'settings') {
       this.goto('settings');
     } else if (action === 'open-world') {
@@ -550,6 +555,7 @@ export class AppState {
   }
 
   private resetJob(): void {
+    this.lastRestoreId = '';
     this.estimateRevision++;
     this.estimateLoading = false;
     this.scan = null;
@@ -747,6 +753,12 @@ export class AppState {
     } catch (cause) {
       this.fail(cause);
       this.step = this.scan ? 'run' : 'scan';
+      if (!options.resume && this.resume) {
+        // Starting over drops the saved checkpoint; ask what is left rather than offer a stale resume.
+        void callBackend<ResumeStatus>('resume.status', { worldDir: this.worldDir })
+          .then((resumable) => this.applyResume(resumable))
+          .catch(() => { this.resume = null; });
+      }
     } finally {
       this.busy = '';
       this.cancelling = false;
@@ -777,8 +789,9 @@ export class AppState {
       if (restored.status !== 'restored' || !restored.recoverySetId) {
         throw new Error(t('backups.restoreUnconfirmed'));
       }
-      this.lastRestoreId = restored.recoverySetId;
       this.resetJob();
+      // Set after the reset: the scan and backup pages say why the reviewed scan is gone.
+      this.lastRestoreId = restored.recoverySetId;
       this.step = 'scan';
       await this.loadBackups();
       this.notify(t('backups.restoreDone'), 'success', 9000);

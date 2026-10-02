@@ -26,8 +26,8 @@ for (const viewport of [
     if (await page.getByRole('dialog').count()) await expect(page.getByRole('dialog')).toHaveCSS('opacity', '1');
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     if (await page.getByRole('dialog').count()) await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: '번역 준비 단계로 이동' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: '번역 준비 및 실행', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '번역 진행 단계로 이동' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '번역 진행', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `output/playwright/run-${viewport.width}x${viewport.height}.png`, fullPage: true });
   });

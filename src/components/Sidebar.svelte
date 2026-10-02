@@ -11,6 +11,8 @@
     { page: 'help', icon: 'help', label: 'nav.help' },
     { page: 'about', icon: 'info', label: 'nav.about' }
   ];
+  // These pages need nothing from the core, so a failed start still leaves a way to help and diagnostics.
+  const startupSafe: Page[] = ['help', 'about'];
   function showUpdate(): void {
     app.helpSection = 'updates';
     app.goto('settings');
@@ -54,7 +56,7 @@
         type="button"
         class="nav"
         class:active={app.page === item.page}
-        disabled={app.busy === 'settings' || !app.ready || app.startupFailed}
+        disabled={app.busy === 'settings' || !app.ready || (app.startupFailed && !startupSafe.includes(item.page))}
         aria-label={t(item.label)}
         aria-current={app.page === item.page ? 'page' : undefined}
         title={app.railCollapsed ? t(item.label) : undefined}
@@ -70,10 +72,10 @@
     {#if app.updateAvailable && !app.railCollapsed}
       <button type="button" class="update" onclick={showUpdate}><Icon name="download" size={14} /> {t('update.sidebar', { version: app.update?.version ?? '' })}</button>
     {/if}
-    <div class="state" class:busy={app.isBusy} role="status" aria-live="polite">
+    <div class="state" class:busy={app.isBusy} class:failed={app.startupFailed && !app.isBusy} role="status" aria-live="polite">
       <img class="pomi" src="/images/pomi.png" alt="" width="32" height="32" />
       <div class="text">
-        <span class="dot" class:busy={app.isBusy} aria-hidden="true"></span>
+        <span class="dot" class:busy={app.isBusy} class:failed={app.startupFailed && !app.isBusy} aria-hidden="true"></span>
         <span class="status-text">{status}{percent !== null ? ` ${percent}%` : ''}</span>
         {#if app.isBusy && app.progress.startedAt}
           <span class="sub num">{formatDuration((now - app.progress.startedAt) / 1000, app.locale)}</span>
@@ -129,6 +131,7 @@
   .sub { grid-column: 2; font-weight: 400; color: var(--text-secondary); font-size: var(--text-xs); }
   .dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--success-solid); }
   .dot.busy { background: var(--accent); animation: pomi-pulse-dot 1.4s ease-in-out infinite; }
+  .dot.failed { background: var(--danger-solid); }
   .rail .state { justify-content: center; padding: var(--space-2); }
   .rail .text, .rail .pomi { display: none; }
   .rail .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); }
@@ -137,6 +140,7 @@
   .collapse { justify-self: start; }
   /* The collapsed rail shows only the dot, so it carries the busy colour too. */
   .sidebar .state.busy::before { background: var(--accent); animation: pomi-pulse-dot 1.4s ease-in-out infinite; }
+  .sidebar .state.failed::before { background: var(--danger-solid); }
   .rail .collapse { justify-self: center; }
   @media (max-width: 1000px) { .sidebar { padding-inline: var(--space-2); } .sidebar .label, .sidebar .wordmark, .sidebar .text, .sidebar .pomi, .sidebar .collapse, .sidebar .task-link { display: none; } .sidebar .nav { justify-content: center; padding: 0; min-height: 36px; } .sidebar .brand { justify-content: center; padding: 0; } .sidebar .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; } .sidebar .state { justify-content: center; } .sidebar .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); } }
   @media (max-width: 640px) {

@@ -96,6 +96,17 @@
         <ProgressBar label={t('status.restoring')} value={null} />
         <p class="muted">{t('common.loading')}</p>
       </section>
+    {:else if actionBusy && backups.length}
+      <!-- Restore buttons are disabled while a job runs; say why instead of leaving them grey. -->
+      <p class="muted busy-note" role="status">{t('backups.busyNote')}</p>
+    {:else if app.lastRestoreId}
+      <!-- The restore cleared the reviewed scan; say so here, where the user still is. -->
+      <Callout tone="success" title={t('restore.rescanTitle')} role="status">
+        {t('restore.rescanBody')}
+        {#snippet actions()}
+          <button type="button" class="btn btn-primary btn-sm" onclick={() => app.goStep('scan')}>{t('restore.toScan')} <Icon name="chevron-right" size={14} /></button>
+        {/snippet}
+      </Callout>
     {/if}
 
     {#if backups.length === 0}

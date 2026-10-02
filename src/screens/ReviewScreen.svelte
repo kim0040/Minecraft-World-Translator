@@ -12,31 +12,59 @@
 
   const source = app.candidates;
   let selected = $state<Candidate | null>(null);
-  // In a narrow window the detail is a sheet. It opens on a click or Enter, never on arrow keys or
-  // Space, so moving through the list and toggling rows stays a keyboard-only task.
+  // When the list area is too narrow for a side panel the detail is a sheet. It opens on a click or
+  // Enter, never on arrow keys or Space, so moving through the list and toggling rows stays a
+  // keyboard-only task.
   let detailOpen = $state(false);
   function select(candidate: Candidate, open: boolean): void {
     selected = candidate;
     if (open) detailOpen = true;
   }
   let wide = $state(true);
+  // Below this the side panel is a sheet; up to the second width it is the narrower panel.
+  const PANEL_MIN = 680;
+  const PANEL_FULL = 940;
+  let workareaWidth = $state(PANEL_FULL);
+  let workarea: HTMLElement | undefined = $state();
   let busyBulk = $state(false);
   let query = $state(source.query);
 
+  async function setWide(next: boolean): Promise<void> {
+    if (next === wide) return;
+    const focus = document.activeElement;
+    const editing = focus instanceof HTMLElement && focus.id === 'manual-translation';
+    const inDetail = focus instanceof HTMLElement && !!focus.closest('.detail, dialog');
+    // Going narrow, the sheet takes over only what the user was working on in the panel.
+    if (!next) detailOpen = !!selected && (editing || inDetail);
+    wide = next;
+    await tick();
+    if (editing) document.getElementById('manual-translation')?.focus();
+    else if (inDetail && wide) document.querySelector<HTMLElement>('tr[aria-selected="true"]')?.focus();
+  }
+
+  // The list area, not the window, decides: the sidebar and its rail change the room left over.
   $effect(() => {
-    const media = matchMedia('(min-width: 1100px)');
-    wide = media.matches;
-    const listener = async () => {
-      const focus = document.activeElement;
-      const editing = focus instanceof HTMLElement && focus.id === 'manual-translation';
-      const inDetail = focus instanceof HTMLElement && !!focus.closest('.detail, dialog');
-      wide = media.matches;
-      await tick();
-      if (editing) document.getElementById('manual-translation')?.focus();
-      else if (inDetail && wide) document.querySelector<HTMLElement>('tr[aria-selected="true"]')?.focus();
+    const element = workarea;
+    if (!element) return;
+    // A local: reading `workareaWidth` back here would make this effect re-observe on every resize.
+    const initial = element.clientWidth;
+    workareaWidth = initial;
+    wide = initial >= PANEL_MIN;
+    let frame = 0;
+    // Applied on the next frame: changing the columns inside the callback trips a ResizeObserver loop.
+    const observer = new ResizeObserver(([entry]) => {
+      cancelAnimationFrame(frame);
+      const width = entry.contentRect.width;
+      frame = requestAnimationFrame(() => {
+        workareaWidth = width;
+        void setWide(width >= PANEL_MIN);
+      });
+    });
+    observer.observe(element);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
     };
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
   });
 
   // Changes to who is included only change what a state filter shows. Reload it after a pause.
@@ -144,7 +172,7 @@
     {/each}
   </div>
 
-  <div class="workarea" class:wide>
+  <div class="workarea" class:wide class:compact={workareaWidth < PANEL_FULL} bind:this={workarea}>
     <div class="tablewrap"><CandidateTable selectedId={selected?.id ?? ''} onSelect={select} /></div>
     {#if wide}<div class="detailwrap"><CandidateDetail candidate={selected} /></div>{/if}
   </div>
@@ -193,13 +221,17 @@
   @media (hover: hover) { .chip[aria-pressed='false']:hover { background: var(--bg-hover); } }
   .workarea { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); min-height: 0; }
   .workarea.wide { grid-template-columns: minmax(0, 1fr) 340px; }
+  .workarea.wide.compact { grid-template-columns: minmax(0, 1fr) 280px; }
   .tablewrap, .detailwrap { min-height: 0; height: 100%; }
   .foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--border); }
   .meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
   .next { display: flex; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
-  @media (max-width: 1100px) { .hint { display: none; } }
+  /* Only the bulk note gives way; the "nothing included" alert explains the disabled button. */
+  @media (max-width: 1100px) { .meta .hint { display: none; } }
   @media (max-width: 640px), (max-height: 650px) {
     .review { height: auto; min-height: 0; grid-template-rows: auto auto auto minmax(300px, 1fr) auto; }
     .workarea { min-height: 300px; }
+    /* The page scrolls here, so the next-step button stays pinned to the bottom of the pane. */
+    .foot { position: sticky; inset-block-end: calc(-1 * var(--pane-pad-bottom, var(--space-3))); z-index: 2; padding-block-end: var(--space-3); background: var(--bg-page); }
   }
 </style>

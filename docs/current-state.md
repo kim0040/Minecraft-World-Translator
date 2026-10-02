@@ -34,7 +34,7 @@
 - alternate app identifier는 명시적인 sidecar data root로 격리한다. 테스트 설정·DB·키·월드가 production root로 흘러가지 않는다.
 - 선택한 월드 밖으로 연결된 level/region/entity/resource pack은 읽기·API 전에 차단한다. resources.zip symlink는 내부 대상이어도 restore 경로 보존을 위해 차단한다. 큰 파일 지문/백업 해시는 스트리밍한다.
 
-2026-10-02 UI/UX 실사용 점검: 설정 이탈 시 저장 확인, 새 설치 설정 안내·돌아가기, 좁은 창 키보드 검토, toast 위치, 표시 언어 즉시 적용, 복원 확인 정리 등. UI-only이며 Phase 상태는 바뀌지 않는다. [기록](history/ux-audit-2026-10-02.md) · 남은 문제: [알려진 UI/UX 문제](ux-issues.md)
+2026-10-02 UI/UX 실사용 점검: 설정 이탈 시 저장 확인, 새 설치 설정 안내·돌아가기, 좁은 창 키보드 검토, toast 위치, 표시 언어 즉시 적용, 복원 확인 정리, 후속으로 시작 실패 시 도움말·정보 접근, 복원 후 다시 스캔 안내, 작업 영역 폭 기준 후보 상세 패널, 낮은 창의 검토 다음 단계 버튼 고정, 처음부터 다시 번역(비용 확인), 결과 화면 다음 행동·실패 목록 개수 안내 등. UI-only이며 Phase 상태는 바뀌지 않는다. [기록](history/ux-audit-2026-10-02.md) · 남은 문제: [알려진 UI/UX 문제](ux-issues.md)
 
 ## 문서·라이선스 정리
 
