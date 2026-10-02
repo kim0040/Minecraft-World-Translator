@@ -86,6 +86,12 @@ export class AppState {
   banner = $state<{ tone: 'error' | 'warning'; message: string } | null>(null);
   toasts = $state<{ id: number; tone: Tone; message: string }[]>([]);
   railCollapsed = $state(false);
+  /** Set by the settings screen while it holds changes that are not saved yet. */
+  settingsDirty = $state(false);
+  /** A move away from settings that waits until the user saves or drops the changes there. */
+  pendingLeave = $state<(() => void) | null>(null);
+  /** The workflow step that sent the user to settings, so settings can offer the way back. */
+  returnStep = $state<Step | null>(null);
 
   settings = $state<Settings>(defaultSettings());
   apiKeyStored = $state(false);
@@ -163,6 +169,14 @@ export class AppState {
 
   get hasModel(): boolean {
     return !!this.settings.model?.trim();
+  }
+
+  /** What still has to be set up before the AI can translate. Scanning and review work without it. */
+  get setupNeeds(): ('model' | 'key')[] {
+    const needs: ('model' | 'key')[] = [];
+    if (!this.hasModel) needs.push('model');
+    if (!this.apiKeyStored) needs.push('key');
+    return needs;
   }
 
   get canRun(): boolean {
@@ -418,15 +432,57 @@ export class AppState {
 
   // --- navigation --------------------------------------------------------------------------
 
+  /**
+   * Leave the current page. Unsaved settings are never dropped silently: the move waits until the
+   * settings screen asks whether to save them, drop them, or stay.
+   */
+  private leave(next: () => void): void {
+    const run = () => {
+      if (this.page === 'settings') this.returnStep = null;
+      next();
+    };
+    if (this.page === 'settings' && this.settingsDirty) this.pendingLeave = run;
+    else run();
+  }
+
+  /** Answer for a move that waited on unsaved settings. */
+  resolveLeave(proceed: boolean): void {
+    const next = this.pendingLeave;
+    this.pendingLeave = null;
+    if (!proceed || !next) return;
+    this.settingsDirty = false;
+    next();
+  }
+
   goto(page: Page): void {
-    if (this.busy === 'settings') return;
-    this.page = page;
+    if (this.busy === 'settings' || page === this.page) return;
+    this.leave(() => { this.page = page; });
   }
 
   goStep(step: Step): void {
     if (!this.ready || this.startupFailed || !this.stepReached[step] || this.isBusy) return;
-    this.page = 'workspace';
-    this.step = step;
+    if (this.page === 'workspace') {
+      this.step = step;
+      return;
+    }
+    this.leave(() => {
+      this.page = 'workspace';
+      this.step = step;
+    });
+  }
+
+  /** Open settings to fix something the current step needs; settings then offers the way back. */
+  openSettingsFor(step: Step = this.step): void {
+    if (this.busy === 'settings') return;
+    this.returnStep = this.page === 'workspace' ? step : null;
+    this.goto('settings');
+  }
+
+  /** Back to the step that opened settings. */
+  returnFromSettings(): void {
+    const step = this.returnStep;
+    if (step && this.stepReached[step]) this.goStep(step);
+    else this.goto('workspace');
   }
 
   /** Commands from the native menu bar (or their shortcuts in a browser preview). */
@@ -441,8 +497,10 @@ export class AppState {
       this.goto('settings');
     } else if (action === 'open-world') {
       if (this.isBusy) return;
-      this.page = 'workspace';
-      void this.chooseWorld();
+      this.leave(() => {
+        this.page = 'workspace';
+        void this.chooseWorld();
+      });
     } else if (action === 'help' || action === 'shortcuts') {
       this.helpSection = action === 'shortcuts' ? 'shortcuts' : '';
       this.goto('help');
@@ -485,8 +543,10 @@ export class AppState {
       this.notify(t('world.dropBusy'), 'info');
       return;
     }
-    this.page = 'workspace';
-    await this.useWorld(path);
+    this.leave(() => {
+      this.page = 'workspace';
+      void this.useWorld(path);
+    });
   }
 
   private resetJob(): void {
@@ -721,7 +781,7 @@ export class AppState {
       this.resetJob();
       this.step = 'scan';
       await this.loadBackups();
-      this.notify(t('backups.restoreDone', { id: restored.recoverySetId || backupSetId }), 'success', 9000);
+      this.notify(t('backups.restoreDone'), 'success', 9000);
       return true;
     } catch (cause) {
       this.fail(cause);
@@ -867,6 +927,30 @@ export class AppState {
       this.modelsCached = !!listed.cached;
       this.modelCatalogs.set(scope, { models: listed.models, fetchedAt: Date.now(), cached: !!listed.cached });
       return listed.models.length;
+    } finally {
+      this.busy = '';
+    }
+  }
+
+  /**
+   * The display language applies the moment it is picked, like the appearance next to it. Only the
+   * language is written; other edits waiting on the settings screen stay unsaved there.
+   */
+  async setUiLanguage(locale: Locale): Promise<boolean> {
+    const before = this.settings.ui_language;
+    if (before === locale) return true;
+    if (this.busy) return false;
+    this.busy = 'settings';
+    this.settings = { ...this.settings, ui_language: locale };
+    setLocale(locale);
+    try {
+      await this.persistSettings();
+      return true;
+    } catch (cause) {
+      this.settings = { ...this.settings, ui_language: before };
+      setLocale(this.locale);
+      this.fail(cause);
+      return false;
     } finally {
       this.busy = '';
     }

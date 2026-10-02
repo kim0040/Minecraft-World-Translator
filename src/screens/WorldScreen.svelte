@@ -4,6 +4,7 @@
   import { baseName, formatDate, middleEllipsis } from '../lib/format';
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
+  import SetupNotice from '../components/SetupNotice.svelte';
 
   const dimensions = $derived.by(() => {
     const dirs = app.inspection?.regionDirs ?? [];
@@ -79,10 +80,11 @@
 
       <div class="cta">
         <button type="button" class="btn btn-secondary" disabled={app.isBusy} onclick={() => app.chooseWorld()}>
-          <Icon name="folder" size={16} /> {t('world.open')}
+          <Icon name="folder" size={16} /> {t('world.openOther')}
         </button>
       </div>
     </section>
+    <SetupNotice />
   {:else}
     <section class="card empty">
       <div class="art" aria-hidden="true"><img src="/images/pomi.png" alt="" width="96" height="96" /></div>

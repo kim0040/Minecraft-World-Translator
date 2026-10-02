@@ -33,6 +33,7 @@
     return () => clearInterval(timer);
   });
 
+  const taskPage = $derived<Page>(app.busy === 'restore' ? 'backups' : 'workspace');
   const percent = $derived(
     app.busy === 'translate' && app.progress.phase === 'translate' && app.progress.total > 0
       ? Math.round((app.progress.done / app.progress.total) * 100)
@@ -69,7 +70,7 @@
     {#if app.updateAvailable && !app.railCollapsed}
       <button type="button" class="update" onclick={showUpdate}><Icon name="download" size={14} /> {t('update.sidebar', { version: app.update?.version ?? '' })}</button>
     {/if}
-    <div class="state" role="status" aria-live="polite">
+    <div class="state" class:busy={app.isBusy} role="status" aria-live="polite">
       <img class="pomi" src="/images/pomi.png" alt="" width="32" height="32" />
       <div class="text">
         <span class="dot" class:busy={app.isBusy} aria-hidden="true"></span>
@@ -79,6 +80,10 @@
         {/if}
       </div>
     </div>
+    {#if app.isBusy && app.page !== taskPage}
+      <!-- A job keeps running while other pages are open; this is the one-click way back to it. -->
+      <button type="button" class="task-link btn btn-secondary btn-sm" onclick={() => app.goto(taskPage)}>{t('status.showTask')}</button>
+    {/if}
     <button type="button" class="collapse btn btn-quiet btn-sm" aria-label={t('nav.collapse')} aria-pressed={app.railCollapsed} onclick={() => (app.railCollapsed = !app.railCollapsed)}>
       <Icon name="sidebar" size={18} />
     </button>
@@ -127,9 +132,13 @@
   .rail .state { justify-content: center; padding: var(--space-2); }
   .rail .text, .rail .pomi { display: none; }
   .rail .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); }
+  .task-link { justify-self: stretch; }
+  .rail .task-link { display: none; }
   .collapse { justify-self: start; }
+  /* The collapsed rail shows only the dot, so it carries the busy colour too. */
+  .sidebar .state.busy::before { background: var(--accent); animation: pomi-pulse-dot 1.4s ease-in-out infinite; }
   .rail .collapse { justify-self: center; }
-  @media (max-width: 1000px) { .sidebar { padding-inline: var(--space-2); } .sidebar .label, .sidebar .wordmark, .sidebar .text, .sidebar .pomi, .sidebar .collapse { display: none; } .sidebar .nav { justify-content: center; padding: 0; min-height: 36px; } .sidebar .brand { justify-content: center; padding: 0; } .sidebar .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; } .sidebar .state { justify-content: center; } .sidebar .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); } }
+  @media (max-width: 1000px) { .sidebar { padding-inline: var(--space-2); } .sidebar .label, .sidebar .wordmark, .sidebar .text, .sidebar .pomi, .sidebar .collapse, .sidebar .task-link { display: none; } .sidebar .nav { justify-content: center; padding: 0; min-height: 36px; } .sidebar .brand { justify-content: center; padding: 0; } .sidebar .brand::before { content: ''; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); mask: url('/images/pomi.png') center / contain no-repeat; } .sidebar .state { justify-content: center; } .sidebar .state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); } }
   @media (max-width: 640px) {
     .sidebar { height: auto; flex-direction: row; align-items: center; gap: var(--space-2); padding: var(--space-2); border-inline-end: 0; border-block-end: 1px solid var(--border); overflow: visible; }
     .titlebar { display: none; }

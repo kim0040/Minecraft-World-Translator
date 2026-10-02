@@ -306,7 +306,33 @@
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    await saveSettings();
+    if (await saveSettings() && app.returnStep) app.returnFromSettings();
+  }
+
+  // Leaving with unsaved changes asks first (AppState holds the move until it is answered).
+  $effect(() => { app.settingsDirty = dirty; });
+  $effect(() => () => {
+    app.settingsDirty = false;
+    app.pendingLeave = null;
+  });
+
+  async function saveAndLeave(): Promise<void> {
+    app.resolveLeave(await saveSettings());
+  }
+
+  function leaveWithoutSaving(): void {
+    discardDraft();
+    app.resolveLeave(true);
+  }
+
+  async function changeLanguage(select: HTMLSelectElement): Promise<void> {
+    const locale = select.value as 'ko' | 'en' | 'ja';
+    if (await app.setUiLanguage(locale)) {
+      draft.ui_language = locale;
+      if (snapshot) snapshot.ui_language = locale;
+    } else {
+      select.value = draft.ui_language ?? 'ko';
+    }
   }
 
   async function loadModels(force = true): Promise<void> {
@@ -558,7 +584,7 @@
     <section class="card settings-section" aria-labelledby="translation-title">
       <div class="section-head">
         <div class="section-icon" aria-hidden="true"><Icon name="language" size={20} /></div>
-        <div><h2 id="translation-title">{t('settings.language.title')}</h2><p>{t('settings.style.extraPlaceholder')}</p></div>
+        <div><h2 id="translation-title">{t('settings.language.title')}</h2><p>{t('settings.language.subtitle')}</p></div>
       </div>
       <div class="fields two">
         <div class="field">
@@ -704,11 +730,12 @@
       <div class="fields two">
         <div class="field">
           <label class="label" for="ui-language">{t('settings.app.language')}</label>
-          <select id="ui-language" class="select" bind:value={draft.ui_language}>
+          <select id="ui-language" class="select" value={draft.ui_language} aria-describedby="ui-language-help" onchange={(event) => changeLanguage(event.currentTarget)}>
             <option value="ko">{t('lang.ko')}</option>
             <option value="en">{t('lang.en')}</option>
             <option value="ja">{t('lang.ja')}</option>
           </select>
+          <span id="ui-language-help" class="hint">{t('settings.app.languageHelp')}</span>
         </div>
       </div>
     </section>
@@ -734,14 +761,35 @@
         {#if dirty && hasBlockingError}<span class="field-error">{t('settings.fixErrors')}</span>{/if}
       </div>
       <div class="save-buttons">
+      {#if app.returnStep && !dirty}
+        <!-- Settings were opened to fix something a step needs: once saved, the way back is the next move. -->
+        <button type="button" class="btn btn-primary" disabled={!!app.busy} onclick={() => app.returnFromSettings()}>
+          <Icon name="chevron-left" size={15} /> {t('settings.returnTo', { step: t(`step.${app.returnStep}` as MessageKey) })}
+        </button>
+      {:else}
       <button type="button" class="btn btn-secondary" disabled={!!app.busy || !dirty} onclick={discardDraft}>{t('settings.discard')}</button>
       <button type="submit" class="btn btn-primary" disabled={!!app.busy || hasBlockingError || !dirty}>
-        <Icon name="check" size={15} /> {t(app.busy === 'settings' ? 'settings.saving' : 'common.save')}
+        <Icon name="check" size={15} /> {t(app.busy === 'settings' ? 'settings.saving' : app.returnStep ? 'settings.saveReturn' : 'common.save')}
       </button>
+      {/if}
       </div>
     </footer>
   </form>
 </div>
+
+{#if app.pendingLeave}
+  <Dialog title={t('settings.leave.title')} onClose={() => app.resolveLeave(false)}>
+    <p>{t('settings.leave.body')}</p>
+    {#if hasBlockingError}<p class="field-error" role="alert">{t('settings.fixErrors')}</p>{/if}
+    {#snippet actions()}
+      <button type="button" class="btn btn-quiet leave-stay" disabled={!!app.busy} onclick={() => app.resolveLeave(false)}>{t('settings.leave.stay')}</button>
+      <button type="button" class="btn btn-secondary" disabled={!!app.busy} onclick={leaveWithoutSaving}>{t('settings.leave.discard')}</button>
+      <button type="button" class="btn btn-primary" data-autofocus disabled={!!app.busy || hasBlockingError} onclick={saveAndLeave}>
+        {t(app.busy === 'settings' ? 'settings.saving' : 'settings.leave.save')}
+      </button>
+    {/snippet}
+  </Dialog>
+{/if}
 
 {#if showStyleConfirm}
   <Dialog title={t('settings.styleAssist.title')} onClose={() => (showStyleConfirm = false)}>
@@ -843,6 +891,9 @@
   .check small { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 400; }
   .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .advanced { display: grid; gap: var(--space-5); }
+  /* A closed section is just its summary line: no gap waiting for content that is not shown. */
+  .settings-form details:not([open]) { row-gap: 0; }
+  :global(.dialog) .leave-stay { margin-inline-end: auto; }
   .advanced summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); list-style: none; }
   .advanced summary::-webkit-details-marker { display: none; }
   .advanced summary > .section-head { align-items: center; }

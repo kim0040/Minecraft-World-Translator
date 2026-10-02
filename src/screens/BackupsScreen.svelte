@@ -159,14 +159,16 @@
 
 {#if confirmRestore && selectedBackup}
   <Dialog title={t('backups.restoreTitle')} onClose={closeRestore}>
-    <Callout tone="warning" title={kindLabel(selectedBackup.kind)}>
+    <Callout tone="warning" title={t('backups.restoreWarnTitle')}>
       <p>{t('backups.restoreBody')}</p>
     </Callout>
     <ul class="confirm-facts">
       <li><span>{t('world.selected')}</span><strong>{worldName}</strong></li>
+      <li><span>{t('backups.kindLabel')}</span><strong>{kindLabel(selectedBackup.kind)}</strong></li>
+      <li><span>{t('backups.createdLabel')}</span><strong class="num">{dateLabel(selectedBackup.createdAt)}</strong></li>
+      <li><span>{t('backups.filesLabel')}</span><strong class="num">{formatNumber(selectedBackup.fileCount, app.locale)}</strong></li>
+      <li><span>{t('backups.integrityLabel')}</span><strong>{selectedBackup.verified ? t('backups.verified') : t('backups.unverified')}</strong></li>
       <li><span>{t('backups.id')}</span><code>{selectedBackup.backupSetId}</code></li>
-      <li><span>{t('backups.files', { count: formatNumber(selectedBackup.fileCount, app.locale) })}</span></li>
-      <li><span>{t('backups.verified')}</span><strong>{selectedBackup.verified ? t('backups.verified') : t('backups.unverified')}</strong></li>
     </ul>
     {#if selectedBackup.externalTargets?.length}
       <p class="muted">{t('backups.externalHelp')}</p>

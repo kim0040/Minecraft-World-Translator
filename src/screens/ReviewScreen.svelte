@@ -12,6 +12,13 @@
 
   const source = app.candidates;
   let selected = $state<Candidate | null>(null);
+  // In a narrow window the detail is a sheet. It opens on a click or Enter, never on arrow keys or
+  // Space, so moving through the list and toggling rows stays a keyboard-only task.
+  let detailOpen = $state(false);
+  function select(candidate: Candidate, open: boolean): void {
+    selected = candidate;
+    if (open) detailOpen = true;
+  }
   let wide = $state(true);
   let busyBulk = $state(false);
   let query = $state(source.query);
@@ -138,7 +145,7 @@
   </div>
 
   <div class="workarea" class:wide>
-    <div class="tablewrap"><CandidateTable selectedId={selected?.id ?? ''} onSelect={(candidate) => (selected = candidate)} /></div>
+    <div class="tablewrap"><CandidateTable selectedId={selected?.id ?? ''} onSelect={select} /></div>
     {#if wide}<div class="detailwrap"><CandidateDetail candidate={selected} /></div>{/if}
   </div>
 
@@ -159,10 +166,10 @@
   </footer>
 </div>
 
-{#if !wide && selected}
-  <Dialog title={t('review.detail.title')} onClose={() => (selected = null)}>
+{#if !wide && selected && detailOpen}
+  <Dialog title={t('review.detail.title')} onClose={() => (detailOpen = false)}>
     <CandidateDetail candidate={selected} showHeading={false} />
-    {#snippet actions()}<button type="button" class="btn btn-primary" onclick={() => (selected = null)}>{t('common.close')}</button>{/snippet}
+    {#snippet actions()}<button type="button" class="btn btn-primary" onclick={() => (detailOpen = false)}>{t('common.close')}</button>{/snippet}
   </Dialog>
 {/if}
 

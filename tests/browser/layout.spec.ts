@@ -54,8 +54,8 @@ for (const locale of ['en', 'ja']) {
     await review(page);
     await page.getByRole('button', { name: '환경 설정', exact: true }).click();
     await page.locator('#application-settings').getByRole('radio', { name: '다크' }).check();
+    // The display language applies at once, like the appearance: no Save step.
     await page.locator('#ui-language').selectOption(locale);
-    await page.getByRole('button', { name: '저장', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await page.setViewportSize({ width: 840, height: 480 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });

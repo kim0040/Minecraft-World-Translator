@@ -5,6 +5,7 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
+  import SetupNotice from '../components/SetupNotice.svelte';
   import { exportDocument } from '../lib/document-export';
 
   async function exportReport(): Promise<void> {
@@ -75,13 +76,14 @@
       <div class="copy">
         <h2>{app.worldDir ? baseName(app.worldDir) : t('world.title')}</h2>
         <ul class="promises">
-          <li><Icon name="shield" size={18} /> {t('world.lead')}</li>
+          <li><Icon name="shield" size={18} /> {t('scan.startHint')}</li>
         </ul>
       </div>
       <button type="button" class="btn btn-primary btn-lg" disabled={!app.worldDir || !app.inspection?.validJavaWorld} onclick={() => app.startScan()}>
         {t('scan.run')}
       </button>
     </section>
+    <SetupNotice />
   {:else}
     {#if scan.status !== 'completed' || blockers.length}
       <Callout tone="danger" title={t('scan.blocked')} role="alert">

@@ -7,10 +7,10 @@
   import { motion } from '../lib/motion';
 </script>
 
-<div class="toasts" class:settings-page={app.page === 'settings'} role="region" aria-label={t('error.title')}>
+<div class="toasts" role="region" aria-label={t('error.title')}>
   {#each app.toasts as toast (toast.id)}
     <div class="toast {toast.tone}" role={toast.tone === 'error' ? 'alert' : 'status'}
-      in:fly={{ y: 8, duration: motion(160) }} out:fade={{ duration: motion(120) }} animate:flip={{ duration: motion(160) }}>
+      in:fly={{ y: -8, duration: motion(160) }} out:fade={{ duration: motion(120) }} animate:flip={{ duration: motion(160) }}>
       <Icon name={toast.tone === 'error' ? 'alert-circle' : toast.tone === 'success' ? 'check-circle' : 'info'} size={18} />
       <span class="msg">{toast.message}</span>
       <button type="button" class="btn btn-quiet btn-icon btn-sm" aria-label={t('error.dismiss')} onclick={() => app.dismissToast(toast.id)}>
@@ -21,9 +21,10 @@
 </div>
 
 <style>
-  .toasts { position: fixed; inset-block-end: var(--space-4); inset-inline-end: var(--space-4); z-index: 50; display: grid; gap: var(--space-2); width: min(420px, calc(100vw - 32px)); pointer-events: none; }
-  .toasts.settings-page { inset-block-start: var(--space-4); inset-block-end: auto; }
-  @media (max-width: 640px) { .toasts.settings-page { inset-block-start: calc(40px + 2 * var(--space-2) + 1px + var(--space-3)); } }
+  /* Top right, under the toolbar: the bottom of every screen holds its action bar, and a toast
+     there would cover the very button the user is about to press. */
+  .toasts { position: fixed; inset-block-start: calc(var(--toolbar-height) + var(--space-2)); inset-inline-end: var(--space-4); z-index: 50; display: grid; gap: var(--space-2); width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+  @media (max-width: 640px) { .toasts { inset-block-start: calc(40px + 2 * var(--space-2) + 1px + var(--space-3)); } }
   .toast { pointer-events: auto; display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: var(--space-3); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
     border-radius: var(--radius-lg); background: var(--bg-surface); color: var(--text); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
   .toast :global(.icon) { margin-top: 2px; }

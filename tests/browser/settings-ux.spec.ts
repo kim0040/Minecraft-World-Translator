@@ -17,7 +17,7 @@ test('model lookup never saves drafts, keys or invalidates reviewed candidates',
   await page.locator('#target-language').fill('unsaved-language');
   await page.getByRole('button', { name: '키 변경', exact: true }).click();
   await page.locator('#api-key').fill('synthetic-unsaved-key');
-  await page.getByRole('button', { name: '지원 정보 새로고침', exact: true }).click();
+  await page.getByRole('button', { name: '모델 목록 불러오기', exact: true }).click();
   await expect(page.locator('#target-language')).toHaveValue('unsaved-language');
   await expect(page.locator('#api-key')).toHaveValue('synthetic-unsaved-key');
   expect(await calls(page, 'settings.set')).toBe(0);
@@ -38,28 +38,28 @@ test('authenticated model lookup requests key saving without committing other dr
   await page.locator('#provider').selectOption('openai');
   await expect(page.locator('#api-key')).toBeVisible();
   await page.locator('#api-key').fill('synthetic-unsaved-openai-key');
-  await page.getByRole('button', { name: '지원 정보 새로고침', exact: true }).click();
+  await page.getByRole('button', { name: '모델 목록 불러오기', exact: true }).click();
   await expect(page.getByText('새 API 키는 먼저 저장해 주세요. 모델 조회는 저장된 키만 사용합니다.', { exact: true })).toBeVisible();
   expect(await calls(page, 'settings.set')).toBe(0);
 });
 
 test('metadata failure offers retry and keeps model default available', async ({ page }) => {
   await settings(page, '&modelError=1');
-  await expect(page.getByText('지원 정보를 불러오지 못했습니다. 네트워크와 저장된 키를 확인한 뒤 새로고침해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('모델 목록을 불러오지 못했습니다. 네트워크와 저장된 키를 확인한 뒤 다시 불러와 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: '모델 기본값', exact: true })).toBeEnabled();
   await expect(page.getByRole('radio', { name: '직접 설정', exact: true })).toBeDisabled();
   const attempts = await calls(page, 'models.list');
   await page.waitForTimeout(800);
   expect(await calls(page, 'models.list')).toBe(attempts);
   await page.evaluate(() => history.replaceState({}, '', location.href.replace('&modelError=1', '')));
-  await page.getByRole('button', { name: '지원 정보 새로고침', exact: true }).click();
+  await page.getByRole('button', { name: '모델 목록 불러오기', exact: true }).click();
   await expect(page.getByText('모델 기본값: 켜짐 · 강하게 (high)', { exact: true })).toBeVisible();
   expect(await calls(page, 'settings.set')).toBe(0);
 });
 
 test('cached support information is explicitly marked', async ({ page }) => {
   await settings(page, '&cachedModels=1');
-  await expect(page.getByText(/저장된 정보입니다. 최신 조회에 실패/)).toBeVisible();
+  await expect(page.getByText(/저장된 목록입니다. 최신 조회에 실패/)).toBeVisible();
 });
 
 test('unknown models cannot acquire unsupported reasoning controls', async ({ page }) => {

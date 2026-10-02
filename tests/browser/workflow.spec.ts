@@ -218,6 +218,8 @@ test('model preserves scan; target language invalidates it', async ({ page }) =>
   await page.getByLabel('사용 모델', { exact: true }).fill('another-model');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // Saved settings leave without a question.
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await page.locator('#target-language').fill('日本語');
@@ -265,6 +267,8 @@ test('settings export omits credentials and reset remains an unsaved draft', asy
   await expect(page.locator('#api-key')).toHaveCount(0);
   await expect(page.getByLabel('사용 모델', { exact: true })).not.toHaveValue('synthetic-draft-model');
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // Leaving asks first; dropping the draft must leave the saved settings untouched.
+  await page.getByRole('dialog').getByRole('button', { name: '저장하지 않고 이동', exact: true }).click();
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('xiaomi/mimo-v2.6-flash');
@@ -280,6 +284,8 @@ test('style helper confirms provider transmission and edits only the unsaved pro
   await page.getByRole('dialog').getByRole('button', { name: 'AI로 지시문 다듬기', exact: true }).click();
   await expect(page.locator('#style-prompt')).toHaveValue('중세 판타지 분위기에 맞추어 짧고 자연스럽게 번역하세요.');
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // Leaving asks first; dropping the draft must leave the saved settings untouched.
+  await page.getByRole('dialog').getByRole('button', { name: '저장하지 않고 이동', exact: true }).click();
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await expect(page.locator('#style-prompt')).toHaveValue('');
@@ -299,6 +305,8 @@ test('legacy settings import omits keys, preserves the world and stays a draft',
   await expect(page.getByText(/설정을 가져올 수 없습니다/)).toBeVisible();
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('imported-model');
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // Leaving asks first; dropping the draft must leave the saved settings untouched.
+  await page.getByRole('dialog').getByRole('button', { name: '저장하지 않고 이동', exact: true }).click();
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('xiaomi/mimo-v2.6-flash');
@@ -318,6 +326,8 @@ test('literal Python settings import uses a preview and remains unsaved on failu
   await expect(page.getByText(/설정을 가져올 수 없습니다/)).toBeVisible();
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('literal-model');
   await page.getByRole('button', { name: '번역 작업', exact: true }).click();
+  // Leaving asks first; dropping the draft must leave the saved settings untouched.
+  await page.getByRole('dialog').getByRole('button', { name: '저장하지 않고 이동', exact: true }).click();
   await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount', '7');
   await page.getByRole('button', { name: '환경 설정', exact: true }).click();
   await expect(page.getByLabel('사용 모델', { exact: true })).toHaveValue('xiaomi/mimo-v2.6-flash');

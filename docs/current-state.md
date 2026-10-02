@@ -34,6 +34,8 @@
 - alternate app identifier는 명시적인 sidecar data root로 격리한다. 테스트 설정·DB·키·월드가 production root로 흘러가지 않는다.
 - 선택한 월드 밖으로 연결된 level/region/entity/resource pack은 읽기·API 전에 차단한다. resources.zip symlink는 내부 대상이어도 restore 경로 보존을 위해 차단한다. 큰 파일 지문/백업 해시는 스트리밍한다.
 
+2026-10-02 UI/UX 실사용 점검: 설정 이탈 시 저장 확인, 새 설치 설정 안내·돌아가기, 좁은 창 키보드 검토, toast 위치, 표시 언어 즉시 적용, 복원 확인 정리 등. UI-only이며 Phase 상태는 바뀌지 않는다. [기록](history/ux-audit-2026-10-02.md)
+
 ## 문서·라이선스 정리
 
 2026-10-02 현지화 후속: 영어·한국어·일본어·중국어 간체 README/사용 안내/개인정보/면책을 같은 진입점으로 연결했다. 문자 에셋은 4개 언어의 공유4+안내16을 공통 catalog/SVG/PNG로 관리하며, 현재 UI 언어 ko/en/ja의 소개 화면9장을 합성 데이터로 다시 캡처했다. 중국어는 문서만 제공하며 영어 UI 화면을 명시한다. 타입 검사0오류/0경고·i18n3 PASS·문서 링크/이미지 hash/시각 검토는 이 범위의 결과이며 Phase3·native·release 완료 검증이 아니다. [문구·에셋 관리](localization.md) · [작업 기록](history/localization-2026-10-02.md)

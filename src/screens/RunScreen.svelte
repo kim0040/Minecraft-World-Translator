@@ -5,6 +5,7 @@
   import Icon from '../components/Icon.svelte';
   import Callout from '../components/Callout.svelte';
   import ProgressBar from '../components/ProgressBar.svelte';
+  import SetupNotice from '../components/SetupNotice.svelte';
   import { REASONING_PROVIDERS, reasoningSummary } from '../lib/reasoning';
 
   const providerLabels: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', anthropic: 'Anthropic', openrouter: 'OpenRouter', comet: 'Comet API', custom: 'Custom' };
@@ -125,19 +126,7 @@
       </Callout>
     {/if}
 
-    {#if !app.hasModel && !app.manualOnly}
-      <Callout tone="warning" title={t('run.noModel')} role="alert">
-        {t('run.noModelHelp')}
-        {#snippet actions()}<button type="button" class="btn btn-secondary btn-sm" onclick={() => app.goto('settings')}>{t('run.goSettings')}</button>{/snippet}
-      </Callout>
-    {/if}
-
-    {#if !app.apiKeyStored && !app.manualOnly}
-      <Callout tone="warning" title={t('run.noKey')} role="alert">
-        {t('run.noKeyHelp')}
-        {#snippet actions()}<button type="button" class="btn btn-secondary btn-sm" onclick={() => app.goto('settings')}>{t('run.goSettings')}</button>{/snippet}
-      </Callout>
-    {/if}
+    {#if !app.manualOnly}<SetupNotice blocking />{/if}
 
     <section aria-labelledby="summary-title">
       <h2 id="summary-title" class="group-title">{t('run.summaryTitle')}</h2>
@@ -146,7 +135,7 @@
         <div class="row-item"><dt class="k">{t('run.summary.language')}</dt><dd class="v">{app.settings.target_language}</dd></div>
         <div class="row-item"><dt class="k">{t('run.summary.model')}</dt><dd class="v" class:warn={!app.hasModel && !app.manualOnly}>{modelText}</dd></div>
         {#if REASONING_PROVIDERS.includes(app.settings.provider) && !app.manualOnly}
-          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline"><span class="text">{reasoning}</span><button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.goto('settings')}>{t('run.reasoning.edit')}</button></dd></div>
+          <div class="row-item"><dt class="k">{t('settings.reasoning.label')}</dt><dd class="v inline"><span class="text">{reasoning}</span><button type="button" class="btn btn-quiet btn-sm edit-settings" disabled={!!app.busy} onclick={() => app.openSettingsFor('run')}>{t('run.reasoning.edit')}</button></dd></div>
         {/if}
       </dl>
     </section>

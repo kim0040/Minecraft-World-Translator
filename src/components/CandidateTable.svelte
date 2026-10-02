@@ -7,7 +7,8 @@
   import { visibleWindow } from '../lib/virtual';
   import Icon from './Icon.svelte';
 
-  let { selectedId, onSelect }: { selectedId: string; onSelect: (candidate: Candidate) => void } = $props();
+  // `open` is true when the user asked to see the row (click, Enter), not when the selection just moved.
+  let { selectedId, onSelect }: { selectedId: string; onSelect: (candidate: Candidate, open: boolean) => void } = $props();
 
   const ROW = 60;
   const source = app.candidates;
@@ -66,11 +67,11 @@
     scrollTop = viewport?.scrollTop ?? scrollTop;
     await tick();
     viewport?.querySelector<HTMLElement>(`[data-index="${next}"]`)?.focus();
-    if (select && candidate) onSelect(candidate);
+    if (select && candidate) onSelect(candidate, false);
   }
 
   async function openEditor(candidate: Candidate): Promise<void> {
-    onSelect(candidate);
+    onSelect(candidate, true);
     await tick();
     document.getElementById('manual-translation')?.focus();
   }
@@ -91,7 +92,7 @@
     } else if (event.key === ' ' && candidate) {
       event.preventDefault();
       app.setIncluded(candidate.id, app.excluded.has(candidate.id));
-      onSelect(candidate);
+      onSelect(candidate, false);
     } else if (event.key === 'Enter' && candidate) {
       event.preventDefault();
       void openEditor(candidate);
@@ -130,7 +131,7 @@
             aria-label={t('review.rowLabel', { source: candidate.source, kind: kindLabel(candidate.kind), places: t('common.places', { count: candidate.occurrences }) })}
             tabindex={index === active ? 0 : -1}
             style:height="{ROW}px"
-            onclick={() => { active = index; onSelect(candidate); }}
+            onclick={() => { active = index; onSelect(candidate, true); }}
             onkeydown={(event) => handleKey(event, index, candidate)}
           >
             <td class="c-include">

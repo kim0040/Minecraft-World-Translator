@@ -51,6 +51,10 @@
     max_batch_retries: 3, concurrency: 4, resource_pack_enabled: false,
     skip_target_language_text: true, ui_language: previewLocale, last_world_dir: worldDir
   };
+  // A fresh install: no model chosen and no key saved yet.
+  const fresh = new URLSearchParams(location.search).get('fresh') === '1';
+  if (fresh) Object.assign(settings, { provider: 'openai', model: '' });
+  let freshKeySaved = false;
   const estimate = {
     candidateCount: candidates.length, requests: 1, sourceChars: 180, inputTokens: 720,
     outputTokens: 240, price: { input: 0.00000015, output: 0.0000006, perMillionInput: 0.15, perMillionOutput: 0.6 },
@@ -171,7 +175,7 @@
         notices: { firstLaunch: '', about: '', backupWarning: '', apiWarning: '' },
         settings: { ...settings, last_world_dir: empty ? '' : worldDir, ...(current === 'first-run' ? { app_prefs: {} } : {}) },
         ...(current === 'first-run' ? { prefs: { theme: 'system', notice_accepted: false, tutorial_seen: false, update_auto_check: true, update_last_check: 0, update_skipped_version: '' } } : {}),
-        apiKeyStored: true, credentialMode: 'local', worlds: empty ? [] : [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }],
+        apiKeyStored: !fresh || freshKeySaved, credentialMode: 'local', worlds: empty ? [] : [{ path: worldDir, name: 'Roguefire', lastOpened: 1790672400, available: true }],
         worldInspection: empty ? null : inspection, backups: empty ? [] : backups,
         resume: resumed || resultScenarios.includes(current) ? resumePayload() : { available: false }
       });
@@ -188,7 +192,8 @@
         if (key !== 'apiKey' && key !== 'credentialMode') settings[aliases[key] || key] = value;
       }
       credentialModes.set(body.provider, body.credentialMode || 'local');
-      return ok(request, { settings: { ...settings }, apiKeyStored: true, credentialMode: body.credentialMode || 'local' });
+      if (body.apiKey) freshKeySaved = true;
+      return ok(request, { settings: { ...settings }, apiKeyStored: !fresh || freshKeySaved, credentialMode: body.credentialMode || 'local' });
     }
     if (type === 'prefs.set') {
       window.__pomiPrefs = { ...(window.__pomiPrefs || {}), ...(body.prefs || {}) };
@@ -277,7 +282,7 @@
       }
       if (command === 'plugin:event|unlisten') { listeners.delete(args.eventId); return null; }
       if (command === 'plugin:dialog|open') return window.__pomiDialogFiles ?? null;
-      if (command === 'credential_status') return { stored: new URLSearchParams(location.search).get('missingKey') !== '1', mode: credentialModes.get(args.provider) || 'local' };
+      if (command === 'credential_status') return { stored: new URLSearchParams(location.search).get('missingKey') !== '1' && (!fresh || freshKeySaved), mode: credentialModes.get(args.provider) || 'local' };
       if (command === 'credential_import') return { stored: true, mode: 'local' };
       if (command === 'operation_active') return false;
       if (command === 'open_external') { (window.__pomiOpened ||= []).push(args.url); return null; }
