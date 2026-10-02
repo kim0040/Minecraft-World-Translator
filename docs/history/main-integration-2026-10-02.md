@@ -7,7 +7,7 @@
 - 시작: clean `main` / `c26fcd7e78f9fb6c2d8c17dc398674a9e46705d0`.
 - `git pull --ff-only origin main`: 이미 최신. 기존 fetch refspec은 main만 포함해 작업 브랜치를 숨겼다.
 - 전체 heads 조회 후 `claude/review-and-plan-2026-10-01`을 fetch했다. fetch refspec을 전체 heads로 바꾸어 이후에도 작업 브랜치를 조회할 수 있게 했다.
-- `git merge --ff-only origin/claude/review-and-plan-2026-10-01`: 충돌 없이 `e97261c67a6b183d7d0242a06e077deb1381bca4`까지 7개 commit/99개 파일 통합. 기존 commit과 작업 브랜치는 보존한다.
+- `git merge --ff-only origin/claude/review-and-plan-2026-10-01`: 충돌 없이 `e97261c67a6b183d7d0242a06e077deb1381bca4`까지 7개 commit/99개 파일 통합. 기존 commit 이력을 보존했다. 작업 브랜치는 아래 후속 정리에서 삭제했다.
 - 통합 후 이 기록과 상태 문서를 별도 정리 commit으로 저장한다. 최종 SHA·push 결과는 Git 기록을 따른다. Phase3 전체 완료 commit이나 공개 release가 아니다.
 
 ## 들어온 변경과 확인 근거
@@ -46,3 +46,11 @@
 - 가져온 신규 파일의 world/DB/key/ZIP/app 등 runtime 경로 검출0, private-key/API-key 패턴 검출0. 패턴 검사는 완전한 비밀 검출 보장이 아니다.
 - Luna Max 1개가 잔여 목록을 read-only 조사했고 Main이 SNBT parser·Gemini floor·설정/catalog 복구·업데이트 공개키/gate·About version/license 근거를 직접 확인했다.
 - 대상 브랜치 tip이 main의 ancestor임을 확인했다. push 뒤 원격 main SHA와 작업 트리 상태를 확인한다.
+
+## 후속 브랜치 정리
+
+사용자가 통합된 브랜치가 남아 있음을 지적해 정리했다. `git fetch origin --prune`과 `git ls-remote --heads origin`으로 최신 상태를 확인했다. 작업 브랜치 tip은 여전히 `e97261c`이고 `main`에 없는 commit은 0개였다. 당시 로컬·원격 main은 `694a91a`로 일치했고 해당 브랜치의 열린 PR은 0개였다.
+
+확인한 tip을 조건으로 `--force-with-lease` 삭제해 동시에 새 commit이 생기면 삭제되지 않도록 했다. 원격 `claude/review-and-plan-2026-10-01` 및 로컬 remote-tracking ref 삭제 완료. 로컬 작업 브랜치는 원래 없었으며 정리 후 로컬·원격 heads는 `main`만 남았다. 7개 작업 commit은 main의 이력에 그대로 포함돼 있다.
+
+후속 실제 DeepSeek 검증과 발견된 비용 추정 오차는 [검증 기록](deepseek-api-verification-2026-10-02.md)에 별도로 남겼다. 위 통합 시점의 API 미실행 기록과 구분한다.

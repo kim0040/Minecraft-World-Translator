@@ -8,6 +8,8 @@
 
 ## 구현한 제품
 
+2026-10-02 후속: [실제 DeepSeek 검증](history/deepseek-api-verification-2026-10-02.md)에서 최신 Python JSONL/core의 3후보/1요청 번역·write/reopen·hash 일치 복원, API catalog 기반 모델 변경·비용 재계산을 확인했다. 비용 추정 상한 초과는 미완으로 남겼다. 최신 native 검증은 아니다. 통합된 작업 브랜치를 삭제해 로컬·원격 heads는 main만 남겼다.
+
 - Tauri 2 / Rust shell / Svelte 5 / TypeScript / Vite, 패키지된 Python JSONL sidecar. 기존 CLI와 같은 코어를 사용하며 desktop은 localhost 서버를 열지 않는다.
 - 시작 hello30초/bootstrap60초 절대 deadline, 오류 안내·재시도·소유 sidecar 정리. 무응답30/60초 후 실제 앱 retry와 cold Ready 확인; hello 이후 긴 번역/복원 작업에는 일괄 timeout을 적용하지 않는다.
 - World → Scan → Review → Run → Result, Backups / Settings / About 분리와 공통 shell·dialog·toasts.

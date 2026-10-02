@@ -66,7 +66,7 @@
 - [ ] candidate/occurrence/glossary/TM/job history SQLite 범위·indexes·migration/rollback.
 - [ ] world/global glossary와 규칙·revision·import/export/delete.
 - [ ] revision/context-aware TM, world 격리, 잘못된 번역 무효화·편집·삭제.
-- [ ] provider 가격·시각 기반 token/cost low/high 추정과 실제 usage 비교, resume 남은 분량.
+- [ ] provider 가격·시각 기반 token/cost low/high 추정과 실제 usage 비교, resume 남은 분량. 2026-10-02 실제 DeepSeek 1요청/3후보 번역·write/restore와 catalog 모델 변경 후 자동 재계산은 확인했지만, 실제 $0.000219114가 예상 상한 $0.00010710을 초과했다. reasoning 토큰·실제 라우팅 단가를 반영한 추정 보강 필요. [검증 기록](history/deepseek-api-verification-2026-10-02.md)
 - [ ] COMP-02–06: 최신 component·chunk별 DataVersion/coverage·대표 게임 버전 생성/로드·혼합 형식·구형 pack·버전별 지원 근거. 기존 압축/entities/dimensions/emoji/NUL 및 신규 .mcc 합성 회귀를 재구현하는 작업은 아님.
 - [ ] crash/kill 뒤 interrupted 복구, consistency 검사, 사용자 restore/resume/discard.
 - [ ] 자연스러운 core/desktop 모듈 분리, CLI·legacy 설정 호환.
